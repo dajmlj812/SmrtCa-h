@@ -1,0 +1,5 @@
+Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+05/20/2026,05/20/2026,VALID PURCHASE ONE,Shopping,Sale,-10.00,
+99/99/9999,05/20/2026,ROW WITH BAD DATE,Shopping,Sale,-10.00,
+05/19/2026,05/19/2026,ROW WITH BAD AMOUNT,Shopping,Sale,not-a-number,
+05/18/2026,05/18/2026,VALID PURCHASE TWO,Shopping,Sale,-5.00,

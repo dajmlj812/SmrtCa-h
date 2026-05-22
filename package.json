@@ -1,0 +1,16 @@
+{
+  "name": "smrtcash",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Self-hosted personal finance manager",
+  "scripts": {
+    "test": "npm run test --prefix server && npm run test --prefix web",
+    "test:server": "npm run test --prefix server",
+    "test:web": "npm run test --prefix web",
+    "test:e2e": "npm run test --prefix e2e",
+    "test:smoke": "npm run test:smoke --prefix server",
+    "test:coverage": "npm run test:coverage --prefix server",
+    "test:all": "npm run test && npm run test:e2e",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix web"
+  }
+}

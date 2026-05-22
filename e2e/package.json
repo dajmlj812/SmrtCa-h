@@ -1,0 +1,22 @@
+{
+  "name": "smrtcash-e2e",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node setup-db.mjs",
+    "test": "npm run setup && playwright test",
+    "test:headed": "npm run setup && playwright test --headed",
+    "test:ui": "npm run setup && playwright test --ui",
+    "install:browser": "playwright install chromium",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pg": "^8.21.0"
+  }
+}

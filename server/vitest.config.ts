@@ -1,0 +1,40 @@
+import { defineConfig } from 'vitest/config';
+import { config as loadEnv } from 'dotenv';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Pull DB credentials from the repo-root .env, then redirect every test at an
+// isolated `smrtcash_test` database so the suite never touches real data.
+loadEnv({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
+
+const baseUrl =
+  process.env.DATABASE_URL ??
+  'postgres://smrtcash:smrtcash_dev_pw@localhost:5432/smrtcash';
+const testDatabaseUrl = baseUrl.replace(/\/[^/?]+(\?|$)/, '/smrtcash_test$1');
+const testAttachmentsDir = join(tmpdir(), 'smrtcash-test-attachments');
+
+// Set on the current process so BOTH the global-setup step (main process)
+// and the forked test workers see them. Attachments and the DB both have to
+// be redirected — neither should ever land on a real path.
+process.env.DATABASE_URL = testDatabaseUrl;
+process.env.NODE_ENV = 'test';
+process.env.ATTACHMENTS_DIR = testAttachmentsDir;
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    globalSetup: ['tests/setup/global-setup.ts'],
+    env: {
+      DATABASE_URL: testDatabaseUrl,
+      NODE_ENV: 'test',
+      ATTACHMENTS_DIR: testAttachmentsDir,
+    },
+    // DB-backed tests share one database and truncate between tests, so
+    // test files must run serially, not in parallel.
+    fileParallelism: false,
+    testTimeout: 20_000,
+    hookTimeout: 30_000,
+  },
+});

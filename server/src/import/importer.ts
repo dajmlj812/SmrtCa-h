@@ -1,0 +1,185 @@
+import { withTransaction } from '../db/pool.js';
+import { parseImportFile } from './parse.js';
+import {
+  buildGenericFormat,
+  detectFormat,
+  getFormat,
+  type ColumnMapping,
+  type ImportFormat,
+} from './formats.js';
+import { assignDedupHashes } from './dedup.js';
+import type { ParsedTransaction, RawRow, RowError } from './types.js';
+
+export class ImportError extends Error {}
+
+export interface ImportPreview {
+  detectedFormatId: string | null;
+  detectedFormatName: string | null;
+  suggestedAccountType: string | null;
+  headers: string[];
+  totalRows: number;
+  parsedCount: number;
+  errorCount: number;
+  sample: ParsedTransaction[]; // first few successfully parsed rows
+  errors: RowError[]; // first few failed rows
+}
+
+export interface ImportResult {
+  batchId: string;
+  formatId: string;
+  totalRows: number;
+  importedCount: number;
+  skippedCount: number; // duplicates skipped via ON CONFLICT
+  errorCount: number;
+  errors: RowError[];
+}
+
+interface MapResult {
+  transactions: ParsedTransaction[];
+  errors: RowError[];
+}
+
+function resolveFormat(
+  headers: string[],
+  formatId?: string,
+  mapping?: ColumnMapping,
+): ImportFormat | undefined {
+  if (mapping) return buildGenericFormat(mapping);
+  if (formatId) return getFormat(formatId);
+  return detectFormat(headers);
+}
+
+/** Map every raw row, collecting per-row errors instead of aborting. */
+function mapRows(rows: RawRow[], format: ImportFormat): MapResult {
+  const transactions: ParsedTransaction[] = [];
+  const errors: RowError[] = [];
+  rows.forEach((row, index) => {
+    try {
+      transactions.push(format.mapRow(row));
+    } catch (err) {
+      errors.push({
+        rowNumber: index + 1,
+        message: err instanceof Error ? err.message : String(err),
+        raw: row,
+      });
+    }
+  });
+  return { transactions, errors };
+}
+
+export async function previewImport(
+  filename: string,
+  buffer: Buffer,
+  formatId?: string,
+  mapping?: ColumnMapping,
+): Promise<ImportPreview> {
+  const { headers, rows } = await parseImportFile(filename, buffer);
+  const format = resolveFormat(headers, formatId, mapping);
+
+  if (!format) {
+    return {
+      detectedFormatId: null,
+      detectedFormatName: null,
+      suggestedAccountType: null,
+      headers,
+      totalRows: rows.length,
+      parsedCount: 0,
+      errorCount: 0,
+      sample: [],
+      errors: [],
+    };
+  }
+
+  const { transactions, errors } = mapRows(rows, format);
+  return {
+    detectedFormatId: format.id,
+    detectedFormatName: format.name,
+    suggestedAccountType: format.suggestedAccountType,
+    headers,
+    totalRows: rows.length,
+    parsedCount: transactions.length,
+    errorCount: errors.length,
+    sample: transactions.slice(0, 10),
+    errors: errors.slice(0, 10),
+  };
+}
+
+export async function commitImport(
+  accountId: string,
+  filename: string,
+  buffer: Buffer,
+  formatId?: string,
+  mapping?: ColumnMapping,
+): Promise<ImportResult> {
+  const { headers, rows } = await parseImportFile(filename, buffer);
+  const format = resolveFormat(headers, formatId, mapping);
+  if (!format) {
+    throw new ImportError(
+      'Could not detect a known file format. Provide a column mapping.',
+    );
+  }
+
+  const { transactions, errors } = mapRows(rows, format);
+  const hashes = assignDedupHashes(transactions);
+
+  return withTransaction(async (client) => {
+    const account = await client.query('SELECT id FROM accounts WHERE id = $1', [
+      accountId,
+    ]);
+    if (account.rowCount === 0) {
+      throw new ImportError(`Account ${accountId} not found`);
+    }
+
+    const batch = await client.query<{ id: string }>(
+      `INSERT INTO import_batches (account_id, filename, format_id, row_count)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [accountId, filename, format.id, rows.length],
+    );
+    const batchId = batch.rows[0]!.id;
+
+    let importedCount = 0;
+    for (let i = 0; i < transactions.length; i++) {
+      const t = transactions[i]!;
+      const inserted = await client.query(
+        `INSERT INTO transactions (
+           account_id, import_batch_id, txn_date, post_date, amount_cents,
+           raw_description, source_category, source_type, memo, balance_cents,
+           dedup_hash
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         ON CONFLICT (account_id, dedup_hash) DO NOTHING`,
+        [
+          accountId,
+          batchId,
+          t.txnDate,
+          t.postDate,
+          t.amountCents,
+          t.rawDescription,
+          t.sourceCategory,
+          t.sourceType,
+          t.memo,
+          t.balanceCents,
+          hashes[i],
+        ],
+      );
+      importedCount += inserted.rowCount ?? 0;
+    }
+    const skippedCount = transactions.length - importedCount;
+
+    await client.query(
+      `UPDATE import_batches
+         SET imported_count = $1, skipped_count = $2, error_count = $3
+       WHERE id = $4`,
+      [importedCount, skippedCount, errors.length, batchId],
+    );
+
+    return {
+      batchId,
+      formatId: format.id,
+      totalRows: rows.length,
+      importedCount,
+      skippedCount,
+      errorCount: errors.length,
+      errors: errors.slice(0, 25),
+    };
+  });
+}

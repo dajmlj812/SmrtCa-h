@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Environment / secrets
+.env
+.env.local
+*.local
+
+# Local data
+uploads/
+data/
+*.sqlite
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Never commit real financial data
+samples/*.CSV
+samples/*.csv
+samples/*.xlsx
+samples/*.xls
+!samples/.gitkeep
