@@ -19,6 +19,21 @@ export const ALLOWED_MIME_TYPES = new Set([
 
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
+/**
+ * Per-request aggregate cap. `@fastify/multipart` already enforces a
+ * per-file limit, but `files: 10` × 25 MB allows a 250 MB request that
+ * we want to refuse before doing any disk I/O. Override via
+ * `ATTACHMENTS_MAX_REQUEST_BYTES` (used by tests to exercise the cap).
+ */
+export const MAX_REQUEST_BYTES = (() => {
+  const raw = process.env.ATTACHMENTS_MAX_REQUEST_BYTES;
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 100 * 1024 * 1024;
+})();
+
 export class AttachmentValidationError extends Error {}
 
 /** Strip directory components and unsafe characters; cap length. */

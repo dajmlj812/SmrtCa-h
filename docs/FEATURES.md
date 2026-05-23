@@ -47,7 +47,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Manual edit / re-categorize | ✅ |
 | Transfer linking between your own accounts | 📋 Phase 4 |
 | Recurring & subscription detection | 📋 Phase 6 |
-| Receipt & file attachments | 📋 Phase 3 |
+| Receipt & file attachments | ✅ |
 
 ## AI
 
@@ -60,7 +60,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Merchant cleanup & auto-categorization with confidence | ✅ |
 | Comprehensive hierarchical category taxonomy (~190 categories) | ✅ |
 | AI-suggested-category review (Approve / Merge / Reject) | ✅ |
-| Receipt OCR matching | 📋 Phase 3 |
+| Receipt OCR matching | ✅ |
 | Conversational AI financial assistant | 📋 Phase 9 |
 
 ## Budgeting & Cash Flow
@@ -106,7 +106,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 95-test automated suite (unit → e2e) | ✅ |
+| 182-test automated suite (unit → e2e) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | 📋 Phase 5 |
 | Encryption at rest (database + attachments) | 📋 Phase 5 |

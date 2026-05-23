@@ -13,8 +13,8 @@ nothing is "all or nothing."
 |-------|-------|--------|
 | 1 | Foundation & Import | ✅ Complete — 2026-05-22 |
 | 2 | AI Transaction Normalization | ✅ Complete — 2026-05-22 |
-| 3 | Receipts & Attachments | 🔜 Next |
-| 4 | Insights & Reconciliation | 📋 Planned |
+| 3 | Receipts & Attachments | ✅ Complete — 2026-05-22 |
+| 4 | Insights & Reconciliation | 🔜 Next |
 | 5 | Dockerization, Auth & Hardening | 📋 Planned |
 | 6 | Budgeting & Cash Flow | 📋 Planned |
 | 7 | Wealth & Net Worth | 📋 Planned |
@@ -83,19 +83,34 @@ Delivered:
 
 ---
 
-## Phase 3 — Receipts & Attachments 🔜
+## Phase 3 — Receipts & Attachments ✅
 
 **Goal:** Tie supporting documents to transactions for clarity at tax time.
 
-- Upload files (images, PDFs) and attach them to any transaction
-- Multiple attachments per transaction; thumbnail / inline preview
-- Attachment storage on a mounted volume (encrypted in Phase 5)
-- Drag-and-drop upload
-- Optional: OCR-assisted amount/date matching (Monarch-style receipt scanner)
+Delivered:
+
+- [x] Multipart upload route (`POST /api/transactions/:id/attachments`) with
+      drag-and-drop and click-to-browse in the web UI
+- [x] Multiple attachments per transaction; inline image preview, PDF icon
+- [x] JPEG / PNG / WEBP / PDF allow-list; 25 MB per-file cap; 100 MB
+      aggregate cap per request
+- [x] Filesystem storage under `ATTACHMENTS_DIR` (defaults to
+      `<repo>/data/attachments`); path-traversal hardened
+- [x] Receipt OCR via a pluggable `OcrProvider` interface — Claude vision
+      provider (`claude-haiku-4-5`) extracts amount / date / merchant /
+      confidence; results compared against the transaction with a $0.50 /
+      3-day match tolerance
+- [x] Restart-safe sweep on server boot retries any attachment still at
+      `ocr_status='pending'` (file missing → marked `failed`)
+- [x] 18 additional automated tests (unit + integration + functional)
+      plus a Playwright end-to-end spec
+
+**Deferred to Phase 5:** encryption at rest, Docker volume mount for the
+attachments directory.
 
 ---
 
-## Phase 4 — Insights & Reconciliation 📋
+## Phase 4 — Insights & Reconciliation 🔜
 
 **Goal:** Make the data answer real questions about your money.
 

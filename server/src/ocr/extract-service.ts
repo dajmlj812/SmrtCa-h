@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { readAttachmentBuffer } from '../attachments/storage.js';
 import type { OcrProvider } from './types.js';
 
 /**
@@ -7,8 +8,9 @@ import type { OcrProvider } from './types.js';
  * and stored on the row (status='failed' with the error in ocr_note) so the
  * UI can surface them.
  *
- * Future enhancement: replace this with a real background worker that
- * picks up pending attachments off a queue and survives process restarts.
+ * Restart-safety: any attachment whose upload finished but whose extraction
+ * didn't get to run (server crash mid-OCR) stays at ocr_status='pending'.
+ * `sweepPendingOcr()` below retries those on the next boot.
  */
 export async function runOcrExtraction(
   attachmentId: string,
@@ -65,4 +67,70 @@ export async function markOcrSkipped(attachmentId: string): Promise<void> {
       WHERE id = $1 AND ocr_status = 'pending'`,
     [attachmentId],
   );
+}
+
+export interface SweepResult {
+  scanned: number;
+  extracted: number;
+  failed: number;
+}
+
+/**
+ * Restart-safe retry pass. Finds attachments still at ocr_status='pending'
+ * that are at least `ageSeconds` old (default 60s — gives the in-process
+ * fire-and-forget extraction time to finish) and re-runs OCR on each.
+ *
+ * Per-row failures are caught so one bad row never stops the sweep. Files
+ * that have been deleted off disk get marked 'failed' with the I/O error.
+ */
+export async function sweepPendingOcr(
+  provider: OcrProvider,
+  opts: { ageSeconds?: number } = {},
+): Promise<SweepResult> {
+  const ageSeconds = opts.ageSeconds ?? 60;
+  const candidates = await pool.query<{
+    id: string;
+    storage_path: string;
+    mime_type: string;
+    filename: string;
+  }>(
+    `SELECT id, storage_path, mime_type, filename
+       FROM attachments
+      WHERE ocr_status = 'pending'
+        AND created_at < now() - make_interval(secs => $1::int)`,
+    [ageSeconds],
+  );
+
+  let extracted = 0;
+  let failed = 0;
+  for (const row of candidates.rows) {
+    try {
+      const buffer = await readAttachmentBuffer(row.storage_path);
+      await runOcrExtraction(
+        row.id,
+        provider,
+        buffer,
+        row.mime_type,
+        row.filename,
+      );
+      extracted++;
+    } catch (err) {
+      // runOcrExtraction already wrote 'failed' if it got past the read.
+      // For an upstream error (e.g. missing file), mark it ourselves —
+      // the WHERE clause no-ops if the row was already updated.
+      const message =
+        err instanceof Error
+          ? err.message.slice(0, 500)
+          : String(err).slice(0, 500);
+      await pool.query(
+        `UPDATE attachments
+            SET ocr_status = 'failed',
+                ocr_note   = $1
+          WHERE id = $2 AND ocr_status = 'pending'`,
+        [message, row.id],
+      );
+      failed++;
+    }
+  }
+  return { scanned: candidates.rows.length, extracted, failed };
 }

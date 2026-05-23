@@ -9,7 +9,68 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 3 work will land here._
+_Phase 4 work will land here._
+
+---
+
+## [0.3.0] — 2026-05-22 — Phase 3: Receipts & Attachments
+
+### Added
+
+- **Receipt & file attachments on transactions.** New multipart upload route
+  `POST /api/transactions/:id/attachments` accepts JPEG / PNG / WEBP / PDF
+  (25 MB per file, **100 MB aggregate per request**). Files are written to
+  `ATTACHMENTS_DIR` (defaults to `<repo>/data/attachments`) under a
+  date-sharded layout (`YYYY/MM/<uuid>-<safeFilename>`), with the storage
+  path generated server-side from a UUID and a sanitized filename — so the
+  upload route is immune to path-traversal via the uploaded filename.
+- **Web UI** — a receipt icon on every transaction row opens an attachments
+  modal with **drag-and-drop**, multi-file upload, inline image previews,
+  PDF icons that open in a new tab, download, and delete.
+- **Pluggable receipt OCR.** A new `OcrProvider` interface mirrors the
+  Phase-2 normalizer pattern. The **Claude vision provider**
+  (`claude-haiku-4-5`) extracts `amountCents`, `date`, `merchant`,
+  `confidence` and a free-form `note` via structured outputs. Extracted
+  fields are compared against the transaction using a **$0.50 amount /
+  3-day date** match tolerance, and the modal flags matches vs. differs.
+- **Restart-safe OCR**. A boot-time sweep (`sweepPendingOcr`) finds any
+  attachment still at `ocr_status='pending'` from before the previous
+  shutdown and retries extraction. Rows whose file has vanished from disk
+  are marked `failed`.
+- **API endpoints** — `GET /api/transactions/:id/attachments`,
+  `POST /api/transactions/:id/attachments`,
+  `GET /api/attachments/:id` (download),
+  `GET /api/attachments/:id/preview` (inline),
+  `DELETE /api/attachments/:id`.
+- **Schema** — migration 003 adds OCR columns
+  (`extracted_amount_cents`, `extracted_date`, `extracted_merchant`,
+  `ocr_provider`, `ocr_status`, `ocr_note`) to `attachments`, with a partial
+  index on `ocr_status='pending'` for the sweep.
+- **18 additional automated tests** covering filename sanitization, MIME /
+  size validation, the path-traversal hardening, the Claude OCR mocked
+  client (image + PDF content blocks, response sanitization, error
+  paths), the full upload → list → download → preview → delete loop, the
+  aggregate-cap 413 path, the OCR sweep (extract / age-skip / file-missing),
+  and a Playwright e2e for receipt attach + delete.
+
+### Changed
+
+- `ATTACHMENTS_MAX_REQUEST_BYTES` env var (default `104857600` — 100 MB)
+  governs the aggregate cap. Tests drop it to 1 MB to exercise the 413
+  path without shipping 100 MB through `app.inject`.
+- `transactions` list query now joins on a correlated `attachment_count`
+  subquery so the row badge can render without an extra round-trip.
+
+### Migration notes
+
+- **Upgrading from 0.2.1:** `npm run migrate --prefix server` to apply
+  migration 003 (OCR columns + partial index). No data backfill is
+  required — every row defaults to `ocr_status='pending'`, but no rows
+  exist yet on a 0.2.1 install.
+- Receipt OCR runs only when `AI_PROVIDER=claude` and `ANTHROPIC_API_KEY`
+  is set. Other providers leave attachments at `ocr_status='skipped'`.
+- Phase 5 still owns **encryption at rest** and the **Docker volume mount**
+  for `ATTACHMENTS_DIR` (the server isn't containerized yet).
 
 ---
 

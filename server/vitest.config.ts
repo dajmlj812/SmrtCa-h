@@ -20,6 +20,10 @@ const testAttachmentsDir = join(tmpdir(), 'smrtcash-test-attachments');
 process.env.DATABASE_URL = testDatabaseUrl;
 process.env.NODE_ENV = 'test';
 process.env.ATTACHMENTS_DIR = testAttachmentsDir;
+// Drop the aggregate-upload cap to 1 MB so the 413 path is exercisable
+// without shipping 100 MB of buffers through app.inject.
+const testMaxRequestBytes = String(1024 * 1024);
+process.env.ATTACHMENTS_MAX_REQUEST_BYTES = testMaxRequestBytes;
 
 export default defineConfig({
   test: {
@@ -30,6 +34,7 @@ export default defineConfig({
       DATABASE_URL: testDatabaseUrl,
       NODE_ENV: 'test',
       ATTACHMENTS_DIR: testAttachmentsDir,
+      ATTACHMENTS_MAX_REQUEST_BYTES: testMaxRequestBytes,
     },
     // DB-backed tests share one database and truncate between tests, so
     // test files must run serially, not in parallel.

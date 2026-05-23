@@ -7,13 +7,15 @@ your own container, with your data staying on your machine.
 
 ## Status
 
-**Phases 1 & 2 — Foundation, Import, and AI Normalization** ✅ Complete
+**Phases 1, 2, and 3 — Foundation, Import, AI Normalization, and Receipts** ✅ Complete
 
 The stack is live and verified: accounts, a CSV/XLSX importer with automatic
 bank-format detection, duplicate protection, a web UI for browsing
 transactions, **a pluggable AI normalization layer (rules / Claude API /
 Ollama) that cleans merchant names and categorizes transactions**, a
-user-editable category taxonomy, and inline manual editing. See the
+user-editable category taxonomy, inline manual editing, and **drag-and-drop
+receipt attachments with Claude-vision OCR** that flags receipts whose
+amount or date don't match the transaction. See the
 [Roadmap](./docs/ROADMAP.md) for what's next.
 
 ## Documentation
@@ -56,7 +58,7 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-137 automated tests spanning unit, integration, functional, security, smoke,
+182 automated tests spanning unit, integration, functional, security, smoke,
 performance, and end-to-end layers. With PostgreSQL running:
 
 ```sh

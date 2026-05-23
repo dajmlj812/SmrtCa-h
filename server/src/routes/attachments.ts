@@ -5,6 +5,7 @@ import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import {
   AttachmentValidationError,
+  MAX_REQUEST_BYTES,
   deleteAttachmentFile,
   sanitizeFilename,
   storeAttachment,
@@ -69,59 +70,25 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'Transaction not found' });
       }
 
-      const created: AttachmentRow[] = [];
       const errors: string[] = [];
-      const pendingOcr: Array<{
-        id: string;
-        buffer: Buffer;
+      interface StagedPart {
+        reportedName: string;
         mimeType: string;
-        filename: string;
-      }> = [];
+        buffer: Buffer;
+      }
+      const staged: StagedPart[] = [];
+      let totalBytes = 0;
 
+      // Phase 1 — drain every part into memory, validate per-file, and
+      // refuse the whole request if the aggregate goes over the cap. No
+      // disk or DB writes happen until we know the upload is acceptable.
       for await (const part of req.parts()) {
         if (part.type !== 'file') continue;
         const reportedName = part.filename ?? 'upload';
-        // Always drain the part's stream first — @fastify/multipart blocks
-        // the iterator if a previous file part is left unconsumed. So we
-        // read the buffer BEFORE any validation that might throw.
         const buffer = await part.toBuffer();
         try {
           validateMimeType(part.mimetype);
           validateSize(buffer.byteLength);
-
-          const attachmentId = randomUUID();
-          const { storagePath, byteSize, safeFilename } = await storeAttachment(
-            attachmentId,
-            reportedName,
-            part.mimetype,
-            buffer,
-          );
-
-          // The row starts as 'pending' (default); the OCR step below either
-          // updates it to 'extracted'/'failed' (Claude) or 'skipped' (no
-          // provider). Either way, no row sits at 'pending' after the
-          // response is sent.
-          const insert = await query<AttachmentRow>(
-            `INSERT INTO attachments
-               (id, transaction_id, filename, mime_type, byte_size, storage_path)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING ${PUBLIC_COLUMNS}`,
-            [
-              attachmentId,
-              req.params.id,
-              safeFilename,
-              part.mimetype,
-              byteSize,
-              storagePath,
-            ],
-          );
-          created.push(insert.rows[0]!);
-          pendingOcr.push({
-            id: attachmentId,
-            buffer,
-            mimeType: part.mimetype,
-            filename: safeFilename,
-          });
         } catch (err) {
           const message =
             err instanceof AttachmentValidationError
@@ -130,12 +97,60 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
                 ? err.message
                 : String(err);
           errors.push(`${sanitizeFilename(reportedName)}: ${message}`);
+          continue;
         }
+        totalBytes += buffer.byteLength;
+        if (totalBytes > MAX_REQUEST_BYTES) {
+          return reply.code(413).send({
+            error: `Total upload size exceeds the ${MAX_REQUEST_BYTES}-byte aggregate cap.`,
+          });
+        }
+        staged.push({ reportedName, mimeType: part.mimetype, buffer });
       }
 
-      if (created.length === 0) {
+      if (staged.length === 0) {
         return reply.code(400).send({
           error: errors.length > 0 ? errors.join('; ') : 'No file uploaded',
+        });
+      }
+
+      // Phase 2 — write to disk and DB. Order matches the original
+      // single-pass code so the OCR background hand-off is unchanged.
+      const created: AttachmentRow[] = [];
+      const pendingOcr: Array<{
+        id: string;
+        buffer: Buffer;
+        mimeType: string;
+        filename: string;
+      }> = [];
+      for (const item of staged) {
+        const attachmentId = randomUUID();
+        const { storagePath, byteSize, safeFilename } = await storeAttachment(
+          attachmentId,
+          item.reportedName,
+          item.mimeType,
+          item.buffer,
+        );
+        const insert = await query<AttachmentRow>(
+          `INSERT INTO attachments
+             (id, transaction_id, filename, mime_type, byte_size, storage_path)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING ${PUBLIC_COLUMNS}`,
+          [
+            attachmentId,
+            req.params.id,
+            safeFilename,
+            item.mimeType,
+            byteSize,
+            storagePath,
+          ],
+        );
+        created.push(insert.rows[0]!);
+        pendingOcr.push({
+          id: attachmentId,
+          buffer: item.buffer,
+          mimeType: item.mimeType,
+          filename: safeFilename,
         });
       }
 

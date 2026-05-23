@@ -260,6 +260,31 @@ describe('Attachments API', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it('rejects with 413 when the aggregate upload exceeds the cap', async () => {
+    // Vitest config sets ATTACHMENTS_MAX_REQUEST_BYTES=1 MB; two 600 KB
+    // files clear the per-file limit but trip the aggregate cap.
+    const SIX_HUNDRED_KB = Buffer.alloc(600 * 1024, 1);
+    const form = buildAttachmentForm([
+      { name: 'a.png', mime: 'image/png', buffer: SIX_HUNDRED_KB },
+      { name: 'b.png', mime: 'image/png', buffer: SIX_HUNDRED_KB },
+    ]);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/transactions/${txnId}/attachments`,
+      payload: form,
+      headers: form.getHeaders(),
+    });
+    expect(res.statusCode).toBe(413);
+    expect(res.json().error).toMatch(/aggregate cap/);
+
+    // Neither file made it to disk or the DB.
+    const after = await pool.query(
+      'SELECT id FROM attachments WHERE transaction_id = $1',
+      [txnId],
+    );
+    expect(after.rowCount).toBe(0);
+  });
+
   it('returns 404 uploading to a missing transaction', async () => {
     const form = buildAttachmentForm([
       { name: 'r.png', mime: 'image/png', buffer: TINY_PNG },

@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import {
   cleanupAttachmentDir,
   pool,
   resetDb,
   seedAccount,
 } from '../setup/test-db.js';
+import { config } from '../../src/config.js';
 import {
   markOcrSkipped,
   runOcrExtraction,
+  sweepPendingOcr,
 } from '../../src/ocr/extract-service.js';
 import type { OcrProvider } from '../../src/ocr/types.js';
 
@@ -128,5 +132,84 @@ describe('OCR pipeline (functional)', () => {
     );
     expect(row.rows[0]!.ocr_status).toBe('skipped');
     expect(row.rows[0]!.ocr_note).toBe('No OCR provider configured');
+  });
+
+  it('sweepPendingOcr re-runs OCR for pending rows with files on disk', async () => {
+    const accountId = await seedAccount();
+    // Seed a transaction.
+    const txn = await pool.query<{ id: string }>(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash)
+       VALUES ($1, '2026-05-14', -1234, 'COFFEE SHOP', $2)
+       RETURNING id`,
+      [accountId, randomUUID()],
+    );
+    // Write a real file under the attachments root so readAttachmentBuffer
+    // can find it (the seedAttachment helper uses /tmp paths that fail
+    // the within-root check).
+    const attachmentId = randomUUID();
+    const storagePath = join(
+      config.attachmentsDir,
+      'sweep',
+      `${attachmentId}-receipt.png`,
+    );
+    await mkdir(dirname(storagePath), { recursive: true });
+    await writeFile(storagePath, TINY_PNG);
+    await pool.query(
+      `INSERT INTO attachments
+         (id, transaction_id, filename, mime_type, byte_size,
+          storage_path, ocr_status, created_at)
+       VALUES ($1, $2, 'receipt.png', 'image/png', $3, $4, 'pending',
+               now() - interval '5 minutes')`,
+      [attachmentId, txn.rows[0]!.id, TINY_PNG.length, storagePath],
+    );
+
+    const result = await sweepPendingOcr(mockOcrSuccess, { ageSeconds: 60 });
+    expect(result.scanned).toBe(1);
+    expect(result.extracted).toBe(1);
+    expect(result.failed).toBe(0);
+
+    const row = await pool.query(
+      'SELECT ocr_status, extracted_merchant FROM attachments WHERE id = $1',
+      [attachmentId],
+    );
+    expect(row.rows[0]!.ocr_status).toBe('extracted');
+    expect(row.rows[0]!.extracted_merchant).toBe('Coffee Shop');
+  });
+
+  it('sweepPendingOcr ignores rows newer than ageSeconds', async () => {
+    const accountId = await seedAccount();
+    const { attachmentId } = await seedAttachment(accountId);
+    // Row was just inserted (created_at = now()), so a 60s threshold skips it.
+    const result = await sweepPendingOcr(mockOcrSuccess, { ageSeconds: 60 });
+    expect(result.scanned).toBe(0);
+
+    const row = await pool.query(
+      'SELECT ocr_status FROM attachments WHERE id = $1',
+      [attachmentId],
+    );
+    expect(row.rows[0]!.ocr_status).toBe('pending');
+  });
+
+  it('sweepPendingOcr marks rows whose file vanished as failed', async () => {
+    const accountId = await seedAccount();
+    // The seedAttachment helper points at a /tmp path that doesn't pass
+    // assertWithinRoot — exactly the "file missing" failure mode we want.
+    const { attachmentId } = await seedAttachment(accountId);
+    await pool.query(
+      `UPDATE attachments SET created_at = now() - interval '5 minutes' WHERE id = $1`,
+      [attachmentId],
+    );
+
+    const result = await sweepPendingOcr(mockOcrSuccess, { ageSeconds: 60 });
+    expect(result.scanned).toBe(1);
+    expect(result.failed).toBe(1);
+
+    const row = await pool.query(
+      'SELECT ocr_status, ocr_note FROM attachments WHERE id = $1',
+      [attachmentId],
+    );
+    expect(row.rows[0]!.ocr_status).toBe('failed');
+    expect(row.rows[0]!.ocr_note).toBeTruthy();
   });
 });
