@@ -9,9 +9,110 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 7 closed out. Next up: Phase 8 (OFX/QFX/QIF imports + bank
-connectivity) and Phase 9 (PWA + AI assistant + bill-splitting +
-calendar view)._
+_Phase 8 opened. 0.11.0 lands the first slice — OFX/QFX/QIF file imports
+plus the pluggable data-source scaffold. Next: 0.11.1 OFX Direct
+Connect, 0.11.2 Plaid (super-admin gated, off by default), 0.11.3
+scheduled background sync._
+
+---
+
+## [0.11.0] — 2026-05-23 — File-import expansion (Phase 8.0)
+
+First Phase 8 release. Three new import formats join CSV/XLSX —
+covering the Quicken / Banktivity / Moneydance migration path — and a
+pluggable data-source layer goes in as the cornerstone for 8.1
+(OFX Direct Connect), 8.2 (Plaid), and 8.3 (scheduled sync).
+
+### New parsers
+
+- **QIF (Quicken Interchange Format)** — `server/src/import/parsers/qif.ts`.
+  Walks `!Type:Bank` / `CCard` / `Cash` / `Oth A` / `Oth L` sections,
+  records terminated by `^`. Accepts all common date shapes including
+  Quicken's apostrophe-year (`1/3'05` → 2005-01-03) and 2-digit slash
+  years (pivot: `<70` → 2000s, `≥70` → 1900s). N (reference / check
+  number) is rolled into memo. Ignored sections (`!Account`,
+  `!Type:Cat`, investment, securities) are skipped without crashing.
+- **OFX 1.x (SGML) + OFX 2.x (XML) + QFX** — `server/src/import/parsers/ofx.ts`.
+  A tolerant SGML parser that handles both styles: explicit close
+  tags (OFX 2.x) and the SGML quirk where leaf elements omit their
+  close tag and text terminates at the next `<` (OFX 1.x). Walks
+  every `STMTTRN` node anywhere in the tree, so bank statements,
+  credit-card statements, and investment statements all work.
+  Pulls `TRNTYPE` / `DTPOSTED` / `TRNAMT` / `NAME` / `MEMO` /
+  `CHECKNUM` / `FITID`. QFX is detected by the `.qfx` extension
+  and labelled as such; the parser is otherwise identical to OFX.
+
+### Pipeline wiring
+
+- New module `server/src/import/structured.ts` exports
+  `tryParseStructured(filename, buffer)`. The importer calls this
+  first; if it returns a result, the CSV/XLSX path is skipped
+  entirely. Routing is by file extension (`.ofx`, `.qfx`, `.qif`)
+  with a content-sniff fallback for OFX (so files with weird
+  extensions still work).
+- `importer.ts` was refactored so both CSV/XLSX and structured
+  imports share a single `persistBatch()` helper — dedup hashing,
+  the `import_batches` insert, the per-row transaction insert with
+  `ON CONFLICT (account_id, dedup_hash) DO NOTHING`, and the batch
+  counters all live in one place now.
+- `/api/imports/formats` now advertises `ofx` / `qfx` / `qif` so the
+  Import page's format dropdown lists them alongside Chase.
+- Same `POST /api/imports/preview` and `POST /api/imports/commit`
+  endpoints — no new routes.
+
+### Data-source layer scaffold
+
+- New directory `server/src/datasource/` with `types.ts` and
+  `registry.ts` defining the `TransactionDataSource` interface that
+  the rest of Phase 8 plugs into. The shape mirrors Phase 2's
+  `TransactionNormalizer` and Phase 3's `OcrProvider` — `id`,
+  `name`, `fullyLocal`, `configKeys`, and an async `fetch()` that
+  returns `ParsedTransaction[]` + `RowError[]` + an opaque cursor
+  for incremental sync. No data sources are registered yet; the
+  scaffold sits ready for 8.1.
+
+### Web
+
+- Import page's file picker accepts `.csv`/`.xlsx`/`.ofx`/`.qfx`/`.qif`.
+- Header help text reflects the new format list.
+- No other UI changes — the existing preview + commit + dedup flow
+  works unmodified because structured imports return the same
+  `ImportPreview` / `ImportResult` shapes as CSV/XLSX.
+
+### Tests
+
+- `tests/unit/qif-parser.test.ts` — 7 tests: canonical fixture
+  round-trip, trailing record without `^`, ignored sections,
+  per-record error isolation, apostrophe + 2-digit-year dates,
+  garbage-date rejection.
+- `tests/unit/ofx-parser.test.ts` — 6 tests: OFX 1.x SGML, QFX,
+  OFX 2.x XML, content sniffing, OFX date parser, missing-root
+  rejection.
+- `tests/integration/imports-structured.test.ts` — 7 tests
+  exercising the full `/api/imports/preview` + `/api/imports/commit`
+  + `/api/imports/formats` path for QIF / OFX 1.x / OFX 2.x / QFX,
+  including dedup on re-import.
+- Total: **425 tests** (419 server + 6 web), all green.
+
+### Files
+
+```
+server/src/datasource/types.ts                          (new)
+server/src/datasource/registry.ts                       (new)
+server/src/import/parsers/qif.ts                        (new)
+server/src/import/parsers/ofx.ts                        (new)
+server/src/import/structured.ts                         (new)
+server/src/import/formats.ts                            (advertises ofx/qfx/qif)
+server/src/import/importer.ts                           (structured-first routing)
+server/tests/fixtures/sample.qif                        (new)
+server/tests/fixtures/sample.ofx                        (new)
+server/tests/fixtures/sample.qfx                        (new)
+server/tests/fixtures/sample-ofx2.ofx                   (new)
+server/tests/unit/qif-parser.test.ts                    (new)
+server/tests/unit/ofx-parser.test.ts                    (new)
+server/tests/integration/imports-structured.test.ts     (new)
+web/src/pages/ImportPage.tsx                            (accept list + help text)
+```
 
 ---
 

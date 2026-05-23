@@ -1,0 +1,21 @@
+!Type:Bank
+D03/12/2026
+T-42.18
+PStarbucks #1234
+MAirport
+LCoffee Shops
+N
+C*
+^
+D03/13/2026
+T1500.00
+PAcme Corp Payroll
+MDirect Deposit
+LIncome
+^
+D2026-03-14
+T-9.99
+PSpotify Premium
+LMusic
+N1234
+^

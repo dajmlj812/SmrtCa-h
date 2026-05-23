@@ -18,7 +18,7 @@ nothing is "all or nothing."
 | 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
-| 8 | Connectivity & Automation | 📋 Planned |
+| 8 | Connectivity & Automation | 🔜 In progress — 8.0 ✅ |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
@@ -218,18 +218,25 @@ projection extras landed.
 
 ---
 
-## Phase 8 — Connectivity & Automation 📋
+## Phase 8 — Connectivity & Automation 🔜
 
 **Goal:** Offer all three ways to get data in — without forcing the cloud.
 
-- A pluggable **account data-source layer** (mirrors the pluggable AI design)
-- **Extended file imports** — OFX, QFX, QIF — enabling a smooth migration for
-  Quicken / CountAbout users *(small, high-value — can land early)*
-- **OFX Direct Connect** — pull transactions straight from banks that support
-  the protocol, with no aggregator
-- **Optional Plaid integration** — opt-in automatic sync, clearly flagged as
-  leaving the fully-local model
-- Scheduled background sync & auto-import
+Sliced into four releases:
+
+- **8.0** ✅ (released as 0.11.0) — extended file imports (OFX 1.x SGML,
+  OFX 2.x XML, QFX, QIF) plus the pluggable `TransactionDataSource`
+  layer that the rest of Phase 8 plugs into. Enables a clean
+  migration off Quicken / Banktivity / Moneydance with no aggregator.
+- **8.1** 🔜 — **OFX Direct Connect**: pull transactions straight from
+  banks that support the protocol, with no aggregator. Implements
+  the first `TransactionDataSource` on top of the OFX parser.
+- **8.2** 📋 — **Plaid integration**, super-admin-gated and disabled
+  by default. Clearly flagged as leaving the fully-local model.
+  Same data-source interface, different backend.
+- **8.3** 📋 — **scheduled background sync** + auto-import. A
+  per-tenant cadence calls `fetch()` on each enabled data source
+  and runs the same dedup + persistence path.
 
 ---
 

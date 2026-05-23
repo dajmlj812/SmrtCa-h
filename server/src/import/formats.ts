@@ -69,12 +69,28 @@ export interface FormatSummary {
   suggestedAccountType: AccountType;
 }
 
+/**
+ * Pseudo-format ids that aren't in BUILT_IN_FORMATS but ARE recognized
+ * by the structured-import path (parsers/ofx.ts, parsers/qif.ts).
+ * They're advertised in /api/imports/formats so the UI dropdown lists
+ * them, but selecting one has no effect: the importer routes by file
+ * extension, not by `formatId`, for structured files.
+ */
+const STRUCTURED_FORMATS: FormatSummary[] = [
+  { id: 'ofx', name: 'OFX (Open Financial Exchange)', suggestedAccountType: 'checking' },
+  { id: 'qfx', name: 'Quicken QFX', suggestedAccountType: 'checking' },
+  { id: 'qif', name: 'Quicken QIF', suggestedAccountType: 'checking' },
+];
+
 export function listFormats(): FormatSummary[] {
-  return BUILT_IN_FORMATS.map(({ id, name, suggestedAccountType }) => ({
-    id,
-    name,
-    suggestedAccountType,
-  }));
+  return [
+    ...BUILT_IN_FORMATS.map(({ id, name, suggestedAccountType }) => ({
+      id,
+      name,
+      suggestedAccountType,
+    })),
+    ...STRUCTURED_FORMATS,
+  ];
 }
 
 export function getFormat(id: string): ImportFormat | undefined {

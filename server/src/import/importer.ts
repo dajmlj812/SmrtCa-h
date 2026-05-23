@@ -8,6 +8,7 @@ import {
   type ImportFormat,
 } from './formats.js';
 import { assignDedupHashes } from './dedup.js';
+import { tryParseStructured } from './structured.js';
 import type { ParsedTransaction, RawRow, RowError } from './types.js';
 
 export class ImportError extends Error {}
@@ -73,6 +74,24 @@ export async function previewImport(
   formatId?: string,
   mapping?: ColumnMapping,
 ): Promise<ImportPreview> {
+  // OFX/QFX/QIF go through their own typed parsers and skip the
+  // CSV/XLSX headers + column-mapping path. A user-supplied mapping
+  // doesn't apply here.
+  const structured = tryParseStructured(filename, buffer);
+  if (structured) {
+    return {
+      detectedFormatId: structured.formatId,
+      detectedFormatName: structured.formatName,
+      suggestedAccountType: structured.suggestedAccountType,
+      headers: [],
+      totalRows: structured.transactions.length + structured.errors.length,
+      parsedCount: structured.transactions.length,
+      errorCount: structured.errors.length,
+      sample: structured.transactions.slice(0, 10),
+      errors: structured.errors.slice(0, 10),
+    };
+  }
+
   const { headers, rows } = await parseImportFile(filename, buffer);
   const format = resolveFormat(headers, formatId, mapping);
 
@@ -111,6 +130,17 @@ export async function commitImport(
   formatId?: string,
   mapping?: ColumnMapping,
 ): Promise<ImportResult> {
+  const structured = tryParseStructured(filename, buffer);
+  if (structured) {
+    return persistBatch(
+      accountId,
+      filename,
+      structured.formatId,
+      structured.transactions,
+      structured.errors,
+    );
+  }
+
   const { headers, rows } = await parseImportFile(filename, buffer);
   const format = resolveFormat(headers, formatId, mapping);
   if (!format) {
@@ -120,7 +150,26 @@ export async function commitImport(
   }
 
   const { transactions, errors } = mapRows(rows, format);
+  return persistBatch(accountId, filename, format.id, transactions, errors, rows.length);
+}
+
+/**
+ * Shared persistence path. Both the CSV/XLSX pipeline and the
+ * structured (OFX/QFX/QIF) pipeline hand off to this once they have a
+ * list of typed transactions plus per-row errors. `totalRows` lets
+ * the CSV path report the original row count; the structured path
+ * just uses transactions + errors.
+ */
+async function persistBatch(
+  accountId: string,
+  filename: string,
+  formatId: string,
+  transactions: ParsedTransaction[],
+  errors: RowError[],
+  totalRows?: number,
+): Promise<ImportResult> {
   const hashes = assignDedupHashes(transactions);
+  const rowCount = totalRows ?? transactions.length + errors.length;
 
   return withTransaction(async (client) => {
     const account = await client.query('SELECT id FROM accounts WHERE id = $1', [
@@ -133,7 +182,7 @@ export async function commitImport(
     const batch = await client.query<{ id: string }>(
       `INSERT INTO import_batches (account_id, filename, format_id, row_count)
        VALUES ($1, $2, $3, $4) RETURNING id`,
-      [accountId, filename, format.id, rows.length],
+      [accountId, filename, formatId, rowCount],
     );
     const batchId = batch.rows[0]!.id;
 
@@ -174,8 +223,8 @@ export async function commitImport(
 
     return {
       batchId,
-      formatId: format.id,
-      totalRows: rows.length,
+      formatId,
+      totalRows: rowCount,
       importedCount,
       skippedCount,
       errorCount: errors.length,

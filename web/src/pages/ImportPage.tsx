@@ -88,7 +88,7 @@ export function ImportPage() {
         <div>
           <h1>Import</h1>
           <div className="subtitle">
-            Upload a CSV or Excel statement from your bank
+            Upload a CSV, Excel, OFX, QFX, or QIF statement from your bank
           </div>
         </div>
       </div>
@@ -137,13 +137,13 @@ export function ImportPage() {
 
           <div className="dropzone">
             <label htmlFor="import-file" className="muted">
-              Choose a .csv or .xlsx file to import
+              Choose a .csv / .xlsx / .ofx / .qfx / .qif file to import
             </label>
             <input
               id="import-file"
               ref={fileInputRef}
               type="file"
-              accept=".csv,.CSV,.xlsx,.xls,.txt"
+              accept=".csv,.CSV,.xlsx,.xls,.txt,.ofx,.OFX,.qfx,.QFX,.qif,.QIF"
               onChange={onFileChange}
             />
           </div>
