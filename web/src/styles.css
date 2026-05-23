@@ -1633,3 +1633,54 @@ tr.selected {
   font-style: italic;
   color: #9ca3af;
 }
+
+/* ── Health page — gauges + charts (Phase 7.8) ───────────── */
+.gauge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.gauge {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px 12px;
+  text-align: center;
+  border-top: 4px solid #e5e7eb;
+}
+.gauge-tone-ok   { border-top-color: #10b981; }
+.gauge-tone-warn { border-top-color: #f59e0b; }
+.gauge-tone-crit { border-top-color: #dc2626; }
+.gauge svg {
+  width: 100%;
+  height: auto;
+  max-height: 90px;
+}
+.gauge-label {
+  font-size: 0.9em;
+  color: #6b7280;
+  font-weight: 600;
+  margin-top: -2px;
+}
+.gauge-hint {
+  font-size: 0.75em;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.chart-card {
+  padding: 12px;
+}
+.chart-title {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}

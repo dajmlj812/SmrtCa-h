@@ -64,6 +64,37 @@ describe('Health metrics (Phase 7.6)', () => {
     expect(body.db.table_counts.accounts).toBe(1);
     expect(body.db.table_counts.transactions).toBe(2);
   });
+
+  it('GET /api/health/timeseries returns the buffer envelope', async () => {
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/health/timeseries?window=60',
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    expect(body.window_seconds).toBe(60);
+    expect(Array.isArray(body.points)).toBe(true);
+    // Each point (if any) must have the documented shape.
+    for (const p of body.points) {
+      expect(typeof p.ts).toBe('string');
+      expect(typeof p.cpu_pct).toBe('number');
+      expect(typeof p.rss_bytes).toBe('number');
+      expect(typeof p.req_rate).toBe('number');
+      expect(typeof p.db_query_rate).toBe('number');
+    }
+  });
+
+  it('GET /api/health/live returns the most recent sample or null', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/health/live' });
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    // Test runs faster than the 5s sampler tick, so `latest` is almost
+    // always null. Either is valid; just enforce the contract.
+    if (body.latest !== null) {
+      expect(typeof body.latest.ts).toBe('string');
+      expect(typeof body.latest.cpu_pct).toBe('number');
+    }
+  });
 });
 
 describe('Backups (Phase 7.6)', () => {

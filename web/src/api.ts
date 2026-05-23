@@ -474,6 +474,25 @@ export interface HealthSnapshot {
   };
 }
 
+export interface MetricSample {
+  ts: string;
+  cpu_pct: number;
+  rss_bytes: number;
+  heap_used_bytes: number;
+  heap_total_bytes: number;
+  event_loop_mean_ms: number;
+  event_loop_p99_ms: number;
+  event_loop_util: number;
+  req_count: number;
+  req_rate: number;
+  err_count: number;
+  err_rate: number;
+  db_query_count: number;
+  db_query_rate: number;
+  db_query_mean_ms: number;
+  db_query_max_ms: number;
+}
+
 export interface BackupRecord {
   id: string;
   kind: 'manual' | 'scheduled';
@@ -1327,8 +1346,18 @@ export const api = {
   restartServer: () =>
     http<{ restarting: boolean }>('/api/admin/restart', { method: 'POST' }),
 
-  // ── Health (Phase 7.6) ───────────────────────────────────
+  // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),
+
+  healthTimeseries: (windowSec?: number) => {
+    const q = windowSec ? `?window=${windowSec}` : '';
+    return http<{ window_seconds: number; points: MetricSample[] }>(
+      `/api/health/timeseries${q}`,
+    );
+  },
+
+  healthLive: () =>
+    http<{ latest: MetricSample | null }>('/api/health/live'),
 
   // ── Backups (Phase 7.6) ──────────────────────────────────
   listBackupsHistory: () =>

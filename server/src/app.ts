@@ -37,6 +37,7 @@ import { backupRoutes } from './routes/backups.js';
 import { reportRoutes } from './routes/reports.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
+import { metricsRecorder } from './domain/metrics-recorder.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 
 // Augment FastifyRequest with the authenticated user. Set by the auth
@@ -170,6 +171,14 @@ export async function buildApp(
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.
   startBackupScheduler();
+
+  // Start the rolling-metrics recorder and instrument every HTTP
+  // response. The /api/health/timeseries endpoint reads its buffer.
+  metricsRecorder.start();
+  app.addHook('onResponse', (req, reply, done) => {
+    metricsRecorder.incRequest(reply.statusCode);
+    done();
+  });
 
   // Optional: serve the prebuilt web bundle from the same process. The
   // Docker image copies `web/dist` into `server/dist/public`; in dev the

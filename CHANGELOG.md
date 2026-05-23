@@ -13,6 +13,61 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.7.8] — 2026-05-23 — Live gauges + line charts on the Health page
+
+Operator metrics the way a systems engineer wants them: a rolling-buffer
+sampler runs in-process every 5 seconds, capturing CPU, memory, event-
+loop delay, request rate, error rate, and DB query rate + latency. The
+Health page renders the current values as colored gauges and the last 5
+minutes as Recharts line charts.
+
+### Added
+
+- **`MetricsRecorder` singleton** (`domain/metrics-recorder.ts`) —
+  rolling buffer of 720 samples (1 hour at 5s resolution). Each
+  sample captures:
+  - `cpu_pct` — process CPU % over the window (from `process.cpuUsage()`
+    deltas; can exceed 100 on multi-core when busy)
+  - `rss_bytes`, `heap_used_bytes`, `heap_total_bytes` — Node memory
+  - `event_loop_mean_ms` and `event_loop_p99_ms` — from
+    `perf_hooks.monitorEventLoopDelay()`, reset per sample
+  - `event_loop_util` — 0..1, 1 = saturated
+  - `req_count` / `req_rate` — HTTP responses served in the window
+  - `err_count` / `err_rate` — share that returned 5xx
+  - `db_query_count` / `db_query_rate` / `db_query_mean_ms` /
+    `db_query_max_ms` — DB query throughput + latency
+- **Request instrumentation** — `onResponse` hook on the Fastify
+  instance bumps the request + error counters.
+- **DB-query instrumentation** — the `query()` helper in `db/pool.ts`
+  wraps every call with timing reported to the recorder. Direct
+  `pool.query` calls aren't instrumented; that was a deliberate
+  tradeoff after a fragile attempt to override the multi-overload
+  method on the pg.Pool class itself.
+- **`GET /api/health/timeseries[?window=N]`** — returns the rolling
+  buffer (last N seconds or the full hour). Each point matches the
+  `MetricSample` shape documented above.
+- **`GET /api/health/live`** — most recent sample alone (for gauge-only
+  widgets that don't need history).
+- **Health page charts + gauges**:
+  - **Six gauges** with color-toned arcs (green/yellow/red): CPU %,
+    Heap %, event-loop p99 ms, requests/sec, DB qps, error rate %.
+    Thresholds chosen from operational experience —
+    CPU 70/90, heap 70/90, event-loop 50/100 ms, latency 50/200 ms,
+    error rate 1%/5%.
+  - **Six line charts** at the 5-minute resolution: CPU %, Memory
+    (RSS + heap), Requests/sec, DB query rate + mean latency on a
+    dual-axis chart, event-loop mean + p99, Errors/sec.
+  - Existing static info cards (app / db / storage) move below the
+    live panels.
+
+### Tests
+
+- `+2` integration tests (`health-backups-reports.test.ts`):
+  timeseries envelope shape + per-point typing; live snapshot contract.
+- **Total: 351** (server 345 + web 6).
+
+---
+
 ## [0.7.7] — 2026-05-23 — Column filters + show/hide on report tables
 
 Reports get two power-user knobs: hide columns you don't care about,

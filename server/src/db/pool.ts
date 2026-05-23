@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { config } from '../config.js';
+import { metricsRecorder } from '../domain/metrics-recorder.js';
 
 // --- Type parsers -----------------------------------------------------------
 // int8 / bigint (oid 20): money is stored as integer cents, well within the
@@ -11,11 +12,27 @@ pg.types.setTypeParser(1082, (value) => value);
 
 export const pool = new pg.Pool({ connectionString: config.databaseUrl });
 
+/**
+ * Instrumented query helper — every call here is timed and reported to
+ * the metrics recorder, so /api/health/timeseries shows accurate DB
+ * query rate + mean/max latency.
+ *
+ * Most of the server uses this helper or `withTransaction()` below
+ * (which also threads instrumented calls through). The handful of
+ * places that call `pool.query` directly aren't reported — that's a
+ * pragmatic tradeoff to avoid wrapping the pg.Pool method itself,
+ * which proved fragile against pg's overload typing.
+ */
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params: unknown[] = [],
 ): Promise<pg.QueryResult<T>> {
-  return pool.query<T>(text, params as unknown[]);
+  const t0 = Date.now();
+  try {
+    return await pool.query<T>(text, params as unknown[]);
+  } finally {
+    metricsRecorder.recordQuery(Date.now() - t0);
+  }
 }
 
 /** Run a function inside a single transaction, committing or rolling back. */
