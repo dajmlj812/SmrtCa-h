@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { api } from '../api';
+import { useEffect, useState, type FormEvent } from 'react';
+import { api, type AuthProviderDescriptor } from '../api';
 
 interface Props {
   /** Called after a successful login so the App re-checks status. */
@@ -7,16 +7,22 @@ interface Props {
 }
 
 export function LoginPage({ onAuthenticated }: Props) {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [providers, setProviders] = useState<AuthProviderDescriptor[]>([]);
+
+  useEffect(() => {
+    api.authProviders().then(setProviders).catch(() => undefined);
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      await api.authLogin(password);
+      await api.authLogin({ email: email.trim(), password });
       onAuthenticated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -25,6 +31,12 @@ export function LoginPage({ onAuthenticated }: Props) {
     }
   }
 
+  // The Local provider drives the in-page form; redirect providers
+  // (OIDC/SAML) become big buttons above the password fields.
+  const ssoProviders = providers.filter(
+    (p) => p.kind !== 'local' && p.enabled,
+  );
+
   return (
     <div className="auth-shell">
       <form className="auth-card" onSubmit={submit}>
@@ -32,15 +44,42 @@ export function LoginPage({ onAuthenticated }: Props) {
           Smrt<span>Cash</span>
         </div>
         <h1>Welcome back</h1>
-        <p className="muted">Enter your password to continue.</p>
+        <p className="muted">Sign in to continue.</p>
         {error && <div className="banner error">{error}</div>}
+
+        {ssoProviders.length > 0 && (
+          <div className="sso-providers">
+            {ssoProviders.map((p) => (
+              <a
+                key={p.id}
+                className="btn secondary sso-btn"
+                href={`/api/auth/oidc/${p.id.replace(/^oidc:/, '')}/begin?returnTo=${encodeURIComponent('/')}`}
+              >
+                Continue with {p.displayName}
+              </a>
+            ))}
+            <div className="sso-divider">or</div>
+          </div>
+        )}
+
+        <div className="field">
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="username"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
         <div className="field">
           <label htmlFor="password">Password</label>
           <input
             id="password"
             type="password"
             autoComplete="current-password"
-            autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -49,7 +88,7 @@ export function LoginPage({ onAuthenticated }: Props) {
         <button
           className="btn auth-submit"
           type="submit"
-          disabled={submitting || password === ''}
+          disabled={submitting || email === '' || password === ''}
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>

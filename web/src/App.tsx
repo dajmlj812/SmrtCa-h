@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { api } from './api';
 import { AccountsPage } from './pages/AccountsPage';
 import { AccountDetailPage } from './pages/AccountDetailPage';
@@ -21,11 +21,16 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HealthPage } from './pages/HealthPage';
 import { BackupsPage } from './pages/BackupsPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { InviteAcceptPage } from './pages/InviteAcceptPage';
+import { WorkspacePage } from './pages/WorkspacePage';
 
 type AuthState = 'loading' | 'needs-setup' | 'needs-login' | 'authenticated';
 
 export function App() {
   const [authState, setAuthState] = useState<AuthState>('loading');
+  const location = useLocation();
+  // /invite/:token is a public landing — skip the auth gate entirely.
+  const isInviteRoute = location.pathname.startsWith('/invite/');
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -44,6 +49,13 @@ export function App() {
     void refreshAuth();
   }, [refreshAuth]);
 
+  if (isInviteRoute) {
+    return (
+      <Routes>
+        <Route path="/invite/:token" element={<InviteAcceptPage />} />
+      </Routes>
+    );
+  }
   if (authState === 'loading') {
     return (
       <div className="auth-shell">
@@ -96,6 +108,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/reports">Reports</NavLink>
           <NavLink to="/backups">Backups</NavLink>
           <NavLink to="/health">Health</NavLink>
+          <NavLink to="/workspace">Workspace</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="sidebar-footer">
@@ -128,6 +141,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/backups" element={<BackupsPage />} />
           <Route path="/health" element={<HealthPage />} />
+          <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

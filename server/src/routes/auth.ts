@@ -1,11 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { config } from '../config.js';
-import { query } from '../db/pool.js';
+import { pool, query, withTransaction } from '../db/pool.js';
 import {
   PasswordPolicyError,
   hashPassword,
   validatePassword,
-  verifyPassword,
 } from '../auth/passwords.js';
 import {
   SESSION_COOKIE,
@@ -13,21 +13,14 @@ import {
   deleteSession,
   pruneExpiredSessions,
 } from '../auth/sessions.js';
+import {
+  clearProviderCache,
+  getProvider,
+  listProviders,
+} from '../auth/providers/registry.js';
+import { resolveIdentity } from '../auth/identities.js';
 
-interface UserRow {
-  id: string;
-  password_hash: string;
-  created_at: string;
-  last_login_at: string | null;
-}
-
-async function loadSingletonUser(): Promise<UserRow | null> {
-  const r = await query<UserRow>(
-    `SELECT id, password_hash, created_at, last_login_at
-       FROM users ORDER BY created_at LIMIT 1`,
-  );
-  return r.rows[0] ?? null;
-}
+const OIDC_STATE_COOKIE = 'smrtcash_oidc_state';
 
 function setSessionCookie(reply: FastifyReply, sessionId: string, expiresAt: Date): void {
   reply.setCookie(SESSION_COOKIE, sessionId, {
@@ -44,25 +37,65 @@ function clearSessionCookie(reply: FastifyReply): void {
   reply.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
+async function activeTenantForUser(userId: string): Promise<string | null> {
+  // Pick the user's first membership (by created_at). Used when minting
+  // a brand-new session.
+  const r = await pool.query<{ tenant_id: string }>(
+    `SELECT tenant_id FROM memberships
+      WHERE user_id = $1
+      ORDER BY created_at LIMIT 1`,
+    [userId],
+  );
+  return r.rows[0]?.tenant_id ?? null;
+}
+
+async function isInstanceSetup(): Promise<boolean> {
+  const r = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM users`,
+  );
+  return (r.rows[0]?.n ?? 0) > 0;
+}
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-  // Tells the frontend whether the app is set up yet and whether the
-  // current request is authenticated. Always safe to call.
+  // Public — what the login page needs to render.
   app.get('/api/auth/status', async (req) => {
-    const user = await loadSingletonUser();
+    const setup = await isInstanceSetup();
     return {
-      isSetup: user !== null,
+      isSetup: setup,
       authenticated: req.user !== undefined,
     };
   });
 
-  // First-boot setup. Refuses once any user exists — there's only ever
-  // one. After success the caller is also logged in.
+  // Lists enabled providers (Local always; OIDC/SAML depending on
+  // auth_provider_configs). Public.
+  app.get('/api/auth/providers', async () => {
+    const providers = await listProviders();
+    return {
+      providers: providers.map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        displayName: p.displayName,
+        enabled: p.enabled,
+      })),
+    };
+  });
+
+  // First-boot bootstrap: creates the first user as owner of the
+  // already-seeded Default tenant. Refuses once any user exists.
   app.post('/api/auth/setup', async (req, reply) => {
-    const existing = await loadSingletonUser();
-    if (existing) {
+    if (await isInstanceSetup()) {
       return reply.code(409).send({ error: 'Already initialized' });
     }
-    const body = (req.body ?? {}) as { password?: unknown };
+    const body = (req.body ?? {}) as {
+      email?: unknown;
+      name?: unknown;
+      password?: unknown;
+    };
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (email === '') {
+      return reply.code(400).send({ error: 'Email is required' });
+    }
     try {
       validatePassword(body.password);
     } catch (err) {
@@ -72,42 +105,197 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
     const hash = await hashPassword(body.password as string);
-    const created = await query<{ id: string; created_at: string }>(
-      `INSERT INTO users (password_hash) VALUES ($1)
-       RETURNING id, created_at`,
-      [hash],
-    );
-    const userId = created.rows[0]!.id;
-    const session = await createSession(userId);
+
+    const result = await withTransaction(async (client) => {
+      const u = await client.query<{ id: string; created_at: string }>(
+        `INSERT INTO users (email, name, password_hash)
+         VALUES ($1, $2, $3)
+         RETURNING id, created_at`,
+        [email, name || 'Owner', hash],
+      );
+      const userId = u.rows[0]!.id;
+      // Adopt the Default tenant created in migration 017; create it if
+      // missing (covers fresh installs where the migration ran on an
+      // empty DB and the tenant was created+immediately seeded, and
+      // also tests that truncate the table).
+      const existing = await client.query<{ id: string }>(
+        `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+      );
+      const tenantId = existing.rowCount && existing.rowCount > 0
+        ? existing.rows[0]!.id
+        : (
+            await client.query<{ id: string }>(
+              `INSERT INTO tenants (name, slug)
+               VALUES ('Default', 'default')
+               RETURNING id`,
+            )
+          ).rows[0]!.id;
+      await client.query(
+        `INSERT INTO memberships (tenant_id, user_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [tenantId, userId],
+      );
+      await client.query(
+        `INSERT INTO user_identities (user_id, provider, provider_user_id, email)
+         VALUES ($1, 'local', $2, $3)`,
+        [userId, userId, email],
+      );
+      return { userId, tenantId, createdAt: u.rows[0]!.created_at };
+    });
+
+    const session = await createSession(result.userId, result.tenantId);
     setSessionCookie(reply, session.id, session.expiresAt);
     return reply.code(201).send({
-      user: { id: userId, created_at: created.rows[0]!.created_at },
+      user: { id: result.userId, email, name, created_at: result.createdAt },
     });
   });
 
+  // Local password login. The frontend sends { email, password }. The
+  // legacy single-user form (password only) is still accepted for the
+  // first migration cycle — it picks the singleton user when there's
+  // exactly one.
   app.post('/api/auth/login', async (req, reply) => {
-    const user = await loadSingletonUser();
-    if (!user) {
-      // Not set up — tell the client explicitly so it can route to setup.
+    if (!(await isInstanceSetup())) {
       return reply.code(409).send({ error: 'Not initialized' });
     }
-    const body = (req.body ?? {}) as { password?: unknown };
-    const password = typeof body.password === 'string' ? body.password : '';
-    if (password === '' || !(await verifyPassword(user.password_hash, password))) {
-      return reply.code(401).send({ error: 'Invalid password' });
+    const body = (req.body ?? {}) as { email?: unknown; password?: unknown };
+    const local = await getProvider('local');
+    if (!local || !local.verify) {
+      return reply.code(500).send({ error: 'Local provider unavailable' });
     }
-    await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [user.id]);
-    // Opportunistic cleanup — runs at most once per login attempt.
+
+    // Back-compat: if no email is supplied and there's exactly one user,
+    // act on that user. Drop in a future cleanup once everyone has migrated.
+    let email = typeof body.email === 'string' ? body.email.trim() : '';
+    if (email === '') {
+      const sole = await pool.query<{ email: string | null; n: number }>(
+        `SELECT email, COUNT(*) OVER ()::int AS n FROM users LIMIT 1`,
+      );
+      if (sole.rowCount === 1 && sole.rows[0]!.n === 1 && sole.rows[0]!.email) {
+        email = sole.rows[0]!.email;
+      }
+    }
+    if (email === '') {
+      return reply.code(400).send({ error: 'Email is required' });
+    }
+
+    let identity;
+    try {
+      identity = await local.verify({ email, password: body.password });
+    } catch (err) {
+      return reply
+        .code(401)
+        .send({ error: err instanceof Error ? err.message : 'Login failed' });
+    }
+    const resolved = await resolveIdentity(identity);
+    const tenantId = await activeTenantForUser(resolved.userId);
+    if (!tenantId) {
+      return reply.code(403).send({
+        error: 'No tenant membership for this user',
+      });
+    }
+    await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [
+      resolved.userId,
+    ]);
     void pruneExpiredSessions().catch((err) =>
       req.log.warn({ err }, 'Session cleanup failed'),
     );
-    const session = await createSession(user.id);
+    const session = await createSession(resolved.userId, tenantId);
     setSessionCookie(reply, session.id, session.expiresAt);
-    return { user: { id: user.id } };
+    return { user: { id: resolved.userId, email: resolved.email, name: resolved.name } };
   });
 
-  // Logout is idempotent — deleting an unknown id is a no-op, and clearing
-  // an unset cookie is a no-op. Always returns 204.
+  // ── OIDC: begin + callback ───────────────────────────────
+  app.get<{ Params: { slug: string }; Querystring: { returnTo?: string } }>(
+    '/api/auth/oidc/:slug/begin',
+    async (req, reply) => {
+      const provider = await getProvider(`oidc:${req.params.slug}`);
+      if (!provider) {
+        return reply.code(404).send({ error: 'Unknown provider' });
+      }
+      const result = await provider.begin({ returnTo: req.query.returnTo });
+      if (result.kind !== 'redirect') {
+        return reply.code(500).send({ error: 'Provider did not start a redirect flow' });
+      }
+      // Stash the per-attempt state in a short-lived signed cookie so
+      // the callback can verify it. Cookie name includes the slug so
+      // simultaneous attempts to different IdPs don't trample each other.
+      reply.setCookie(
+        `${OIDC_STATE_COOKIE}_${req.params.slug}`,
+        JSON.stringify(result.state),
+        {
+          httpOnly: true,
+          sameSite: 'lax', // 'lax' so the cookie survives the IdP redirect
+          secure: config.auth.cookieSecure,
+          path: '/',
+          signed: true,
+          maxAge: 600, // 10 minutes
+        },
+      );
+      return reply.redirect(result.url);
+    },
+  );
+
+  app.get<{
+    Params: { slug: string };
+    Querystring: Record<string, string>;
+  }>('/api/auth/oidc/:slug/callback', async (req, reply) => {
+    const provider = await getProvider(`oidc:${req.params.slug}`);
+    if (!provider || !provider.completeRedirect) {
+      return reply.code(404).send({ error: 'Unknown provider' });
+    }
+    const cookieName = `${OIDC_STATE_COOKIE}_${req.params.slug}`;
+    const rawCookie = req.cookies[cookieName];
+    if (!rawCookie) {
+      return reply.code(400).send({ error: 'OIDC state cookie missing — expired or third-party blocked' });
+    }
+    const unsigned = req.unsignCookie(rawCookie);
+    if (!unsigned.valid || !unsigned.value) {
+      return reply.code(400).send({ error: 'OIDC state cookie invalid' });
+    }
+    reply.clearCookie(cookieName, { path: '/' });
+
+    let state: Record<string, string>;
+    try {
+      state = JSON.parse(unsigned.value) as Record<string, string>;
+    } catch {
+      return reply.code(400).send({ error: 'OIDC state cookie unparseable' });
+    }
+
+    let identity;
+    try {
+      identity = await provider.completeRedirect(req.query, state);
+    } catch (err) {
+      return reply.code(401).send({
+        error: err instanceof Error ? err.message : 'OIDC callback failed',
+      });
+    }
+    const resolved = await resolveIdentity(identity);
+    const tenantId = await activeTenantForUser(resolved.userId);
+    if (!tenantId) {
+      return reply.code(403).send({
+        error:
+          "This account isn't a member of any tenant. Ask an admin for an invitation.",
+      });
+    }
+    const session = await createSession(resolved.userId, tenantId);
+    setSessionCookie(reply, session.id, session.expiresAt);
+
+    // Return the user to where they came from (sanitized).
+    const returnTo =
+      typeof state.returnTo === 'string' && state.returnTo.startsWith('/')
+        ? state.returnTo
+        : '/';
+    return reply.redirect(returnTo);
+  });
+
+  // Settings UI hook: rebuild the registry after a config change.
+  app.post('/api/auth/providers/reload', async () => {
+    clearProviderCache();
+    return { ok: true };
+  });
+
+  // Logout — idempotent.
   app.post('/api/auth/logout', async (req, reply) => {
     const cookieValue = req.cookies[SESSION_COOKIE];
     if (cookieValue) {
@@ -124,13 +312,42 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!req.user) {
       return reply.code(401).send({ error: 'Not authenticated' });
     }
-    const r = await query<{ id: string; created_at: string; last_login_at: string | null }>(
-      `SELECT id, created_at, last_login_at FROM users WHERE id = $1`,
+    const u = await query<{
+      id: string;
+      email: string | null;
+      name: string | null;
+      created_at: string;
+      last_login_at: string | null;
+    }>(
+      `SELECT id, email, name, created_at::text, last_login_at::text
+         FROM users WHERE id = $1`,
       [req.user.id],
     );
-    if (r.rowCount === 0) {
+    if (u.rowCount === 0) {
       return reply.code(401).send({ error: 'User not found' });
     }
-    return { user: r.rows[0] };
+    const memberships = await query<{
+      tenant_id: string;
+      tenant_name: string;
+      tenant_slug: string;
+      role: string;
+    }>(
+      `SELECT m.tenant_id, t.name AS tenant_name, t.slug AS tenant_slug, m.role
+         FROM memberships m
+         JOIN tenants t ON t.id = m.tenant_id
+        WHERE m.user_id = $1
+        ORDER BY m.created_at`,
+      [req.user.id],
+    );
+    return {
+      user: u.rows[0],
+      memberships: memberships.rows,
+      active_tenant_id: req.user.tenantId ?? null,
+    };
   });
+}
+
+// Helper used by membership / invite routes to mint a fresh random token.
+export function randomToken(): string {
+  return randomBytes(24).toString('base64url');
 }

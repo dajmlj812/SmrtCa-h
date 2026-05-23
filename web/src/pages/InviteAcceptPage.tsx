@@ -1,14 +1,34 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
-
-interface Props {
-  /** Called after a successful setup so the App re-checks status. */
-  onAuthenticated: () => void;
-}
 
 const MIN_PASSWORD = 8;
 
-export function SetupPage({ onAuthenticated }: Props) {
+/**
+ * /invite/:token — public landing page for an invitation link.
+ *
+ * Validates the token via GET /api/invitations/:token, then collects
+ * email + name + password and posts the accept. On success the server
+ * creates the user + membership and sets the session cookie; we then
+ * route to the dashboard.
+ */
+
+interface Invitation {
+  id: string;
+  tenant_id: string;
+  tenant_name: string;
+  email_hint: string | null;
+  role: 'admin' | 'member' | 'viewer';
+  expires_at: string;
+}
+
+export function InviteAcceptPage() {
+  const { token = '' } = useParams<{ token: string }>();
+  const navigate = useNavigate();
+
+  const [invitation, setInvitation] = useState<Invitation | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -16,8 +36,22 @@ export function SetupPage({ onAuthenticated }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const mismatch = confirm !== '' && password !== confirm;
+  useEffect(() => {
+    if (!token) {
+      setLoadErr('Missing invitation token');
+      return;
+    }
+    api
+      .fetchInvitation(token)
+      .then((r) => {
+        setInvitation(r.invitation);
+        if (r.invitation.email_hint) setEmail(r.invitation.email_hint);
+      })
+      .catch((e) => setLoadErr(e instanceof Error ? e.message : 'Invalid invite'));
+  }, [token]);
+
   const tooShort = password !== '' && password.length < MIN_PASSWORD;
+  const mismatch = confirm !== '' && password !== confirm;
   const ready =
     email.trim() !== '' &&
     password.length >= MIN_PASSWORD &&
@@ -29,17 +63,43 @@ export function SetupPage({ onAuthenticated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      await api.authSetup({
+      await api.acceptInvitation(token, {
         email: email.trim(),
         name: name.trim() || undefined,
         password,
       });
-      onAuthenticated();
+      navigate('/');
+      // Force a reload so the App reruns auth probe and renders the app.
+      window.location.reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Setup failed');
+      setError(err instanceof Error ? err.message : 'Accept failed');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (loadErr) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-card">
+          <div className="brand auth-brand">
+            Smrt<span>Cash</span>
+          </div>
+          <h1>Invitation problem</h1>
+          <p className="banner error">{loadErr}</p>
+          <p className="muted">Ask whoever sent the link for a fresh one.</p>
+        </div>
+      </div>
+    );
+  }
+  if (!invitation) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-card">
+          <p className="empty">Loading invitation…</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -48,11 +108,10 @@ export function SetupPage({ onAuthenticated }: Props) {
         <div className="brand auth-brand">
           Smrt<span>Cash</span>
         </div>
-        <h1>Create the owner account</h1>
+        <h1>You're invited</h1>
         <p className="muted">
-          This becomes the owner of the default workspace. Pick a strong
-          password (≥ {MIN_PASSWORD} characters). There's no email
-          recovery, so store it in a password manager.
+          Join <strong>{invitation.tenant_name}</strong> as a{' '}
+          <strong>{invitation.role}</strong>.
         </p>
         {error && <div className="banner error">{error}</div>}
         <div className="field">
@@ -110,12 +169,8 @@ export function SetupPage({ onAuthenticated }: Props) {
             <div className="field-hint error">Passwords do not match.</div>
           )}
         </div>
-        <button
-          className="btn auth-submit"
-          type="submit"
-          disabled={!ready || submitting}
-        >
-          {submitting ? 'Creating account…' : 'Create account'}
+        <button className="btn auth-submit" type="submit" disabled={!ready || submitting}>
+          {submitting ? 'Joining…' : 'Accept invitation'}
         </button>
       </form>
     </div>

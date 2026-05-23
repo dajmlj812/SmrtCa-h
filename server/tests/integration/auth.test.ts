@@ -32,7 +32,7 @@ describe('Auth API', () => {
       const setup = await app.inject({
         method: 'POST',
         url: '/api/auth/setup',
-        payload: { password: 'correct-horse-battery-staple' },
+        payload: { email: 'owner@local', password: 'correct-horse-battery-staple' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -60,7 +60,7 @@ describe('Auth API', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/auth/setup',
-        payload: { password: 'short' },
+        payload: { email: 'owner@local', password: 'short' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -72,14 +72,14 @@ describe('Auth API', () => {
       await app.inject({
         method: 'POST',
         url: '/api/auth/setup',
-        payload: { password: 'correct-horse-battery-staple' },
+        payload: { email: 'owner@local', password: 'correct-horse-battery-staple' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
       const second = await app.inject({
         method: 'POST',
         url: '/api/auth/setup',
-        payload: { password: 'another-good-password' },
+        payload: { email: 'owner@local', password: 'another-good-password' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -90,7 +90,7 @@ describe('Auth API', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/auth/login',
-        payload: { password: 'whatever' },
+        payload: { email: 'owner@local', password: 'whatever' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -108,7 +108,7 @@ describe('Auth API', () => {
       const setup = await app.inject({
         method: 'POST',
         url: '/api/auth/setup',
-        payload: { password: 'correct-horse-battery-staple' },
+        payload: { email: 'owner@local', password: 'correct-horse-battery-staple' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -120,7 +120,7 @@ describe('Auth API', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/auth/login',
-        payload: { password: 'correct-horse-battery-staple' },
+        payload: { email: 'owner@local', password: 'correct-horse-battery-staple' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -137,7 +137,7 @@ describe('Auth API', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/auth/login',
-        payload: { password: 'wrong' },
+        payload: { email: 'owner@local', password: 'wrong' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);

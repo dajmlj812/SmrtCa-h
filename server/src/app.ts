@@ -35,27 +35,35 @@ import { settingsRoutes } from './routes/settings.js';
 import { healthRoutes } from './routes/health.js';
 import { backupRoutes } from './routes/backups.js';
 import { reportRoutes } from './routes/reports.js';
+import { tenantRoutes } from './routes/tenants.js';
+import { authProviderRoutes } from './routes/auth-providers.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { metricsRecorder } from './domain/metrics-recorder.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 
 // Augment FastifyRequest with the authenticated user. Set by the auth
-// preHandler below.
+// preHandler below. `tenantId` is the session's active tenant — null
+// until the user picks one (or for fresh sessions where the user has
+// no memberships yet).
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: { id: string };
+    user?: { id: string; tenantId: string | null };
   }
 }
 
-// URL prefixes that do NOT require an authenticated session.
+// URL prefixes that do NOT require an authenticated session. The OIDC
+// begin + callback paths are also public so a logged-out user can hit
+// them; the rest of /api/auth/* (logout, me) require a session.
 const PUBLIC_PATHS = new Set<string>([
   '/api/health',
   '/api/auth/status',
   '/api/auth/setup',
   '/api/auth/login',
   '/api/auth/logout',
+  '/api/auth/providers',
 ]);
+const PUBLIC_PREFIXES = ['/api/auth/oidc/', '/api/invitations/'];
 
 export interface BuildAppOptions {
   /** Enable Fastify's request logger. Off by default in tests. */
@@ -92,7 +100,9 @@ export async function buildApp(
   app.addHook('preHandler', async (req, reply) => {
     const url = (req.url.split('?')[0] ?? '').replace(/\/+$/, '');
     if (!url.startsWith('/api/') && url !== '/api') return;
-    if (PUBLIC_PATHS.has(url)) {
+    const isPublic =
+      PUBLIC_PATHS.has(url) || PUBLIC_PREFIXES.some((p) => url.startsWith(p));
+    if (isPublic) {
       // For /api/auth/status we still try to populate req.user so the
       // endpoint can report `authenticated: true` when applicable.
       if (url === '/api/auth/status') {
@@ -101,7 +111,8 @@ export async function buildApp(
           const unsigned = req.unsignCookie(raw);
           if (unsigned.valid && unsigned.value) {
             const session = await loadSession(unsigned.value);
-            if (session) req.user = { id: session.userId };
+            if (session)
+              req.user = { id: session.userId, tenantId: session.activeTenantId };
           }
         }
       }
@@ -120,7 +131,7 @@ export async function buildApp(
     if (!session) {
       return reply.code(401).send({ error: 'Session expired' });
     }
-    req.user = { id: session.userId };
+    req.user = { id: session.userId, tenantId: session.activeTenantId };
   });
 
   app.setErrorHandler(
@@ -167,6 +178,8 @@ export async function buildApp(
   await app.register(healthRoutes);
   await app.register(backupRoutes);
   await app.register(reportRoutes);
+  await app.register(tenantRoutes);
+  await app.register(authProviderRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.

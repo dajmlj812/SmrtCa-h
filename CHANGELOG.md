@@ -13,6 +13,139 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.8.0] — 2026-05-23 — Multi-tenant + multi-user foundation
+
+Headline shift: SmrtCash is no longer a single-user-per-instance app.
+This release lays the schema, abstractions, and UI for households /
+organizations to share one self-hosted deployment with role-gated
+access and pluggable authentication. RLS enforcement and SAML
+implementation follow in 0.8.x slices.
+
+### Added — schema (migrations 017 + 018)
+
+- **`tenants`** — one row per household/org. URL-safe slug + display name.
+- **`memberships`** — many-to-many users↔tenants with role
+  (`owner` / `admin` / `member` / `viewer`).
+- **`invitations`** — short-lived URL-safe tokens with role + optional
+  email hint, created by owner/admin, accepted by anyone holding the
+  link. Tokens expire after 14 days.
+- **`user_identities`** — many-to-one identities↔user. One row per
+  provider login (`local`, `oidc:google`, `oidc:<slug>`, `saml:<slug>`).
+  Lets one user log in via password AND Google AND Microsoft.
+- **`auth_provider_configs`** — runtime registry of configured OIDC /
+  SAML providers. Settings UI writes here; the login page reads via
+  `GET /api/auth/providers`. Local is implicit and always available.
+- **users gains `email` + `name`** (unique email); singleton convention
+  retired. `password_hash` is now nullable for OIDC-only users.
+- **sessions gains `active_tenant_id`** so the session middleware can
+  carry tenant context. Set on login + invite-accept; mutable via
+  `POST /api/tenants/switch`.
+- **`tenant_id` columns** added (nullable, backfilled to the seeded
+  `Default` tenant) on every user-data table: accounts, transactions,
+  attachments, categories, category_suggestions, import_batches,
+  normalization_rules, transaction_splits, recurring_suggestions,
+  budgets, savings_goals, bills, recurring_income, holdings, vehicles,
+  commute_routes, route_vehicle_assignments, fuel_prices. NOT NULL +
+  Row Level Security policies land in a follow-up migration after the
+  query audit + test sweep.
+
+### Added — authentication abstraction
+
+- **`AuthProvider` interface** (`auth/providers/types.ts`) — every
+  login method implements `begin()` + (`verify()` for credential flows
+  OR `completeRedirect()` for OIDC/SAML).
+- **Local provider** wraps the existing argon2id flow as one provider
+  among many. Always enabled — it's the bootstrap path.
+- **Generic OIDC provider** (`auth/providers/oidc.ts`) — full
+  Authorization-Code + PKCE flow built on Node 22's `fetch` and
+  `crypto`. Reads the IdP discovery document, generates verifier +
+  nonce + state, exchanges the code at the token endpoint, validates
+  `iss` + `aud` + `nonce`, decodes the ID token, and falls back to
+  the userinfo endpoint when needed. Same code path serves the preset
+  configs for Google / Microsoft / GitHub (their discovery URLs are
+  hardcoded) and any spec-compliant generic OIDC IdP (Okta,
+  Authentik, Keycloak, Azure AD, etc).
+- **SAML provider** is a stub — interface in place, returns a clear
+  "not implemented yet" from `begin()`. A correct SP-initiated flow
+  with XML-signature verification needs a vetted library and focused
+  tests; queued for 0.8.x.
+
+### Added — routes
+
+- `GET /api/auth/providers` — login page lists configured providers
+- `GET /api/auth/oidc/:slug/begin` — kicks off an OIDC redirect with
+  a short-lived signed state cookie
+- `GET /api/auth/oidc/:slug/callback` — handles the IdP callback
+- `POST /api/auth/setup` — now takes `{ email, name?, password }` and
+  promotes the new user to owner of the Default tenant
+- `POST /api/auth/login` — takes `{ email, password }` (back-compat:
+  email-less still works when exactly one user exists)
+- `GET /api/auth/me` — current user + memberships + active_tenant_id
+- `GET /api/tenants`, `POST /api/tenants/switch`
+- `GET /api/tenants/:id/members`, `DELETE /api/tenants/:id/members/:userId`
+- `GET/POST /api/tenants/:id/invitations`,
+  `DELETE /api/tenants/:id/invitations/:invId`
+- `GET /api/invitations/:token` (public),
+  `POST /api/invitations/:token/accept` (public — mints session)
+- `GET/POST/PATCH/DELETE /api/auth-provider-configs` (owner only)
+
+### Added — web UI
+
+- **LoginPage** — email + password fields, SSO buttons for every
+  enabled OIDC provider.
+- **SetupPage** — email + display name + password for the owner of
+  the brand-new instance.
+- **`/invite/:token`** — public landing for invitation links;
+  collects email + name + password, accepts the invite, mints the
+  session, lands on the dashboard.
+- **`/workspace`** — new admin page with three sections:
+  - **Members** — roster + role pill + Remove (owner only).
+  - **Invitations** — list pending + create form + Copy-link +
+    Revoke. The accept URL is `https://<host>/invite/<token>`.
+  - **Auth providers** — list configured OIDC/SAML providers; form to
+    add a preset (Google/Microsoft/GitHub) or a Generic OIDC config
+    with discovery URL + client id + client secret + redirect URI.
+    `client_secret` is masked on the list view. SAML rows surface but
+    can't be enabled until the SAML implementation lands.
+
+### Migration notes
+
+- `npm run migrate --prefix server` applies 017 + 018.
+- Existing single-user installs: the migration backfills your user as
+  owner of the seeded Default tenant. Your password keeps working. You
+  may want to set an email via the UI (`/workspace`) once it's live.
+- Existing data rows now carry `tenant_id = <Default>`. RLS isn't
+  active yet — every authenticated request can still see all data in
+  the instance. The data isolation guarantee arrives in the follow-up
+  migration that turns on RLS and updates every query.
+
+### Tests
+
+- `+8` integration tests (`multi-tenant.test.ts`): providers listed,
+  tenants list, me-returns-memberships, invitation create+accept,
+  double-accept rejected, member-remove, provider-config CRUD,
+  duplicate-slug 409.
+- The seeded test user now carries a Default-tenant membership +
+  email + identity row so existing private-route tests pass
+  unchanged.
+- **Total: 359** (server 353 + web 6).
+
+### Deferred (next slices)
+
+- **RLS enforcement** — turn on Postgres Row Level Security on every
+  data table with `current_setting('app.tenant_id')` predicates, and a
+  request hook that `SET LOCAL`s the active tenant. Until this lands,
+  app-layer scoping is the only thing keeping tenants apart, which is
+  fine for households sharing an instance but not for SaaS isolation.
+- **SAML 2.0** — actual SP-initiated flow with XML-signature verification
+  via a vetted library (`@node-saml/node-saml` or similar).
+- **Self-serve tenant creation + tenant switcher in the top bar** —
+  today every user lives inside the seeded Default tenant. The UI
+  doesn't expose multi-tenant switching because the data model
+  doesn't enforce it yet.
+
+---
+
 ## [0.7.9] — 2026-05-23 — Fuzzy filters, column show/hide rollout, heap fix, configurable refresh
 
 Three knobs the user asked for, plus a real bug fix that was making the

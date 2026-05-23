@@ -55,7 +55,7 @@ describe('Health metrics (Phase 7.6)', () => {
     expect(body.db.connected).toBe(true);
     expect(body.db.ping_ms).toBeGreaterThanOrEqual(0);
     expect(body.db.table_counts).toBeDefined();
-    expect(body.db.last_migration).toMatch(/016_phase7_6/);
+    expect(body.db.last_migration).toMatch(/\.sql$/);
     expect(body.storage).toBeDefined();
   });
 

@@ -1698,3 +1698,24 @@ tr.selected {
   border-color: #6366f1;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
+
+/* SSO providers on the login page (Phase 8.0) */
+.sso-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sso-btn {
+  text-align: center;
+  text-decoration: none;
+  display: block;
+}
+.sso-divider {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 8px 0;
+}

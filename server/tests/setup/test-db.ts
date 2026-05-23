@@ -50,19 +50,39 @@ export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> 
               users, sessions, budgets, savings_goals, bills, recurring_income,
               recurring_suggestions, normalization_rules, transaction_splits,
               holdings, vehicles, commute_routes, route_vehicle_assignments,
-              fuel_prices, app_settings, backups
+              fuel_prices, app_settings, backups, tenants, memberships,
+              invitations, user_identities, auth_provider_configs
        RESTART IDENTITY CASCADE`,
   );
   await seedDefaultCategories(pool);
   if (!opts.skipAuth) {
+    // Seed the singleton test user, the Default tenant, and a
+    // membership so private-route tests pass through the auth gate
+    // and (post-Phase 8) carry tenant context.
     await pool.query(
-      `INSERT INTO users (id, password_hash) VALUES ($1, $2)`,
-      [TEST_USER_ID, TEST_PASSWORD_HASH],
+      `INSERT INTO users (id, email, name, password_hash)
+       VALUES ($1, $2, 'Test User', $3)`,
+      [TEST_USER_ID, 'test@local', TEST_PASSWORD_HASH],
+    );
+    const tenant = await pool.query<{ id: string }>(
+      `INSERT INTO tenants (name, slug) VALUES ('Default', 'default')
+         RETURNING id`,
+    );
+    const tenantId = tenant.rows[0]!.id;
+    await pool.query(
+      `INSERT INTO memberships (tenant_id, user_id, role)
+       VALUES ($1, $2, 'owner')`,
+      [tenantId, TEST_USER_ID],
     );
     await pool.query(
-      `INSERT INTO sessions (id, user_id, expires_at)
-       VALUES ($1, $2, now() + interval '1 day')`,
-      [TEST_SESSION_ID, TEST_USER_ID],
+      `INSERT INTO user_identities (user_id, provider, provider_user_id, email)
+       VALUES ($1::uuid, 'local', $1::text, 'test@local')`,
+      [TEST_USER_ID],
+    );
+    await pool.query(
+      `INSERT INTO sessions (id, user_id, expires_at, active_tenant_id)
+       VALUES ($1, $2, now() + interval '1 day', $3)`,
+      [TEST_SESSION_ID, TEST_USER_ID, tenantId],
     );
   }
 }

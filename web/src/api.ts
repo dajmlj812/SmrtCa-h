@@ -545,6 +545,70 @@ export interface ReportResult {
   summary?: string;
 }
 
+// ── Phase 8 types (multi-tenant + multi-user + providers) ───
+export interface AuthProviderDescriptor {
+  id: string;
+  kind: 'local' | 'oidc' | 'saml';
+  displayName: string;
+  enabled: boolean;
+}
+
+export interface TenantMembership {
+  tenant_id: string;
+  tenant_name: string;
+  tenant_slug: string;
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+}
+
+export interface MeResponse {
+  user: {
+    id: string;
+    email: string | null;
+    name: string | null;
+    created_at: string;
+    last_login_at: string | null;
+  };
+  memberships: TenantMembership[];
+  active_tenant_id: string | null;
+}
+
+export interface TenantSummary {
+  id: string;
+  name: string;
+  slug: string;
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+}
+
+export interface Member {
+  user_id: string;
+  email: string | null;
+  name: string | null;
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface Invitation {
+  id: string;
+  email_hint: string | null;
+  role: 'admin' | 'member' | 'viewer';
+  token: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface AuthProviderConfig {
+  id: string;
+  kind: 'oidc' | 'saml';
+  slug: string;
+  display_name: string;
+  enabled: boolean;
+  config_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export class AuthRequiredError extends Error {
   constructor() {
     super('Authentication required');
@@ -755,27 +819,136 @@ export const api = {
   authStatus: () =>
     http<{ isSetup: boolean; authenticated: boolean }>('/api/auth/status'),
 
-  authSetup: (password: string) =>
+  authSetup: (input: { email: string; name?: string; password: string }) =>
     http<{ user: { id: string; created_at: string } }>('/api/auth/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(input),
     }),
 
-  authLogin: (password: string) =>
+  authLogin: (input: { email: string; password: string }) =>
     http<{ user: { id: string } }>('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(input),
     }),
+
+  authProviders: () =>
+    http<{ providers: AuthProviderDescriptor[] }>('/api/auth/providers').then(
+      (r) => r.providers,
+    ),
 
   authLogout: () =>
     http<void>('/api/auth/logout', { method: 'POST' }),
 
-  authMe: () =>
-    http<{ user: { id: string; created_at: string; last_login_at: string | null } }>(
-      '/api/auth/me',
+  authMe: () => http<MeResponse>('/api/auth/me'),
+
+  // ── Phase 8: tenants + memberships + invitations + providers ─
+  listTenants: () =>
+    http<{ tenants: TenantSummary[]; active_tenant_id: string | null }>(
+      '/api/tenants',
     ),
+
+  switchTenant: (tenantId: string) =>
+    http<{ active_tenant_id: string; role: string }>('/api/tenants/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId }),
+    }),
+
+  listMembers: (tenantId: string) =>
+    http<{ members: Member[] }>(`/api/tenants/${tenantId}/members`).then(
+      (r) => r.members,
+    ),
+
+  removeMember: (tenantId: string, userId: string) =>
+    http<void>(`/api/tenants/${tenantId}/members/${userId}`, {
+      method: 'DELETE',
+    }),
+
+  listInvitations: (tenantId: string) =>
+    http<{ invitations: Invitation[] }>(
+      `/api/tenants/${tenantId}/invitations`,
+    ).then((r) => r.invitations),
+
+  createInvitation: (
+    tenantId: string,
+    input: { emailHint?: string; role: 'admin' | 'member' | 'viewer' },
+  ) =>
+    http<{ invitation: Invitation }>(
+      `/api/tenants/${tenantId}/invitations`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ).then((r) => r.invitation),
+
+  revokeInvitation: (tenantId: string, invId: string) =>
+    http<void>(`/api/tenants/${tenantId}/invitations/${invId}`, {
+      method: 'DELETE',
+    }),
+
+  fetchInvitation: (token: string) =>
+    http<{
+      invitation: {
+        id: string;
+        tenant_id: string;
+        tenant_name: string;
+        email_hint: string | null;
+        role: 'admin' | 'member' | 'viewer';
+        expires_at: string;
+      };
+    }>(`/api/invitations/${encodeURIComponent(token)}`),
+
+  acceptInvitation: (
+    token: string,
+    input: { email: string; name?: string; password: string },
+  ) =>
+    http<{ user: { id: string; email: string }; tenant_id: string }>(
+      `/api/invitations/${encodeURIComponent(token)}/accept`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ),
+
+  listAuthProviderConfigs: () =>
+    http<{
+      providers: AuthProviderConfig[];
+      presets: Array<{ slug: string; displayName: string; discoveryUrl: string }>;
+    }>('/api/auth-provider-configs'),
+
+  createAuthProviderConfig: (input: {
+    kind: 'oidc' | 'saml';
+    slug: string;
+    displayName: string;
+    enabled: boolean;
+    config: Record<string, unknown>;
+  }) =>
+    http<{ id: string }>('/api/auth-provider-configs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
+  updateAuthProviderConfig: (
+    id: string,
+    input: Partial<{
+      displayName: string;
+      enabled: boolean;
+      config: Record<string, unknown>;
+    }>,
+  ) =>
+    http<{ ok: true }>(`/api/auth-provider-configs/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
+  deleteAuthProviderConfig: (id: string) =>
+    http<void>(`/api/auth-provider-configs/${id}`, { method: 'DELETE' }),
 
   // ── Transfers (Phase 4) ──────────────────────────────────
   listTransfers: () =>
