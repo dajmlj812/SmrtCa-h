@@ -10,6 +10,8 @@ const ACCOUNT_TYPES: Array<{ value: string; label: string }> = [
   { value: 'cash', label: 'Cash' },
   { value: 'investment', label: 'Investment' },
   { value: 'loan', label: 'Loan' },
+  { value: 'manual_asset', label: 'Asset (manual, e.g. house)' },
+  { value: 'manual_liability', label: 'Liability (manual, e.g. mortgage)' },
   { value: 'other', label: 'Other' },
 ];
 

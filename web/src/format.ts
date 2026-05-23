@@ -25,6 +25,8 @@ export function accountTypeLabel(type: string): string {
     investment: 'Investment',
     loan: 'Loan',
     other: 'Other',
+    manual_asset: 'Asset',
+    manual_liability: 'Liability',
   };
   return labels[type] ?? type;
 }

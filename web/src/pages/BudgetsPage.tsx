@@ -6,6 +6,7 @@ import {
   type Category,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { BudgetWizard } from '../components/BudgetWizard';
 
 const PERIOD_LABELS: Record<BudgetPeriodType, string> = {
   weekly: 'Weekly',
@@ -44,6 +45,8 @@ export function BudgetsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardSummary, setWizardSummary] = useState<string | null>(null);
 
   const load = useCallback(async (m: string) => {
     setLoading(true);
@@ -124,6 +127,13 @@ export function BudgetsPage() {
         </div>
         <div className="toolbar inline">
           <button
+            className="btn"
+            onClick={() => setShowWizard(true)}
+            title="Generate multiple future periods at once with bills + groceries + fuel + tolls pre-filled"
+          >
+            ✨ AutoMagic setup
+          </button>
+          <button
             className="btn secondary"
             onClick={() => setMonth(prevMonth(month))}
           >
@@ -138,6 +148,22 @@ export function BudgetsPage() {
           </button>
         </div>
       </div>
+
+      {wizardSummary && <div className="banner success">{wizardSummary}</div>}
+
+      {showWizard && (
+        <BudgetWizard
+          onClose={() => setShowWizard(false)}
+          onCommitted={(r) => {
+            setShowWizard(false);
+            setWizardSummary(
+              `Created ${r.created} budget row${r.created === 1 ? '' : 's'}` +
+                (r.skipped > 0 ? `, skipped ${r.skipped} duplicate(s).` : '.'),
+            );
+            void load(month);
+          }}
+        />
+      )}
 
       {error && <div className="banner error">{error}</div>}
 

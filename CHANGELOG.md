@@ -9,7 +9,155 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 7 work will land here._
+_Phase 7.2 (multi-currency) and Phase 7.3 (retirement projections) work
+will land here._
+
+---
+
+## [0.7.1] — 2026-05-22 — Phase 7.1: AutoMagic budget wizard + vehicles + toll routes
+
+A coherent "set up the next N budget periods in one click" flow. The
+wizard projects existing bills + income into each future period and
+pre-fills three editable categories (Groceries, Fuel, Tolls) using
+historical data, fleet info, and active toll routes. Commit writes
+real budget rows, including one per individual bill instance.
+
+### Added
+
+- **Vehicles** (`/vehicles` page, `/api/vehicles` CRUD). Each vehicle
+  records `fuel_type` (regular/midgrade/premium/diesel/electric),
+  `weekly_avg_miles`, and either `mpg` (ICE) or `kwh_per_mile` +
+  `electricity_rate_cents_per_kwh` (EV). A DB CHECK keeps the
+  type-specific fields coherent.
+- **Toll routes** (`/tolls`, `/api/toll-routes`). Named recurring toll
+  outlays, each with a weekly $ estimate and active flag. The wizard
+  sums every active route into one Tolls number per period.
+- **Fuel prices** (`/api/fuel-prices`):
+  - Cached per grade in `fuel_prices`, source `eia` or `manual`.
+  - `POST /api/fuel-prices/refresh` pulls latest weekly US averages
+    from `api.eia.gov` when `EIA_API_KEY` is configured. Manual
+    overrides are preserved (the user's choice wins).
+  - The Vehicles page surfaces the current values with inline
+    "Set manual" fields + a "Refresh from EIA" button.
+- **AutoMagic budget wizard** (`/api/budgets/wizard/preview` and
+  `/commit`). Inputs: period type, anchor date, count (1–24). For each
+  future period the preview computes:
+  - Income instances (from `recurring_income`, projected by frequency)
+  - Bill instances (from `bills`, projected; one row per instance)
+  - Groceries default = median of last 8 weeks of Groceries-category
+    spend, scaled to the period length
+  - Fuel = `Σ vehicles (weekly_miles / mpg × $/gal)` for ICE +
+    `Σ EVs (weekly_miles × kWh/mi × $/kWh)`, scaled
+  - Tolls = sum of active toll routes' weekly estimates, scaled
+  - Implicit flex = income − bills − the three (shown, not stored)
+- **Per-period inline editing.** Groceries / Fuel / Tolls each have an
+  amount input per period — overrides flow back into the preview math.
+- **Commit semantics.** Writes per-period budget rows for the three
+  editable categories *plus* one bill-linked budget row per bill
+  instance falling in that period. `budgets.bill_id` (new column,
+  migration 012) links the row to its source bill. Existing rows are
+  never overwritten — skip-duplicates is the rule; the response reports
+  created/skipped counts.
+- **Bill-linked budget actuals.** `/api/budgets/actual` now includes
+  `bill_id`, `bill_name`, and `bill_next_due_date`. For bill-linked
+  rows, `actual_cents` flips to the budgeted amount the moment the
+  bill is marked paid (its `next_due_date` advances past the row's
+  period end); otherwise 0.
+
+### Changed
+
+- `BUDGET_COLUMNS` extended and every `/api/budgets` query joins
+  `bills` so the response carries bill-linked metadata.
+- Sidebar adds **Vehicles** and **Tolls** entries.
+- `EIA_API_KEY` env var documented in `.env.example` (added below).
+
+### Tests
+
+- **+6 server tests** (287 → 293) covering the wizard preview math
+  (groceries median, fuel math from vehicles + price cache, toll route
+  sum) plus the commit path (creates 3 editable rows + 1 per bill,
+  skip-duplicates on re-run).
+- Total automated coverage: **306 tests** (server 293 + web 6 +
+  Playwright 7).
+
+### Migration notes
+
+- **Upgrading from 0.7.0:** `npm run migrate --prefix server` applies
+  migration 012 (vehicles + toll_routes + fuel_prices tables +
+  `budgets.bill_id`).
+- Set `EIA_API_KEY` in `.env` (free key from
+  https://www.eia.gov/opendata/register.php) to enable auto-refresh of
+  fuel prices. Without it, manual entry covers the same use case.
+
+---
+
+## [0.7.0] — 2026-05-22 — Phase 7.0: Investment holdings + manual assets & liabilities
+
+Phase 7 is being released in three slices. **7.0 lands the wealth-
+tracking core** — investments with cost basis and mark-to-market, plus
+manual asset/liability accounts for things SmrtCash can't see (houses,
+cars, mortgages, loans). The dashboard's net-worth chart now reflects
+your complete picture, not just the bank-import slice. **7.1**
+(multi-currency) and **7.2** (retirement projections) follow.
+
+### Added
+
+- **Investment holdings.** New `holdings` table (migration 011) with
+  `(account_id, symbol, name, quantity NUMERIC(18,6), cost_basis_cents,
+  last_price_cents, last_price_date)`. Six decimals on `quantity`
+  supports fractional shares and crypto. Holdings are entered manually
+  in 0.7.0; auto-price-fetching is a future hook.
+- **Holdings CRUD** at `/api/holdings` (`GET ?accountId=`, `POST`,
+  `PATCH`, `DELETE`). `POST` enforces that the parent account is of
+  type `investment`. List responses include the derived
+  `market_value_cents` (`quantity × last_price_cents`) and
+  `unrealized_gain_cents` (market value − cost basis).
+- **Investment account balance** now equals `opening_balance_cents +
+  sum(transactions on/after opening date) + sum(holdings market value)`.
+  A new `holdings_value_cents` field is exposed separately so the UI
+  can split "cash side" from "equity side" if desired.
+- **Manual asset / liability accounts.** Two new account types —
+  `manual_asset` (house, vehicle, art) and `manual_liability`
+  (mortgage, auto loan, student loan). These accounts have no
+  transactions; their value lives in `opening_balance_cents` and the
+  user adjusts it periodically.
+  - **Convention:** liabilities are stored as **negative** balances so
+    a single `SUM()` across all accounts yields net worth. The web form
+    accepts "Amount owed" as a positive number and negates on save.
+- **Holdings panel** on the Account Detail page (investment accounts
+  only). Per-row **Update price** (mark-to-market) and **Delete**, plus
+  totals: market value, cost basis, unrealized gain.
+- **Account form** learns the two new types; the opening-balance form
+  on the detail page changes its label and copy for manual A&L
+  ("Amount owed" for liabilities, "Current value" for assets).
+- **Net worth over time** at `/api/insights/net-worth-over-time` now
+  includes holdings (`quantity × last_price`) and manual A&L
+  (`opening_balance_cents`) alongside cash accounts. The dashboard
+  chart picks up the wider view automatically.
+
+### Tests
+
+- **+7 server tests** (280 → 287): holdings CRUD happy path,
+  non-investment-account rejection, mark-to-market, quantity > 0,
+  investment-balance = cash + market-value, manual A&L creation,
+  net-worth-over-time math with the full mix.
+- Total automated coverage: **300 tests** (server 287 + web 6 +
+  Playwright 7).
+
+### Migration notes
+
+- **Upgrading from 0.6.2:** `npm run migrate --prefix server` applies
+  migration 011 (holdings table + expanded account-type CHECK).
+- No backfill needed — existing accounts keep their balance math; only
+  new investment accounts pick up the holdings-aware total.
+
+### What's still coming in Phase 7
+
+- **0.7.1 — multi-currency.** Each account already has a `currency`
+  column; the queries will gain conversion to a configurable base
+  currency, with an `exchange_rates` table.
+- **0.7.2 — retirement projections.** Compound-growth math against
+  contributions and an assumed return, surfaced as a scenarios page.
 
 ---
 

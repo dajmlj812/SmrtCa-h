@@ -1206,3 +1206,85 @@ tr.selected {
 .suggestion-card.selected {
   outline: 2px solid #4f8cff;
 }
+
+/* ── Phase 7.0: holdings panel ─────────────────────────────── */
+
+.holdings-panel {
+  margin-bottom: 24px;
+}
+.holdings-totals {
+  display: flex;
+  gap: 24px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--card-border, #e5e7eb);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Phase 7.1: wizard, vehicles, tolls ──────────────────── */
+
+.modal-xl {
+  max-width: 1100px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.wizard-controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+.wizard-defaults {
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.wizard-grid {
+  display: grid;
+  gap: 12px;
+}
+.wizard-period {
+  border: 1px solid var(--card-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 12px;
+}
+.wizard-period-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.wizard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.wizard-table td {
+  padding: 4px 8px;
+  vertical-align: middle;
+}
+.wizard-table td:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 110px;
+}
+.wizard-table .wizard-amount {
+  width: 90px;
+  padding: 2px 6px;
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.wizard-flex td {
+  border-top: 1px solid var(--card-border, #e5e7eb);
+  padding-top: 8px;
+  font-weight: 500;
+}
+.wizard-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border, #e5e7eb);
+}

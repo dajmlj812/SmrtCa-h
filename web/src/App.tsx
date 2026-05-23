@@ -13,6 +13,8 @@ import { SetupPage } from './pages/SetupPage';
 import { BudgetsPage } from './pages/BudgetsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
+import { VehiclesPage } from './pages/VehiclesPage';
+import { TollsPage } from './pages/TollsPage';
 
 type AuthState = 'loading' | 'needs-setup' | 'needs-login' | 'authenticated';
 
@@ -79,11 +81,13 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/budgets">Budgets</NavLink>
           <NavLink to="/goals">Goals</NavLink>
           <NavLink to="/bills">Bills</NavLink>
+          <NavLink to="/vehicles">Vehicles</NavLink>
+          <NavLink to="/tolls">Tolls</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/import">Import</NavLink>
         </nav>
         <div className="sidebar-footer">
-          Phase 6 · Budgeting
+          Phase 7 · Wealth + AutoMagic
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -103,6 +107,8 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/budgets" element={<BudgetsPage />} />
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/bills" element={<BillsPage />} />
+          <Route path="/vehicles" element={<VehiclesPage />} />
+          <Route path="/tolls" element={<TollsPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
         </Routes>

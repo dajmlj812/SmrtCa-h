@@ -10,12 +10,28 @@ function asString(value: unknown): string {
 
 // True balance: opening_balance_cents + sum of amounts on/after opening date
 // (or sum of all amounts when opening_balance_date is null). Closes KI-01.
+// For investment accounts, the holdings' market value (quantity × last
+// price) is added on top in the SELECT so balance_cents always
+// represents the account's total worth. holdings_value_cents is
+// exposed separately for the UI.
 const BALANCE_SELECT = `
   a.opening_balance_cents
     + COALESCE(SUM(t.amount_cents) FILTER (
         WHERE a.opening_balance_date IS NULL
            OR t.txn_date >= a.opening_balance_date
       ), 0)
+    + COALESCE((
+        SELECT SUM(h.quantity * h.last_price_cents)::bigint
+          FROM holdings h
+         WHERE h.account_id = a.id
+      ), 0)
+`;
+const HOLDINGS_VALUE = `
+  COALESCE((
+    SELECT SUM(h.quantity * h.last_price_cents)::bigint
+      FROM holdings h
+     WHERE h.account_id = a.id
+  ), 0)
 `;
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
@@ -26,6 +42,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         a.id, a.name, a.institution, a.type, a.last4, a.currency, a.created_at,
         a.opening_balance_cents, a.opening_balance_date,
         (${BALANCE_SELECT})::bigint           AS balance_cents,
+        (${HOLDINGS_VALUE})::bigint            AS holdings_value_cents,
         COUNT(t.id)::bigint                    AS transaction_count
       FROM accounts a
       LEFT JOIN transactions t ON t.account_id = a.id
@@ -46,6 +63,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
                 a.created_at,
                 a.opening_balance_cents, a.opening_balance_date,
                 (${BALANCE_SELECT})::bigint           AS balance_cents,
+                (${HOLDINGS_VALUE})::bigint            AS holdings_value_cents,
                 COUNT(t.id)::bigint                    AS transaction_count
          FROM accounts a
          LEFT JOIN transactions t ON t.account_id = a.id

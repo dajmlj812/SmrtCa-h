@@ -7,9 +7,82 @@ export interface Account {
   currency: string;
   created_at: string;
   balance_cents: number;
+  /** Only populated for investment accounts (sum of quantity × last_price). */
+  holdings_value_cents?: number;
   transaction_count: number;
   opening_balance_cents: number;
   opening_balance_date: string | null;
+}
+
+export type VehicleFuelType =
+  | 'regular'
+  | 'midgrade'
+  | 'premium'
+  | 'diesel'
+  | 'electric';
+
+export interface Vehicle {
+  id: string;
+  name: string;
+  fuel_type: VehicleFuelType;
+  mpg: number | null;
+  kwh_per_mile: number | null;
+  electricity_rate_cents_per_kwh: number | null;
+  weekly_avg_miles: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface TollRoute {
+  id: string;
+  name: string;
+  weekly_estimate_cents: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface FuelPrice {
+  fuel_type: 'regular' | 'midgrade' | 'premium' | 'diesel';
+  price_cents_per_gallon: number;
+  source: 'eia' | 'manual';
+  fetched_at: string;
+}
+
+export interface WizardPeriodPreview {
+  index: number;
+  start: string;
+  end: string;
+  days: number;
+  income: Array<{ id: string; name: string; amount_cents: number; date: string }>;
+  bills: Array<{ id: string; name: string; amount_cents: number; date: string }>;
+  groceriesCents: number;
+  fuelCents: number;
+  tollsCents: number;
+  flexCents: number;
+}
+
+export interface WizardPreview {
+  periodType: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+  anchor: string;
+  count: number;
+  groceriesWeeklyMedianCents: number;
+  fuelWeeklyCents: number;
+  tollsWeeklyCents: number;
+  periods: WizardPeriodPreview[];
+}
+
+export interface Holding {
+  id: string;
+  account_id: string;
+  symbol: string | null;
+  name: string;
+  quantity: number;
+  cost_basis_cents: number;
+  last_price_cents: number;
+  last_price_date: string | null;
+  market_value_cents: number;
+  unrealized_gain_cents: number;
+  created_at: string;
 }
 
 export interface Transaction {
@@ -871,4 +944,163 @@ export const api = {
     http<void>(`/api/transactions/${transactionId}/splits`, {
       method: 'DELETE',
     }),
+
+  // ── Holdings (Phase 7.0) ─────────────────────────────────
+  listHoldings: (accountId?: string) =>
+    http<{ holdings: Holding[] }>(
+      `/api/holdings${accountId ? `?accountId=${accountId}` : ''}`,
+    ).then((r) => r.holdings),
+
+  createHolding: (input: {
+    accountId: string;
+    symbol?: string;
+    name: string;
+    quantity: number;
+    costBasisCents?: number;
+    lastPriceCents?: number;
+    lastPriceDate?: string | null;
+  }) =>
+    http<{ holding: Holding }>('/api/holdings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.holding),
+
+  updateHolding: (
+    id: string,
+    input: Partial<{
+      symbol: string;
+      name: string;
+      quantity: number;
+      costBasisCents: number;
+      lastPriceCents: number;
+      lastPriceDate: string | null;
+    }>,
+  ) =>
+    http<{ holding: Holding }>(`/api/holdings/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.holding),
+
+  deleteHolding: (id: string) =>
+    http<void>(`/api/holdings/${id}`, { method: 'DELETE' }),
+
+  // ── Vehicles + tolls + fuel prices (Phase 7.1) ────────────
+  listVehicles: () =>
+    http<{ vehicles: Vehicle[] }>('/api/vehicles').then((r) => r.vehicles),
+
+  createVehicle: (input: {
+    name: string;
+    fuelType: VehicleFuelType;
+    mpg?: number;
+    kwhPerMile?: number;
+    electricityRateCentsPerKwh?: number;
+    weeklyAvgMiles: number;
+  }) =>
+    http<{ vehicle: Vehicle }>('/api/vehicles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.vehicle),
+
+  updateVehicle: (
+    id: string,
+    input: Partial<{
+      name: string;
+      mpg: number | null;
+      kwhPerMile: number | null;
+      electricityRateCentsPerKwh: number | null;
+      weeklyAvgMiles: number;
+      active: boolean;
+    }>,
+  ) =>
+    http<{ vehicle: Vehicle }>(`/api/vehicles/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.vehicle),
+
+  deleteVehicle: (id: string) =>
+    http<void>(`/api/vehicles/${id}`, { method: 'DELETE' }),
+
+  listTollRoutes: () =>
+    http<{ tollRoutes: TollRoute[] }>('/api/toll-routes').then(
+      (r) => r.tollRoutes,
+    ),
+
+  createTollRoute: (input: { name: string; weeklyEstimateCents: number }) =>
+    http<{ tollRoute: TollRoute }>('/api/toll-routes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.tollRoute),
+
+  updateTollRoute: (
+    id: string,
+    input: Partial<{ name: string; weeklyEstimateCents: number; active: boolean }>,
+  ) =>
+    http<{ tollRoute: TollRoute }>(`/api/toll-routes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.tollRoute),
+
+  deleteTollRoute: (id: string) =>
+    http<void>(`/api/toll-routes/${id}`, { method: 'DELETE' }),
+
+  listFuelPrices: () =>
+    http<{ prices: FuelPrice[]; eiaConfigured: boolean }>('/api/fuel-prices'),
+
+  setManualFuelPrice: (fuelType: string, priceCentsPerGallon: number) =>
+    http<{ price: FuelPrice }>('/api/fuel-prices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fuelType, priceCentsPerGallon }),
+    }).then((r) => r.price),
+
+  refreshFuelPrices: () =>
+    http<{
+      summary: {
+        refreshed: string[];
+        skippedManual: string[];
+        failed: string[];
+        configured: boolean;
+      };
+    }>('/api/fuel-prices/refresh', { method: 'POST' }).then((r) => r.summary),
+
+  // ── Budget wizard (Phase 7.1) ────────────────────────────
+  budgetWizardPreview: (input: {
+    periodType: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+    anchor: string;
+    count: number;
+    groceriesOverrideCents?: Record<number, number>;
+    fuelOverrideCents?: Record<number, number>;
+    tollsOverrideCents?: Record<number, number>;
+  }) =>
+    http<{ preview: WizardPreview }>('/api/budgets/wizard/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.preview),
+
+  budgetWizardCommit: (input: {
+    periodType: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
+    anchor: string;
+    count: number;
+    groceriesOverrideCents?: Record<number, number>;
+    fuelOverrideCents?: Record<number, number>;
+    tollsOverrideCents?: Record<number, number>;
+  }) =>
+    http<{
+      result: {
+        created: number;
+        skipped: number;
+        perPeriod: Array<{ index: number; created: number; skipped: number }>;
+      };
+    }>('/api/budgets/wizard/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.result),
 };

@@ -106,8 +106,9 @@ export function currentPeriod(opts: {
 }
 
 const BUDGET_COLUMNS = `b.id, b.period_month, b.period_type, b.period_end,
-  b.category_id, b.amount_cents, b.created_at,
-  c.name AS category_name, c.parent_id`;
+  b.category_id, b.bill_id, b.amount_cents, b.created_at,
+  c.name AS category_name, c.parent_id,
+  bl.name AS bill_name, bl.next_due_date AS bill_next_due_date`;
 
 export async function budgetRoutes(app: FastifyInstance): Promise<void> {
   // List budgets. Filter by anchor month for backward compatibility, OR
@@ -120,6 +121,7 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
           `SELECT ${BUDGET_COLUMNS}
              FROM budgets b
         LEFT JOIN categories c ON c.id = b.category_id
+        LEFT JOIN bills      bl ON bl.id = b.bill_id
          ORDER BY b.period_type, b.period_month, c.name NULLS LAST`,
         );
         return { budgets: rows.rows };
@@ -134,6 +136,7 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         `SELECT ${BUDGET_COLUMNS}
            FROM budgets b
       LEFT JOIN categories c ON c.id = b.category_id
+      LEFT JOIN bills      bl ON bl.id = b.bill_id
           WHERE b.period_month = $1::date
        ORDER BY (b.category_id IS NULL),  -- flex pool last
                 c.name NULLS LAST`,
@@ -324,16 +327,21 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         period_type: PeriodType;
         period_end: string | null;
         category_id: string | null;
+        bill_id: string | null;
         amount_cents: number;
         category_name: string | null;
+        bill_name: string | null;
+        bill_next_due_date: string | null;
       }>(
         useAsOf
           ? `SELECT ${BUDGET_COLUMNS}
                FROM budgets b
-          LEFT JOIN categories c ON c.id = b.category_id`
+          LEFT JOIN categories c ON c.id = b.category_id
+          LEFT JOIN bills      bl ON bl.id = b.bill_id`
           : `SELECT ${BUDGET_COLUMNS}
                FROM budgets b
           LEFT JOIN categories c ON c.id = b.category_id
+          LEFT JOIN bills      bl ON bl.id = b.bill_id
               WHERE b.period_type = 'monthly' AND b.period_month = $1::date`,
         useAsOf ? [] : [month],
       );
@@ -348,6 +356,9 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         id: string;
         category_id: string | null;
         category_name: string | null;
+        bill_id: string | null;
+        bill_name: string | null;
+        bill_next_due_date: string | null;
         period_type: PeriodType;
         period_start: string;
         period_end: string;
@@ -363,7 +374,15 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
           asOf,
         });
         let actualCents: number;
-        if (b.category_id !== null) {
+        if (b.bill_id !== null) {
+          // Bill-linked rows: actual flips to the budgeted amount the
+          // moment the bill is marked paid (next_due_date advances
+          // past this period's end), and stays 0 until then.
+          actualCents =
+            b.bill_next_due_date !== null && b.bill_next_due_date >= period.end
+              ? Number(b.amount_cents)
+              : 0;
+        } else if (b.category_id !== null) {
           // Split transactions contribute their per-category slice here
           // (transaction_category_lines is the right source).
           const r = await query<{ total: number }>(
@@ -393,6 +412,9 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         rows.push({
           id: b.id,
           category_id: b.category_id,
+          bill_id: b.bill_id,
+          bill_name: b.bill_name,
+          bill_next_due_date: b.bill_next_due_date,
           category_name:
             b.category_name ?? (b.category_id === null ? null : 'Unknown'),
           period_type: b.period_type,

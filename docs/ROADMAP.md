@@ -17,7 +17,7 @@ nothing is "all or nothing."
 | 4 | Insights & Reconciliation | ✅ Complete — 2026-05-22 |
 | 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
-| 7 | Wealth & Net Worth | 🔜 Next |
+| 7 | Wealth & Net Worth | 🔄 In progress — 7.0 done; 7.1 next |
 | 8 | Connectivity & Automation | 📋 Planned |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
 
@@ -191,16 +191,17 @@ detection wants its own phase to handle the false-positive UX properly.
 
 ---
 
-## Phase 7 — Wealth & Net Worth 🔜
+## Phase 7 — Wealth & Net Worth 🔄
 
 **Goal:** Add the wealth-tracking depth of Empower and Banktivity.
 
-- Investment accounts — holdings, cost basis, current value
-- Manual asset & liability tracking (property, vehicles, loans) for a complete
-  net-worth picture
-- Net worth over time (extends Phase 4 dashboards)
-- **Multi-currency support** with exchange rates (Moneydance-style)
-- Basic retirement / long-term goal projections
+Sliced into three releases:
+
+- **7.0** ✅ — investment holdings (cost basis + mark-to-market) and
+  manual asset/liability accounts (house, mortgage, etc.); net-worth
+  chart on the dashboard now includes them
+- **7.1** 🔜 — multi-currency with exchange rates (Moneydance-style)
+- **7.2** 📋 — basic retirement / long-term goal projections
 
 ---
 

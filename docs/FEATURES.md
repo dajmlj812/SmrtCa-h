@@ -19,7 +19,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Net-worth summary across all accounts | ✅ |
 | Delete an account (cascades to its transactions) | ✅ |
 | True balance reconciliation with opening balances | ✅ |
-| Manual assets & liabilities (property, vehicles, loans) | 📋 Phase 7 |
+| Manual assets & liabilities (property, vehicles, loans) | ✅ |
 
 ## Importing & Connectivity
 
@@ -76,15 +76,19 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Savings goals with progress tracking | ✅ |
 | Bill reminders & upcoming-bills view | ✅ |
 | Simple cash-flow forecast from recurring items | ✅ |
+| AutoMagic budget wizard (multi-period with bills/income/groceries/fuel/tolls) | ✅ |
+| Vehicle-driven fuel cost calculator (EIA prices, ICE + EV) | ✅ |
+| Toll-route weekly estimates | ✅ |
 
 ## Wealth & Net Worth
 
 | Feature | Status |
 |---------|--------|
-| Investment holdings — cost basis & current value | 📋 Phase 7 |
-| Net worth over time across all accounts | ✅ |
-| Multi-currency support with exchange rates | 📋 Phase 7 |
-| Retirement / long-term goal projections | 📋 Phase 7 |
+| Investment holdings — cost basis & mark-to-market | ✅ |
+| Manual asset & liability tracking (house, mortgage, vehicle) | ✅ |
+| Net worth over time across all accounts (incl. holdings + A&L) | ✅ |
+| Multi-currency support with exchange rates | 🔜 Phase 7.1 |
+| Retirement / long-term goal projections | 📋 Phase 7.2 |
 
 ## Insights & Reporting
 
@@ -110,7 +114,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 293-test automated suite (unit → e2e) | ✅ |
+| 306-test automated suite (unit → e2e) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | ✅ |
 | Encryption at rest (attachments AES-256-GCM; DB via host volume) | ✅ |

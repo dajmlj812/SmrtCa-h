@@ -119,9 +119,13 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         60,
       );
 
-      // For each month-end, sum across accounts of (opening_balance plus
-      // post-opening txns up to that month-end). Transfers self-cancel so
-      // they're harmless here.
+      // For each month-end, sum across accounts of (opening_balance + post-
+      // opening txns up to that month-end). Investment accounts add the
+      // CURRENT market value of their holdings (we don't track historical
+      // prices yet, so the holding value is constant across the chart).
+      // Manual asset/liability accounts contribute their opening_balance_cents
+      // as-is — liabilities are stored negative by convention so they
+      // naturally reduce net worth in the SUM.
       const result = await query(
         `WITH series AS (
            SELECT generate_series(
@@ -134,9 +138,13 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
            SELECT month_start,
                   (month_start + interval '1 month' - interval '1 day')::date AS month_end
              FROM series
+         ),
+         holdings_value AS (
+           SELECT COALESCE(SUM(quantity * last_price_cents), 0)::bigint AS total
+             FROM holdings
          )
          SELECT to_char(me.month_start, 'YYYY-MM') AS month,
-                COALESCE(SUM(
+                (COALESCE(SUM(
                   a.opening_balance_cents +
                   COALESCE((
                     SELECT SUM(t.amount_cents)
@@ -146,7 +154,8 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
                             OR t.txn_date >= a.opening_balance_date)
                        AND t.txn_date <= me.month_end
                   ), 0)
-                ), 0)::bigint AS net_worth_cents
+                ), 0)
+                + (SELECT total FROM holdings_value))::bigint AS net_worth_cents
            FROM month_ends me
      CROSS JOIN accounts a
        GROUP BY me.month_start

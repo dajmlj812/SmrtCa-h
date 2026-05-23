@@ -5,7 +5,13 @@ export type AccountType =
   | 'cash'
   | 'investment'
   | 'loan'
-  | 'other';
+  | 'other'
+  // Phase 7.0 — manual wealth tracking. These accounts have no
+  // transactions; their value is held in opening_balance_cents and the
+  // user marks-to-market periodically. Liabilities are stored with a
+  // negative balance by convention.
+  | 'manual_asset'
+  | 'manual_liability';
 
 export const ACCOUNT_TYPES: AccountType[] = [
   'checking',
@@ -15,6 +21,8 @@ export const ACCOUNT_TYPES: AccountType[] = [
   'investment',
   'loan',
   'other',
+  'manual_asset',
+  'manual_liability',
 ];
 
 export interface RawRow {

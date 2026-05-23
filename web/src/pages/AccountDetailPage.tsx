@@ -4,6 +4,7 @@ import { api, type Account, type Category, type Transaction } from '../api';
 import { accountTypeLabel, formatCents, formatDate } from '../format';
 import { TransactionTable } from '../components/TransactionTable';
 import { AttachmentsModal } from '../components/AttachmentsModal';
+import { HoldingsPanel } from '../components/HoldingsPanel';
 
 export function AccountDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -177,6 +178,13 @@ export function AccountDetailPage() {
         <span className="muted">{total} total</span>
       </div>
 
+      {account?.type === 'investment' && (
+        <HoldingsPanel
+          accountId={account.id}
+          onChanged={() => void load(search)}
+        />
+      )}
+
       {loading ? (
         <p className="empty">Loading…</p>
       ) : (
@@ -215,9 +223,15 @@ function OpeningBalanceForm({
   account: Account;
   onSaved: (saved: Account) => void;
 }) {
-  const [dollars, setDollars] = useState(
-    (account.opening_balance_cents / 100).toFixed(2),
-  );
+  // Liability accounts store the value as a negative cents number but the
+  // user thinks in "amount owed" — a positive figure. Translate at the
+  // input/display layer so the SQL stays sign-coherent (sum() across all
+  // accounts = net worth).
+  const isLiability = account.type === 'manual_liability';
+  const initial = isLiability
+    ? -account.opening_balance_cents
+    : account.opening_balance_cents;
+  const [dollars, setDollars] = useState((initial / 100).toFixed(2));
   const [date, setDate] = useState(account.opening_balance_date ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -227,12 +241,13 @@ function OpeningBalanceForm({
     setSaving(true);
     setError(null);
     try {
-      const cents = Math.round(Number(dollars) * 100);
-      if (!Number.isFinite(cents)) {
-        throw new Error('Opening balance must be a number');
+      const userCents = Math.round(Number(dollars) * 100);
+      if (!Number.isFinite(userCents)) {
+        throw new Error('Amount must be a number');
       }
+      const storedCents = isLiability ? -Math.abs(userCents) : userCents;
       const saved = await api.updateAccount(account.id, {
-        opening_balance_cents: cents,
+        opening_balance_cents: storedCents,
         opening_balance_date: date === '' ? null : date,
       });
       onSaved(saved);
@@ -243,12 +258,18 @@ function OpeningBalanceForm({
     }
   }
 
+  const label = isLiability
+    ? 'Amount owed ($)'
+    : account.type === 'manual_asset'
+      ? 'Current value ($)'
+      : 'Opening balance ($)';
+
   return (
     <form className="opening-balance-form" onSubmit={submit}>
       {error && <div className="banner error">{error}</div>}
       <div className="form-grid">
         <div className="field">
-          <label htmlFor="opening-balance">Opening balance ($)</label>
+          <label htmlFor="opening-balance">{label}</label>
           <input
             id="opening-balance"
             type="number"
@@ -257,24 +278,34 @@ function OpeningBalanceForm({
             onChange={(e) => setDollars(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label htmlFor="opening-date">As of (optional)</label>
-          <input
-            id="opening-date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
+        {account.type !== 'manual_asset' && account.type !== 'manual_liability' && (
+          <div className="field">
+            <label htmlFor="opening-date">As of (optional)</label>
+            <input
+              id="opening-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+        )}
+      </div>
+      {(account.type === 'manual_asset' || account.type === 'manual_liability') ? (
+        <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
+          Update this whenever the value changes (a new appraisal, a loan
+          payment). The figure flows into your net worth without needing
+          transaction-level detail.
         </div>
-      </div>
-      <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-        Leave the date blank to apply the opening balance against all imported
-        transactions. Set a date if your imports go back further than the
-        statement balance you know.
-      </div>
+      ) : (
+        <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
+          Leave the date blank to apply the opening balance against all imported
+          transactions. Set a date if your imports go back further than the
+          statement balance you know.
+        </div>
+      )}
       <div style={{ marginTop: 12 }}>
         <button className="btn" type="submit" disabled={saving}>
-          {saving ? 'Saving…' : 'Save opening balance'}
+          {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
     </form>

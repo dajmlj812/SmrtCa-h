@@ -25,6 +25,11 @@ import { billRoutes } from './routes/bills.js';
 import { recurringRoutes } from './routes/recurring.js';
 import { normalizationRuleRoutes } from './routes/normalization-rules.js';
 import { splitRoutes } from './routes/splits.js';
+import { holdingRoutes } from './routes/holdings.js';
+import { vehicleRoutes } from './routes/vehicles.js';
+import { tollRouteRoutes } from './routes/toll-routes.js';
+import { fuelPriceRoutes } from './routes/fuel-prices.js';
+import { budgetWizardRoutes } from './routes/budget-wizard.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 
 // Augment FastifyRequest with the authenticated user. Set by the auth
@@ -139,6 +144,11 @@ export async function buildApp(
   await app.register(recurringRoutes);
   await app.register(normalizationRuleRoutes);
   await app.register(splitRoutes);
+  await app.register(holdingRoutes);
+  await app.register(vehicleRoutes);
+  await app.register(tollRouteRoutes);
+  await app.register(fuelPriceRoutes);
+  await app.register(budgetWizardRoutes);
 
   // Optional: serve the prebuilt web bundle from the same process. The
   // Docker image copies `web/dist` into `server/dist/public`; in dev the

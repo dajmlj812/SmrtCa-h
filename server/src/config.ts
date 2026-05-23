@@ -67,6 +67,9 @@ export const config = {
   attachmentEncryptionKey: parseAttachmentKey(
     process.env.ATTACHMENT_ENCRYPTION_KEY,
   ),
+  // Optional: free key from https://www.eia.gov/opendata/register.php
+  // Used by the fuel-price fetcher; manual prices win when set.
+  eiaApiKey: process.env.EIA_API_KEY ?? '',
   auth: {
     // Used by @fastify/cookie to sign the session-id cookie. Required for
     // sessions to survive process restarts; an ephemeral one is generated
