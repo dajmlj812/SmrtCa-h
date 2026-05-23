@@ -45,6 +45,9 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money shown as exact currency, color-coded in/out | ✅ |
 | AI-cleaned merchant names & categorization | ✅ |
 | Manual edit / re-categorize | ✅ |
+| Bulk edits with optional "save as rule" | ✅ |
+| Learned normalization rules (manual edits become persistent patterns) | ✅ |
+| Transaction splits (one transaction → multiple categories) | ✅ |
 | Transfer linking between your own accounts | ✅ |
 | Recurring & subscription detection (AI-suggested, human-verified) | ✅ |
 | Receipt & file attachments | ✅ |
@@ -107,7 +110,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 279-test automated suite (unit → e2e) | ✅ |
+| 293-test automated suite (unit → e2e) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | ✅ |
 | Encryption at rest (attachments AES-256-GCM; DB via host volume) | ✅ |

@@ -48,7 +48,7 @@ export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> 
   await pool.query(
     `TRUNCATE accounts, categories, import_batches, transactions, attachments,
               users, sessions, budgets, savings_goals, bills, recurring_income,
-              recurring_suggestions
+              recurring_suggestions, normalization_rules, transaction_splits
        RESTART IDENTITY CASCADE`,
   );
   await seedDefaultCategories(pool);

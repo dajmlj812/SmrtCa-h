@@ -107,6 +107,27 @@ export interface BudgetVsActualRow {
   actual_cents: number;
 }
 
+export interface NormalizationRule {
+  id: string;
+  pattern: string;
+  normalized_merchant: string | null;
+  category_id: string | null;
+  source: 'manual' | 'ai';
+  match_count: number;
+  last_applied_at: string | null;
+  created_at: string;
+}
+
+export interface TransactionSplit {
+  id: string;
+  transaction_id: string;
+  category_id: string | null;
+  category_name?: string | null;
+  amount_cents: number;
+  memo: string | null;
+  created_at: string;
+}
+
 export interface RecurringSuggestion {
   id: string;
   kind: 'bill' | 'income';
@@ -760,4 +781,94 @@ export const api = {
       `/api/recurring/suggestions/${id}/snooze`,
       { method: 'POST' },
     ),
+
+  bulkRecurringAction: (
+    ids: string[],
+    action: 'confirm' | 'reject' | 'snooze',
+  ) =>
+    http<{
+      action: string;
+      updated?: number;
+      confirmed?: number;
+      skipped?: Array<{ id: string; reason: string }>;
+    }>('/api/recurring/suggestions/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, action }),
+    }),
+
+  // ── Bulk transaction edits (Phase 6.2) ───────────────────
+  bulkUpdateTransactions: (
+    ids: string[],
+    updates: { categoryId?: string | null; merchant?: string },
+  ) =>
+    http<{ updated: number; ids: string[] }>('/api/transactions/bulk', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, updates }),
+    }),
+
+  // ── Normalization rules ──────────────────────────────────
+  listNormalizationRules: () =>
+    http<{ rules: NormalizationRule[] }>('/api/normalization-rules').then(
+      (r) => r.rules,
+    ),
+
+  createNormalizationRule: (input: {
+    pattern: string;
+    normalizedMerchant?: string | null;
+    categoryId?: string | null;
+  }) =>
+    http<{ rule: NormalizationRule }>('/api/normalization-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.rule),
+
+  deleteNormalizationRule: (id: string) =>
+    http<void>(`/api/normalization-rules/${id}`, { method: 'DELETE' }),
+
+  previewNormalizationRule: (pattern: string) =>
+    http<{ pattern: string; total: number; manual: number }>(
+      '/api/normalization-rules/preview',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pattern }),
+      },
+    ),
+
+  applyNormalizationRules: (opts: { ruleIds?: string[]; includeManual?: boolean } = {}) =>
+    http<{ totalUpdated: number; perRule: Array<{ id: string; updated: number }> }>(
+      '/api/normalization-rules/apply',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(opts),
+      },
+    ),
+
+  // ── Splits ───────────────────────────────────────────────
+  listSplits: (transactionId: string) =>
+    http<{ splits: TransactionSplit[] }>(
+      `/api/transactions/${transactionId}/splits`,
+    ).then((r) => r.splits),
+
+  saveSplits: (
+    transactionId: string,
+    splits: Array<{ categoryId: string | null; amountCents: number; memo?: string }>,
+  ) =>
+    http<{ splits: TransactionSplit[] }>(
+      `/api/transactions/${transactionId}/splits`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ splits }),
+      },
+    ).then((r) => r.splits),
+
+  clearSplits: (transactionId: string) =>
+    http<void>(`/api/transactions/${transactionId}/splits`, {
+      method: 'DELETE',
+    }),
 };

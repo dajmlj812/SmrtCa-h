@@ -38,6 +38,58 @@ function centsToDecimal(cents: number | null): string {
 }
 
 export async function transactionRoutes(app: FastifyInstance): Promise<void> {
+  // Bulk-edit. The body lists transaction ids and the fields to apply
+  // uniformly. All matched rows flip to normalization_status='manual'
+  // because the user is making an explicit assignment.
+  app.patch('/api/transactions/bulk', async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      ids?: unknown;
+      updates?: { categoryId?: unknown; merchant?: unknown };
+    };
+    if (!Array.isArray(body.ids) || body.ids.length === 0) {
+      return reply.code(400).send({ error: 'ids must be a non-empty array' });
+    }
+    const ids: string[] = [];
+    for (const id of body.ids) {
+      if (typeof id !== 'string' || !isUuid(id)) {
+        return reply.code(400).send({ error: `Invalid transaction id: ${String(id)}` });
+      }
+      ids.push(id);
+    }
+    const updates = body.updates ?? {};
+    const setClauses: string[] = [];
+    const params: unknown[] = [];
+
+    if (updates.merchant !== undefined) {
+      const m = asString(updates.merchant) || null;
+      params.push(m);
+      setClauses.push(`normalized_merchant = $${params.length}`);
+    }
+    if (updates.categoryId !== undefined) {
+      if (updates.categoryId === null) {
+        params.push(null);
+      } else if (typeof updates.categoryId === 'string' && isUuid(updates.categoryId)) {
+        params.push(updates.categoryId);
+      } else {
+        return reply.code(400).send({ error: 'Invalid categoryId' });
+      }
+      setClauses.push(`category_id = $${params.length}`);
+    }
+    if (setClauses.length === 0) {
+      return reply.code(400).send({ error: 'No updates provided' });
+    }
+
+    setClauses.push(`normalization_status = 'manual'`);
+    params.push(ids);
+    const r = await query(
+      `UPDATE transactions SET ${setClauses.join(', ')}
+        WHERE id = ANY($${params.length}::uuid[])
+     RETURNING id`,
+      params,
+    );
+    return { updated: r.rowCount ?? 0, ids: r.rows.map((row) => (row as { id: string }).id) };
+  });
+
   // Manual edit — sets normalization_status to 'manual' so AI re-runs leave
   // the row alone.
   app.patch<{ Params: { id: string } }>(

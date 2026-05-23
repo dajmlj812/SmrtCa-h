@@ -230,6 +230,108 @@ export async function recurringRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Bulk action — confirm/reject/snooze many suggestions at once. Confirm
+  // uses each suggestion's detector-default name + frequency (no per-row
+  // overrides; for fine-tuning use the single-suggestion endpoint).
+  app.post('/api/recurring/suggestions/bulk', async (req, reply) => {
+    const body = (req.body ?? {}) as { ids?: unknown; action?: unknown };
+    if (!Array.isArray(body.ids) || body.ids.length === 0) {
+      return reply.code(400).send({ error: 'ids must be a non-empty array' });
+    }
+    const action = body.action;
+    if (action !== 'confirm' && action !== 'reject' && action !== 'snooze') {
+      return reply
+        .code(400)
+        .send({ error: "action must be one of 'confirm', 'reject', 'snooze'" });
+    }
+    const ids: string[] = [];
+    for (const id of body.ids) {
+      if (typeof id !== 'string' || !isUuid(id)) {
+        return reply.code(400).send({ error: `Invalid suggestion id: ${String(id)}` });
+      }
+      ids.push(id);
+    }
+
+    if (action === 'reject' || action === 'snooze') {
+      const newStatus = action === 'reject' ? 'rejected' : 'snoozed';
+      const r = await query(
+        `UPDATE recurring_suggestions
+            SET status = $1, resolved_at = now()
+          WHERE id = ANY($2::uuid[]) AND status IN ('pending','snoozed')
+       RETURNING id`,
+        [newStatus, ids],
+      );
+      return { action, updated: r.rowCount ?? 0 };
+    }
+
+    // Confirm path — load each and apply detector defaults.
+    const rows = await pool.query<{
+      id: string;
+      kind: 'bill' | 'income';
+      name: string;
+      amount_cents: number;
+      detected_frequency: DetectedFrequency;
+      sample_txn_ids: string[];
+      status: string;
+    }>(
+      `SELECT id, kind, name, amount_cents, detected_frequency,
+              sample_txn_ids, status
+         FROM recurring_suggestions
+        WHERE id = ANY($1::uuid[])`,
+      [ids],
+    );
+
+    let confirmed = 0;
+    const skipped: Array<{ id: string; reason: string }> = [];
+    for (const sug of rows.rows) {
+      if (sug.status !== 'pending' && sug.status !== 'snoozed') {
+        skipped.push({ id: sug.id, reason: `already ${sug.status}` });
+        continue;
+      }
+      const freqMap =
+        sug.kind === 'bill' ? FREQ_TO_BILL : FREQ_TO_INCOME;
+      const targetFreq = freqMap[sug.detected_frequency];
+      if (!targetFreq) {
+        skipped.push({
+          id: sug.id,
+          reason: `frequency '${sug.detected_frequency}' invalid for ${sug.kind}`,
+        });
+        continue;
+      }
+      const nextDate = await deriveNextDate(sug.sample_txn_ids, sug.detected_frequency);
+      if (!nextDate) {
+        skipped.push({ id: sug.id, reason: 'could not derive next date' });
+        continue;
+      }
+      await withTransaction(async (client) => {
+        let resolvedId: string;
+        if (sug.kind === 'bill') {
+          const ins = await client.query<{ id: string }>(
+            `INSERT INTO bills (name, amount_cents, frequency, next_due_date)
+             VALUES ($1, $2, $3, $4) RETURNING id`,
+            [sug.name, sug.amount_cents, targetFreq, nextDate],
+          );
+          resolvedId = ins.rows[0]!.id;
+        } else {
+          const ins = await client.query<{ id: string }>(
+            `INSERT INTO recurring_income (name, amount_cents, frequency, next_expected_date)
+             VALUES ($1, $2, $3, $4) RETURNING id`,
+            [sug.name, sug.amount_cents, targetFreq, nextDate],
+          );
+          resolvedId = ins.rows[0]!.id;
+        }
+        await client.query(
+          `UPDATE recurring_suggestions
+              SET status = 'confirmed', resolved_to_id = $1, resolved_at = now()
+            WHERE id = $2`,
+          [resolvedId, sug.id],
+        );
+      });
+      confirmed++;
+    }
+    return { action: 'confirm', confirmed, skipped };
+  });
+
   app.post<{ Params: { id: string } }>(
     '/api/recurring/suggestions/:id/snooze',
     async (req, reply) => {

@@ -364,9 +364,11 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         });
         let actualCents: number;
         if (b.category_id !== null) {
+          // Split transactions contribute their per-category slice here
+          // (transaction_category_lines is the right source).
           const r = await query<{ total: number }>(
             `SELECT COALESCE(SUM(-amount_cents), 0)::bigint AS total
-               FROM transactions
+               FROM transaction_category_lines
               WHERE category_id = $1
                 AND amount_cents < 0
                 AND transfer_group_id IS NULL
@@ -378,7 +380,7 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         } else {
           const r = await query<{ total: number }>(
             `SELECT COALESCE(SUM(-amount_cents), 0)::bigint AS total
-               FROM transactions
+               FROM transaction_category_lines
               WHERE amount_cents < 0
                 AND transfer_group_id IS NULL
                 AND txn_date >= $1::date

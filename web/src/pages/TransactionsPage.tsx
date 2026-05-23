@@ -8,6 +8,8 @@ import {
 } from '../api';
 import { TransactionTable } from '../components/TransactionTable';
 import { AttachmentsModal } from '../components/AttachmentsModal';
+import { BulkActionBar } from '../components/BulkActionBar';
+import { SplitsModal } from '../components/SplitsModal';
 
 const PAGE_SIZE = 100;
 
@@ -31,6 +33,8 @@ export function TransactionsPage() {
   const [attachmentsFor, setAttachmentsFor] = useState<Transaction | null>(
     null,
   );
+  const [splittingFor, setSplittingFor] = useState<Transaction | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api.listAccounts().then(setAccounts).catch(() => undefined);
@@ -235,6 +239,26 @@ export function TransactionsPage() {
         </span>
       </div>
 
+      <BulkActionBar
+        selectedIds={Array.from(selectedIds)}
+        categories={categories}
+        onClear={() => setSelectedIds(new Set())}
+        onApplied={() => {
+          setSelectedIds(new Set());
+          void load({ accountId, search, offset });
+        }}
+        onCaptureRule={async (input) => {
+          try {
+            await api.createNormalizationRule(input);
+          } catch (e) {
+            // Duplicate pattern is OK — surface other errors.
+            if (!(e instanceof Error && /already exists/i.test(e.message))) {
+              throw e;
+            }
+          }
+        }}
+      />
+
       {loading ? (
         <p className="empty">Loading…</p>
       ) : (
@@ -244,6 +268,29 @@ export function TransactionsPage() {
           categories={categories}
           onUpdate={onTxnUpdate}
           onOpenAttachments={setAttachmentsFor}
+          onOpenSplits={setSplittingFor}
+          selection={{
+            selected: selectedIds,
+            onToggle: (id) =>
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              }),
+            onToggleAll: (ids) =>
+              setSelectedIds((prev) => {
+                const allSelected = ids.every((id) => prev.has(id));
+                if (allSelected) {
+                  const next = new Set(prev);
+                  for (const id of ids) next.delete(id);
+                  return next;
+                }
+                const next = new Set(prev);
+                for (const id of ids) next.add(id);
+                return next;
+              }),
+          }}
         />
       )}
 
@@ -260,6 +307,18 @@ export function TransactionsPage() {
               ),
             )
           }
+        />
+      )}
+
+      {splittingFor && (
+        <SplitsModal
+          transaction={splittingFor}
+          categories={categories}
+          onClose={() => setSplittingFor(null)}
+          onSaved={() => {
+            setSplittingFor(null);
+            void load({ accountId, search, offset });
+          }}
         />
       )}
 

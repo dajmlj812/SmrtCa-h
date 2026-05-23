@@ -19,6 +19,14 @@ interface Props {
   ) => Promise<void>;
   /** Called when the user clicks the attachments icon on a row. */
   onOpenAttachments?: (transaction: Transaction) => void;
+  /** Called when the user clicks the split icon on a row. */
+  onOpenSplits?: (transaction: Transaction) => void;
+  /** When provided, render a checkbox column and report changes. */
+  selection?: {
+    selected: Set<string>;
+    onToggle: (id: string) => void;
+    onToggleAll: (ids: string[]) => void;
+  };
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -62,6 +70,8 @@ export function TransactionTable({
   categories,
   onUpdate,
   onOpenAttachments,
+  onOpenSplits,
+  selection,
 }: Props) {
   const groups = useMemo(
     () => (categories ? buildCategoryGroups(categories) : []),
@@ -71,18 +81,38 @@ export function TransactionTable({
   if (transactions.length === 0) {
     return <p className="empty">No transactions yet.</p>;
   }
+  const allIds = transactions.map((t) => t.id);
+  const allChecked =
+    !!selection && allIds.length > 0 && allIds.every((id) => selection.selected.has(id));
+  const someChecked =
+    !!selection && allIds.some((id) => selection.selected.has(id)) && !allChecked;
   return (
     <div className="table-wrap">
       <table className="txn-table">
         <thead>
           <tr>
+            {selection && (
+              <th className="check-col">
+                <input
+                  type="checkbox"
+                  aria-label="Select all on page"
+                  checked={allChecked}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someChecked;
+                  }}
+                  onChange={() => selection.onToggleAll(allIds)}
+                />
+              </th>
+            )}
             <th>Date</th>
             {showAccount && <th>Account</th>}
             <th>Description</th>
             <th>Category</th>
             <th className="num">Amount</th>
             {showRunningBalance && <th className="num">Balance</th>}
-            {onOpenAttachments && <th className="attach-col">Receipt</th>}
+            {(onOpenAttachments || onOpenSplits) && (
+              <th className="attach-col">Actions</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -96,6 +126,8 @@ export function TransactionTable({
               hasCategories={categories !== undefined}
               onUpdate={onUpdate}
               onOpenAttachments={onOpenAttachments}
+              onOpenSplits={onOpenSplits}
+              selection={selection}
             />
           ))}
         </tbody>
@@ -112,6 +144,8 @@ function TransactionRow({
   hasCategories,
   onUpdate,
   onOpenAttachments,
+  onOpenSplits,
+  selection,
 }: {
   transaction: Transaction;
   showAccount: boolean;
@@ -120,6 +154,8 @@ function TransactionRow({
   hasCategories: boolean;
   onUpdate?: Props['onUpdate'];
   onOpenAttachments?: Props['onOpenAttachments'];
+  onOpenSplits?: Props['onOpenSplits'];
+  selection?: Props['selection'];
 }) {
   const t = transaction;
   const editable = hasCategories && onUpdate !== undefined;
@@ -136,8 +172,19 @@ function TransactionRow({
     }
   }
 
+  const isSelected = selection?.selected.has(t.id) ?? false;
   return (
-    <tr>
+    <tr className={isSelected ? 'selected' : ''}>
+      {selection && (
+        <td className="check-col">
+          <input
+            type="checkbox"
+            aria-label={`Select transaction ${t.id}`}
+            checked={isSelected}
+            onChange={() => selection.onToggle(t.id)}
+          />
+        </td>
+      )}
       <td className="nowrap">{formatDate(t.txn_date)}</td>
       {showAccount && <td>{t.account_name}</td>}
       <td className="desc">
@@ -203,26 +250,39 @@ function TransactionRow({
           )}
         </td>
       )}
-      {onOpenAttachments && (
+      {(onOpenAttachments || onOpenSplits) && (
         <td className="attach-col">
-          <button
-            type="button"
-            className={`attach-btn ${
-              (t.attachment_count ?? 0) > 0 ? 'has-attachments' : ''
-            }`}
-            onClick={() => onOpenAttachments(t)}
-            title={
-              (t.attachment_count ?? 0) > 0
-                ? `${t.attachment_count} attachment(s)`
-                : 'Add a receipt'
-            }
-            aria-label="Open attachments"
-          >
-            <span aria-hidden>📎</span>
-            {(t.attachment_count ?? 0) > 0 && (
-              <span className="attach-count">{t.attachment_count}</span>
-            )}
-          </button>
+          {onOpenAttachments && (
+            <button
+              type="button"
+              className={`attach-btn ${
+                (t.attachment_count ?? 0) > 0 ? 'has-attachments' : ''
+              }`}
+              onClick={() => onOpenAttachments(t)}
+              title={
+                (t.attachment_count ?? 0) > 0
+                  ? `${t.attachment_count} attachment(s)`
+                  : 'Add a receipt'
+              }
+              aria-label="Open attachments"
+            >
+              <span aria-hidden>📎</span>
+              {(t.attachment_count ?? 0) > 0 && (
+                <span className="attach-count">{t.attachment_count}</span>
+              )}
+            </button>
+          )}
+          {onOpenSplits && (
+            <button
+              type="button"
+              className="attach-btn"
+              onClick={() => onOpenSplits(t)}
+              title="Split this transaction"
+              aria-label="Split transaction"
+            >
+              <span aria-hidden>✂</span>
+            </button>
+          )}
         </td>
       )}
     </tr>

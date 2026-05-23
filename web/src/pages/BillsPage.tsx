@@ -33,6 +33,10 @@ export function BillsPage() {
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [confirming, setConfirming] = useState<RecurringSuggestion | null>(null);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(
+    new Set(),
+  );
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -84,6 +88,49 @@ export function BillsPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Snooze failed');
+    }
+  }
+
+  function toggleSuggestion(id: string) {
+    setSelectedSuggestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAllSuggestions() {
+    setSelectedSuggestions((prev) => {
+      const allIds = suggestions.map((s) => s.id);
+      const allOn = allIds.every((id) => prev.has(id));
+      if (allOn) return new Set();
+      return new Set(allIds);
+    });
+  }
+
+  async function bulkAction(action: 'confirm' | 'reject' | 'snooze') {
+    if (selectedSuggestions.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const r = await api.bulkRecurringAction(
+        Array.from(selectedSuggestions),
+        action,
+      );
+      const count =
+        action === 'confirm' ? r.confirmed ?? 0 : r.updated ?? 0;
+      setSelectedSuggestions(new Set());
+      if (action === 'confirm' && r.skipped && r.skipped.length > 0) {
+        setError(
+          `Confirmed ${count}; skipped ${r.skipped.length} (${r.skipped[0]!.reason}…)`,
+        );
+      }
+      await load();
+      void count; // counts surface via the panel re-render
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bulk action failed');
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -151,17 +198,69 @@ export function BillsPage() {
             your transactions for repeating patterns.
           </p>
         ) : (
-          <div className="suggestion-list">
-            {suggestions.map((s) => (
-              <SuggestionCard
-                key={s.id}
-                suggestion={s}
-                onConfirm={() => setConfirming(s)}
-                onReject={() => void rejectSuggestion(s.id)}
-                onSnooze={() => void snoozeSuggestion(s.id)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="suggestion-bulk-bar">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={
+                    suggestions.length > 0 &&
+                    suggestions.every((s) => selectedSuggestions.has(s.id))
+                  }
+                  ref={(el) => {
+                    if (el)
+                      el.indeterminate =
+                        selectedSuggestions.size > 0 &&
+                        !suggestions.every((s) => selectedSuggestions.has(s.id));
+                  }}
+                  onChange={toggleAllSuggestions}
+                />{' '}
+                Select all
+              </label>
+              <span className="muted">
+                {selectedSuggestions.size} selected
+              </span>
+              <div className="spacer" />
+              <button
+                className="btn"
+                type="button"
+                disabled={bulkBusy || selectedSuggestions.size === 0}
+                onClick={() => void bulkAction('confirm')}
+                title="Confirm selected — each becomes a bill or recurring income with detector defaults"
+              >
+                Confirm selected
+              </button>
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={bulkBusy || selectedSuggestions.size === 0}
+                onClick={() => void bulkAction('snooze')}
+              >
+                Snooze selected
+              </button>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={bulkBusy || selectedSuggestions.size === 0}
+                onClick={() => void bulkAction('reject')}
+              >
+                Reject selected
+              </button>
+            </div>
+            <div className="suggestion-list">
+              {suggestions.map((s) => (
+                <SuggestionCard
+                  key={s.id}
+                  suggestion={s}
+                  selected={selectedSuggestions.has(s.id)}
+                  onToggle={() => toggleSuggestion(s.id)}
+                  onConfirm={() => setConfirming(s)}
+                  onReject={() => void rejectSuggestion(s.id)}
+                  onSnooze={() => void snoozeSuggestion(s.id)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -302,20 +401,31 @@ export function BillsPage() {
 
 function SuggestionCard({
   suggestion,
+  selected,
+  onToggle,
   onConfirm,
   onReject,
   onSnooze,
 }: {
   suggestion: RecurringSuggestion;
+  selected: boolean;
+  onToggle: () => void;
   onConfirm: () => void;
   onReject: () => void;
   onSnooze: () => void;
 }) {
   const pct = Math.round(Number(suggestion.confidence) * 100);
   return (
-    <div className="card suggestion-card">
+    <div className={`card suggestion-card ${selected ? 'selected' : ''}`}>
       <div className="suggestion-head">
         <div>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            aria-label={`Select ${suggestion.name}`}
+            style={{ marginRight: 8 }}
+          />
           <span className={`pill ${suggestion.kind === 'income' ? 'pos' : 'neg'}-pill`}>
             {suggestion.kind === 'income' ? 'Income' : 'Bill'}
           </span>

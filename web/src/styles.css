@@ -1102,3 +1102,107 @@ select:focus {
   gap: 8px;
   align-items: center;
 }
+
+/* ── Phase 6.2: bulk edits, splits, suggestion bulk ──────── */
+
+.check-col {
+  width: 36px;
+  text-align: center;
+}
+.check-col input[type="checkbox"] {
+  cursor: pointer;
+}
+tr.selected {
+  background: #f1f5ff;
+}
+
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.bulk-count {
+  font-weight: 600;
+  color: #4338ca;
+}
+.bulk-merchant {
+  min-width: 220px;
+}
+.bulk-rule-toggle {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.bulk-error {
+  color: var(--danger, #dc2626);
+  font-size: 13px;
+}
+.bulk-success {
+  color: #065f46;
+  font-size: 13px;
+}
+
+.modal-wide {
+  max-width: 720px;
+}
+.split-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.split-row {
+  display: grid;
+  grid-template-columns: 1fr 130px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.split-amount,
+.split-memo {
+  font-family: inherit;
+  padding: 6px 8px;
+}
+.split-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.split-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  border-top: 1px solid var(--card-border, #e5e7eb);
+}
+.split-total {
+  font-size: 13px;
+}
+.split-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.suggestion-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #eef2ff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.suggestion-bulk-bar .spacer {
+  flex: 1;
+}
+.suggestion-card.selected {
+  outline: 2px solid #4f8cff;
+}

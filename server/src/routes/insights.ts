@@ -43,22 +43,25 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       const startParam = start ?? defaultStart;
       const endParam = end ?? defaultEnd;
 
+      // Spending uses transaction_category_lines so split transactions
+      // contribute per-category amounts instead of dumping everything
+      // into the transaction-level category.
       const result = await query(
-        `SELECT t.category_id,
+        `SELECT l.category_id,
                 c.name      AS category_name,
                 c.parent_id AS parent_id,
                 p.name      AS parent_name,
-                SUM(-t.amount_cents)::bigint AS total_cents,
-                COUNT(*)::int                AS transaction_count
-           FROM transactions t
-      LEFT JOIN categories c ON c.id = t.category_id
+                SUM(-l.amount_cents)::bigint AS total_cents,
+                COUNT(DISTINCT l.transaction_id)::int AS transaction_count
+           FROM transaction_category_lines l
+      LEFT JOIN categories c ON c.id = l.category_id
       LEFT JOIN categories p ON p.id = c.parent_id
-          WHERE t.amount_cents < 0
-            AND t.transfer_group_id IS NULL
-            AND t.txn_date >= $1::date
-            AND t.txn_date <= $2::date
-            AND ($3::uuid IS NULL OR t.account_id = $3)
-       GROUP BY t.category_id, c.name, c.parent_id, p.name
+          WHERE l.amount_cents < 0
+            AND l.transfer_group_id IS NULL
+            AND l.txn_date >= $1::date
+            AND l.txn_date <= $2::date
+            AND ($3::uuid IS NULL OR l.account_id = $3)
+       GROUP BY l.category_id, c.name, c.parent_id, p.name
        ORDER BY total_cents DESC`,
         [startParam, endParam, accountIdParam],
       );

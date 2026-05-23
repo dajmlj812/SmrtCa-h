@@ -13,6 +13,85 @@ _Phase 7 work will land here._
 
 ---
 
+## [0.6.2] — 2026-05-22 — Phase 6.2: Bulk edits, transaction splits, learned normalization rules
+
+Three intertwined features that together make manual cleanup massively
+faster: edit dozens of transactions at once, turn each edit into a rule
+the system applies forever, and break a single transaction into
+per-category slices (a $100 Costco run that's $60 groceries + $40
+clothing now shows up correctly on the dashboard).
+
+### Added
+
+- **Bulk transaction edits.** New `PATCH /api/transactions/bulk` accepts
+  an `ids` array plus `updates: { categoryId?, merchant? }` and applies
+  uniformly. Touched rows flip to `normalization_status='manual'`.
+  Driven from a new **bulk-action toolbar** that appears on
+  `/transactions` whenever rows are selected via the new per-row
+  checkboxes (and the "select all on page" header checkbox).
+- **Learned normalization rules.** `normalization_rules` table
+  (migration 009): `(pattern, normalized_merchant, category_id)` with a
+  case-insensitive unique index. The bulk toolbar offers a
+  **"Save as rule"** checkbox so a one-time bulk rename can be captured
+  as a permanent rule. Endpoints:
+  - `GET / POST / PATCH / DELETE /api/normalization-rules`
+  - `POST /api/normalization-rules/preview { pattern }` — counts matches
+    without writing (used by the future "Apply to similar?" UI).
+  - `POST /api/normalization-rules/apply { ruleIds?, includeManual? }`
+    — runs every rule over non-manual transactions; rows touched flip
+    to `normalization_status='normalized'`. Manual edits stay manual
+    unless `includeManual: true`.
+- **Transaction splits.** New `transaction_splits` table — one row per
+  category slice. `PUT /api/transactions/:id/splits` replaces all
+  splits in a single call, enforcing `sum(amount_cents) =
+  transaction.amount_cents`. Empty array clears splits entirely.
+  Surfaced via a **✂ Split** action on every transaction row that
+  opens a modal: add lines `(category, amount, memo)`, the running
+  total + remaining shows live, save is disabled until it balances.
+- **`transaction_category_lines` view** (migration 010) — single source
+  of truth that expands split transactions into per-category lines.
+  Used by `/api/insights/spending-by-category` and
+  `/api/budgets/actual` so split transactions now contribute their
+  per-category slice instead of dumping into the transaction-level
+  category. Transactions without splits still report under their own
+  `category_id`.
+- **Bulk recurring suggestion actions.** `POST /api/recurring/suggestions/bulk`
+  with `action: 'confirm' | 'reject' | 'snooze'`. The Suggestions panel
+  gets a "Select all" checkbox + per-row checkboxes + an action bar
+  with **Confirm selected** / **Snooze selected** / **Reject selected**.
+  Confirm uses each suggestion's detector defaults (name + cadence);
+  for fine-tuning use the single-suggestion confirm modal.
+
+### Changed
+
+- `TransactionTable` learned a `selection` prop and an `onOpenSplits`
+  callback. Existing callers (AccountDetailPage) keep their previous
+  behavior — selection is only rendered on the Transactions page.
+
+### Tests
+
+- **+14 server tests** (266 → 280): bulk PATCH happy paths +
+  validation, rule preview / apply / manual-skip / includeManual /
+  duplicate-pattern / no-op-refusal, splits sum-mismatch +
+  empty-clears + insights-respect-splits, bulk recurring reject +
+  confirm-with-samples.
+- Total automated coverage: **293 tests** (server 280 + web 6 +
+  Playwright 7).
+
+### Deferred (per the original ask)
+
+- **Receipt-line auto-split** — extending OCR to return line items +
+  proposed categories. Worth a dedicated phase because the prompt and
+  UX surface (let user accept / edit the proposed split) are
+  meaningful in their own right.
+
+### Migration notes
+
+- **Upgrading from 0.6.1:** `npm run migrate --prefix server` applies
+  migrations 009 (rules + splits tables) and 010 (the view).
+
+---
+
 ## [0.6.1] — 2026-05-22 — Phase 6.1: Recurring detection + flexible budget periods
 
 Completes the deferral noted in the 0.6.0 changelog. **Auto-detect
