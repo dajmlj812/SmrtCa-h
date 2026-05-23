@@ -24,6 +24,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { InviteAcceptPage } from './pages/InviteAcceptPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { SystemPage } from './pages/SystemPage';
+import { ThemeToggle } from './components/ThemeToggle';
 
 type AuthState =
   | 'loading'
@@ -119,6 +120,7 @@ function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="sidebar-footer">
+          <ThemeToggle />
           Platform operator
           <button
             className="btn secondary logout-btn"
@@ -179,7 +181,8 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/workspace">Workspace</NavLink>
         </nav>
         <div className="sidebar-footer">
-          Phase 7 · Wealth + AutoMagic + Cleanup
+          <ThemeToggle />
+          SmrtCash · v0.9.5
           <button
             className="btn secondary logout-btn"
             type="button"

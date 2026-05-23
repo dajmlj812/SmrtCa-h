@@ -13,6 +13,59 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.9.5] — 2026-05-23 — Frontend design refresh + dark mode
+
+Pure styling slice — token system overhaul, polished components,
+proper dark mode with a sidebar toggle. No JSX class-name changes;
+no backend touched.
+
+### Added
+
+- **Token-driven design system** in `styles.css`:
+  `--surface-1/2/3`, `--border` + `--border-strong`,
+  `--text/muted/dim`, `--accent`/`--accent-soft`,
+  `--pos/neg/warn/info` (each with a tinted `-soft` variant),
+  `--shadow-sm/shadow/shadow-lg`, `--radius-sm/radius/radius-lg`.
+  Legacy alias names (`--bg`, `--card`, `--accent-dark`) are kept
+  so older rules keep working.
+- **Dark mode** via `:root[data-theme="dark"]` overrides. `main.tsx`
+  applies the attribute from `localStorage` before the React tree
+  mounts → no flash of light theme on reload.
+- **`ThemeToggle` component** in both sidebar footers
+  (tenant + super admin). Two-button segmented control.
+
+### Changed
+
+- **Sidebar**: indigo→emerald brand gradient on `SmrtCash`,
+  background gradient, active link gets a left accent bar instead of
+  a solid pill background, subtle hover states.
+- **Page header**: bumped `h1` to 26px with tighter tracking, refined
+  subtitle color and line-height.
+- **Buttons**: primary uses the new indigo `--accent`, secondary has
+  a clean outlined treatment, danger restraint until hover.
+  `btn-link` gets a soft tinted hover background.
+- **Inputs**: 3px accent-soft focus ring, dark-mode-aware
+  backgrounds + borders.
+- **Tables**: uppercase letter-spaced header row over `--surface-3`,
+  hover row gets `--surface-3`, selected row gets `--accent-soft`,
+  tabular numerics on numeric columns.
+- **Banners + status pills**: use the new `--{pos,neg,warn,info}-soft`
+  backgrounds with `color-mix` borders for a consistent semantic
+  palette in both themes.
+- **Auth screens** get a soft radial-gradient backdrop and a
+  shadow-lg card, with the brand letterform in the gradient style.
+- **Code chips** + scrollbars themed.
+
+### Notes
+
+- The redesign deliberately keeps every existing class name so React
+  components don't need to change. Source-order overrides at the
+  bottom of `styles.css` carry the new visual treatment.
+- Inter is preferred but not bundled — the system stack picks up
+  fluently if it's not installed.
+
+---
+
 ## [0.9.4] — 2026-05-23 — Scheduler fix, GUI restore, secondary backup destination, env snapshot, savings % overrides
 
 Five related items, all backup-or-budget. Headline: the scheduler bug
