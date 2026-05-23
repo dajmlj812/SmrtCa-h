@@ -9,8 +9,115 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 9 in progress. 0.12.0 + 0.12.1 shipped. Next: 0.12.2 bill-
-splitting, 0.12.3 calendar view._
+_Phase 9 in progress. 0.12.0–0.12.2 shipped. Next: 0.12.3 calendar
+view closes Phase 9._
+
+---
+
+## [0.12.2] — 2026-05-23 — Bill-splitting (Phase 9.2)
+
+Third Phase 9 release. Track who owes whom across split expenses
+(dinner with friends, shared rent, roommate utilities). Distinct
+from the existing `transaction_splits` table, which is for CATEGORY
+splitting — this is PERSON splitting.
+
+### Schema (migration 024)
+
+- **`split_participants`** — the people you can split with.
+  Tenant-scoped, `UNIQUE(tenant_id, name)`. Optional `email` and
+  optional `user_id` link (when the participant happens to also be
+  a SmrtCash user, e.g. a spouse on the same tenant). Archive
+  instead of delete to preserve history.
+- **`transaction_shares`** — per-transaction allocation to a
+  participant. `share_cents` matches the sign of the transaction
+  amount: a negative-cents row means the participant's portion of
+  a spending transaction (which, via the API's outward convention,
+  appears as "they owe you" net). `UNIQUE(transaction_id,
+  participant_id)` so re-saving is idempotent. Partial index on
+  `(participant_id) WHERE settled = false` for fast summary
+  queries.
+- **The tenant's own residual share is NEVER stored** — it's
+  computed as `transaction.amount_cents - sum(shares.share_cents)`
+  so a downstream amount change can't desync the math.
+
+### Routes (`server/src/routes/shares.ts`)
+
+- `GET /api/split-participants?includeArchived=1` — list.
+- `POST /api/split-participants` — create. Returns 409 on duplicate
+  name within a tenant.
+- `PATCH /api/split-participants/:id` — rename / re-email / toggle
+  archived.
+- `DELETE /api/split-participants/:id` — also removes that
+  participant's shares (FK cascade).
+- `GET /api/transactions/:id/shares` — returns the per-share rows
+  plus `transactionAmountCents`, `sharesTotalCents`, and
+  `yourShareCents` (the implied residual).
+- `PUT /api/transactions/:id/shares` — replace all shares in one
+  call. Idempotent. Validates: every participant in this tenant,
+  every share's sign matches the transaction, total magnitude
+  doesn't exceed the transaction amount. Records an audit log
+  entry.
+- `POST /api/transaction-shares/:id/settle` — `{settled: true}` to
+  mark paid, `{settled: false}` to re-open.
+- `GET /api/shares/summary` — `net_open_cents` + `open_count` per
+  participant.
+- `GET /api/shares?participantId=X&onlyOpen=1` — share-level list
+  for a participant.
+
+### Assistant tools
+
+Two new tools join the registry (now **14 total**):
+
+- `share_summary` (read) — net owed per participant.
+- `split_transaction` (write, audit-logged) — **auto-creates
+  participants by name**. "Split this $80 lunch between Cam and
+  Dee" works without first creating Cam and Dee through the UI.
+  Each call writes an `assistant.split_transaction` row to the
+  audit log.
+
+### Web
+
+- New `/sharing` page (`SharingPage.tsx`). Net-balance table per
+  participant (positive = they owe you, negative = you owe them),
+  drill-in to the per-participant share list, settle / re-open
+  toggle, archive-or-delete management, include-archived filter.
+- New `SplitTransactionModal.tsx` component. Opened from the new
+  👥 button on every transaction row. Editable per-participant
+  amounts, **Split equally (incl. you)** button that distributes
+  the absolute amount across N+1 (the user plus N participants),
+  inline "add a participant" form.
+- `TransactionTable` gets an `onOpenShares?` optional prop +
+  per-row 👥 button. Existing ✂ category-split button is
+  unchanged.
+- `TransactionsPage` wires the modal on the new prop.
+
+### Tests (+7 server)
+
+- `tests/integration/shares.test.ts` — 7 tests: participant CRUD
+  round-trip, duplicate-name 409, `PUT` shares replaces all + GET
+  reports yourShareCents, `PUT` rejects sign mismatch and
+  over-allocation, settle toggle is idempotent, summary aggregates
+  open shares correctly across multiple transactions and
+  settlements, assistant `split_transaction` tool auto-creates
+  participants by name and writes the audit-log row.
+- Total: **505 tests** (499 server + 6 web), all green.
+
+### Files
+
+```
+server/src/db/migrations/024_phase9_2_split_bills.sql   (new)
+server/src/routes/shares.ts                             (new)
+server/src/app.ts                                       (register routes)
+server/src/domain/assistant/tools.ts                    (+2 tools)
+server/tests/setup/test-db.ts                           (TRUNCATE split_*)
+server/tests/integration/shares.test.ts                 (new)
+web/src/api.ts                                          (sharing API + types)
+web/src/pages/SharingPage.tsx                           (new)
+web/src/components/SplitTransactionModal.tsx            (new)
+web/src/components/TransactionTable.tsx                 (+onOpenShares prop)
+web/src/pages/TransactionsPage.tsx                      (mount modal)
+web/src/App.tsx                                         (nav + route)
+```
 
 ---
 

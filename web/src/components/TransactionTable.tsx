@@ -21,6 +21,8 @@ interface Props {
   onOpenAttachments?: (transaction: Transaction) => void;
   /** Called when the user clicks the split icon on a row. */
   onOpenSplits?: (transaction: Transaction) => void;
+  /** Called when the user clicks the share-with-people icon on a row. */
+  onOpenShares?: (transaction: Transaction) => void;
   /** When provided, render a checkbox column and report changes. */
   selection?: {
     selected: Set<string>;
@@ -71,6 +73,7 @@ export function TransactionTable({
   onUpdate,
   onOpenAttachments,
   onOpenSplits,
+  onOpenShares,
   selection,
 }: Props) {
   const groups = useMemo(
@@ -110,7 +113,7 @@ export function TransactionTable({
             <th>Category</th>
             <th className="num">Amount</th>
             {showRunningBalance && <th className="num">Balance</th>}
-            {(onOpenAttachments || onOpenSplits) && (
+            {(onOpenAttachments || onOpenSplits || onOpenShares) && (
               <th className="attach-col">Actions</th>
             )}
           </tr>
@@ -127,6 +130,7 @@ export function TransactionTable({
               onUpdate={onUpdate}
               onOpenAttachments={onOpenAttachments}
               onOpenSplits={onOpenSplits}
+              onOpenShares={onOpenShares}
               selection={selection}
             />
           ))}
@@ -145,6 +149,7 @@ function TransactionRow({
   onUpdate,
   onOpenAttachments,
   onOpenSplits,
+  onOpenShares,
   selection,
 }: {
   transaction: Transaction;
@@ -155,6 +160,7 @@ function TransactionRow({
   onUpdate?: Props['onUpdate'];
   onOpenAttachments?: Props['onOpenAttachments'];
   onOpenSplits?: Props['onOpenSplits'];
+  onOpenShares?: Props['onOpenShares'];
   selection?: Props['selection'];
 }) {
   const t = transaction;
@@ -250,7 +256,7 @@ function TransactionRow({
           )}
         </td>
       )}
-      {(onOpenAttachments || onOpenSplits) && (
+      {(onOpenAttachments || onOpenSplits || onOpenShares) && (
         <td className="attach-col">
           {onOpenAttachments && (
             <button
@@ -281,6 +287,17 @@ function TransactionRow({
               aria-label="Split transaction"
             >
               <span aria-hidden>✂</span>
+            </button>
+          )}
+          {onOpenShares && (
+            <button
+              type="button"
+              className="attach-btn"
+              onClick={() => onOpenShares(t)}
+              title="Share this transaction with other people"
+              aria-label="Share transaction"
+            >
+              <span aria-hidden>👥</span>
             </button>
           )}
         </td>

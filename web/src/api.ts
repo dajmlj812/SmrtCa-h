@@ -94,6 +94,55 @@ export interface OfxDcConnectionInput {
   enabled?: boolean;
 }
 
+export interface SplitParticipant {
+  id: string;
+  name: string;
+  email: string | null;
+  user_id: string | null;
+  archived: boolean;
+  created_at: string;
+}
+
+export interface TransactionShare {
+  id: string;
+  participant_id: string;
+  participant_name: string;
+  share_cents: number;
+  settled: boolean;
+  settled_at: string | null;
+  note: string | null;
+}
+
+export interface TransactionSharesResponse {
+  transactionAmountCents: number;
+  sharesTotalCents: number;
+  yourShareCents: number;
+  shares: TransactionShare[];
+}
+
+export interface ShareSummaryRow {
+  participant_id: string;
+  name: string;
+  net_open_cents: number;
+  net_all_cents: number;
+  open_count: number;
+}
+
+export interface ShareRow {
+  id: string;
+  transaction_id: string;
+  share_cents: number;
+  settled: boolean;
+  settled_at: string | null;
+  note: string | null;
+  created_at: string;
+  txn_date: string;
+  raw_description: string;
+  txn_amount_cents: number;
+  participant_id: string;
+  participant_name: string;
+}
+
 export interface AssistantClientMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -1983,6 +2032,68 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages }),
     }),
+
+  // ── Bill-splitting (Phase 9.2 / 0.12.2) ──────────────────
+  listSplitParticipants: (includeArchived = false) =>
+    http<{ participants: SplitParticipant[] }>(
+      `/api/split-participants${includeArchived ? '?includeArchived=1' : ''}`,
+    ).then((r) => r.participants),
+
+  createSplitParticipant: (input: { name: string; email?: string | null }) =>
+    http<{ participant: SplitParticipant }>('/api/split-participants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.participant),
+
+  updateSplitParticipant: (
+    id: string,
+    input: { name?: string; email?: string | null; archived?: boolean },
+  ) =>
+    http<{ participant: SplitParticipant }>(`/api/split-participants/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.participant),
+
+  deleteSplitParticipant: (id: string) =>
+    http<void>(`/api/split-participants/${id}`, { method: 'DELETE' }),
+
+  getTransactionShares: (transactionId: string) =>
+    http<TransactionSharesResponse>(`/api/transactions/${transactionId}/shares`),
+
+  putTransactionShares: (
+    transactionId: string,
+    shares: Array<{ participantId: string; shareCents: number; note?: string }>,
+  ) =>
+    http<{ ok: true; written: number }>(`/api/transactions/${transactionId}/shares`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shares }),
+    }),
+
+  settleTransactionShare: (id: string, settled: boolean) =>
+    http<{ share: { id: string; settled: boolean; settled_at: string | null } }>(
+      `/api/transaction-shares/${id}/settle`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settled }),
+      },
+    ),
+
+  sharesSummary: () =>
+    http<{ summary: ShareSummaryRow[] }>('/api/shares/summary').then((r) => r.summary),
+
+  listShares: (params?: { participantId?: string; onlyOpen?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.participantId) q.set('participantId', params.participantId);
+    if (params?.onlyOpen) q.set('onlyOpen', '1');
+    const qs = q.toString();
+    return http<{ shares: ShareRow[] }>(`/api/shares${qs ? `?${qs}` : ''}`).then(
+      (r) => r.shares,
+    );
+  },
 
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),

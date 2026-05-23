@@ -44,6 +44,7 @@ import { ofxDcRoutes } from './routes/ofx-dc.js';
 import { plaidRoutes } from './routes/plaid.js';
 import { autoSyncRoutes } from './routes/auto-sync.js';
 import { assistantRoutes } from './routes/assistant.js';
+import { shareRoutes } from './routes/shares.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { startAutoSyncScheduler } from './domain/auto-sync.js';
@@ -207,6 +208,7 @@ export async function buildApp(
   await app.register(plaidRoutes);
   await app.register(autoSyncRoutes);
   await app.register(assistantRoutes);
+  await app.register(shareRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.

@@ -19,7 +19,7 @@ nothing is "all or nothing."
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
 | 8 | Connectivity & Automation | ✅ Complete — 2026-05-23 |
-| 9 | Mobile, Assistant & Experience | 🔜 In progress — 9.0 ✅ · 9.1 ✅ |
+| 9 | Mobile, Assistant & Experience | 🔜 In progress — 9.0 ✅ · 9.1 ✅ · 9.2 ✅ |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -275,7 +275,16 @@ Sliced into four releases:
   change. Children blocked. Bulk operations hard-capped at 500.
   New /assistant chat page with inline tool-call chips so the
   user sees exactly what the assistant did.
-- **9.2** 📋 — **Bill-splitting / shared expenses**.
+- **9.2** ✅ (released as 0.12.2) — **Bill-splitting / shared
+  expenses**. New `split_participants` + `transaction_shares` tables
+  (tenant-scoped, sign convention preserved so totals never desync).
+  Routes: participant CRUD, `PUT /api/transactions/:id/shares`,
+  `POST /api/transaction-shares/:id/settle`, summary endpoint.
+  New /sharing page (net balances + per-participant share list +
+  settle toggle), 👥 button on every transaction row opens a modal
+  with split-equally + manual allocation. Two new assistant tools
+  (`share_summary`, `split_transaction`) so the AI can answer "who
+  owes me?" and "split this dinner 4 ways" in natural language.
 - **9.3** 📋 — **Calendar budget view**.
 
 ---

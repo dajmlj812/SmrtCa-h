@@ -10,6 +10,7 @@ import { TransactionTable } from '../components/TransactionTable';
 import { AttachmentsModal } from '../components/AttachmentsModal';
 import { BulkActionBar } from '../components/BulkActionBar';
 import { SplitsModal } from '../components/SplitsModal';
+import { SplitTransactionModal } from '../components/SplitTransactionModal';
 
 const PAGE_SIZE = 100;
 
@@ -34,6 +35,7 @@ export function TransactionsPage() {
     null,
   );
   const [splittingFor, setSplittingFor] = useState<Transaction | null>(null);
+  const [sharingFor, setSharingFor] = useState<Transaction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -269,6 +271,7 @@ export function TransactionsPage() {
           onUpdate={onTxnUpdate}
           onOpenAttachments={setAttachmentsFor}
           onOpenSplits={setSplittingFor}
+          onOpenShares={setSharingFor}
           selection={{
             selected: selectedIds,
             onToggle: (id) =>
@@ -307,6 +310,15 @@ export function TransactionsPage() {
               ),
             )
           }
+        />
+      )}
+
+      {sharingFor && (
+        <SplitTransactionModal
+          transactionId={sharingFor.id}
+          transactionAmountCents={sharingFor.amount_cents}
+          transactionDescription={sharingFor.raw_description}
+          onClose={() => setSharingFor(null)}
         />
       )}
 

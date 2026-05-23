@@ -531,6 +531,121 @@ const updateSavingsGoal: AssistantTool = {
   },
 };
 
+const shareSummary: AssistantTool = {
+  name: 'share_summary',
+  description:
+    'Net amount each split participant owes the tenant. share_cents > 0 = they owe you; < 0 = you owe them. open_count counts unsettled rows.',
+  kind: 'read',
+  inputSchema: { type: 'object', properties: {} },
+  async execute(ctx) {
+    const r = await pool.query(
+      `SELECT p.id AS participant_id, p.name,
+              COALESCE(SUM(CASE WHEN s.settled = false THEN s.share_cents ELSE 0 END), 0)::bigint
+                AS net_open_cents,
+              COUNT(s.id) FILTER (WHERE s.settled = false)::int AS open_count
+         FROM split_participants p
+         LEFT JOIN transaction_shares s ON s.participant_id = p.id
+        WHERE p.tenant_id = $1 AND p.archived = false
+        GROUP BY p.id, p.name
+        ORDER BY p.name`,
+      [ctx.tenantId],
+    );
+    return { summary: r.rows };
+  },
+};
+
+const splitTransaction: AssistantTool = {
+  name: 'split_transaction',
+  description: `Split a transaction among one or more participants. Pass shares as an array of {participantName, shareCents}. Share signs must match the transaction sign (e.g. for a -10000 dinner, each participant's share is negative or positive — convention: positive cents = THEY owe you). The tenant's own share is whatever remains.`,
+  kind: 'write',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      transactionId: { type: 'string' },
+      shares: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            participantName: { type: 'string' },
+            shareCents: { type: 'integer' },
+          },
+          required: ['participantName', 'shareCents'],
+        },
+        minItems: 1,
+      },
+    },
+    required: ['transactionId', 'shares'],
+  },
+  async execute(ctx, input) {
+    const i = input as {
+      transactionId: string;
+      shares: Array<{ participantName: string; shareCents: number }>;
+    };
+    // Verify the transaction belongs to this tenant + get its amount.
+    const txn = await pool.query<{ amount_cents: number }>(
+      `SELECT t.amount_cents
+         FROM transactions t JOIN accounts a ON a.id = t.account_id
+        WHERE t.id = $1 AND a.tenant_id = $2`,
+      [i.transactionId, ctx.tenantId],
+    );
+    if (txn.rowCount === 0) {
+      throw new Error(`Transaction ${i.transactionId} not found in this tenant`);
+    }
+    const txnAmount = Number(txn.rows[0]!.amount_cents);
+    const total = i.shares.reduce((a, s) => a + s.shareCents, 0);
+    if (Math.abs(total) > Math.abs(txnAmount)) {
+      throw new Error('Total of shares exceeds the transaction amount');
+    }
+    // Look up / auto-create participants by name (tenant-scoped).
+    const idByName = new Map<string, string>();
+    for (const s of i.shares) {
+      const name = s.participantName.trim();
+      if (!name) throw new Error('Empty participant name');
+      const existing = await pool.query<{ id: string }>(
+        `SELECT id FROM split_participants WHERE tenant_id = $1 AND name = $2`,
+        [ctx.tenantId, name],
+      );
+      if (existing.rowCount! > 0) {
+        idByName.set(name, existing.rows[0]!.id);
+      } else {
+        const inserted = await pool.query<{ id: string }>(
+          `INSERT INTO split_participants (tenant_id, name) VALUES ($1, $2)
+           RETURNING id`,
+          [ctx.tenantId, name],
+        );
+        idByName.set(name, inserted.rows[0]!.id);
+      }
+    }
+    // Replace existing shares for this transaction.
+    await pool.query(
+      `DELETE FROM transaction_shares WHERE transaction_id = $1`,
+      [i.transactionId],
+    );
+    for (const s of i.shares) {
+      await pool.query(
+        `INSERT INTO transaction_shares
+           (transaction_id, participant_id, share_cents)
+         VALUES ($1, $2, $3)`,
+        [i.transactionId, idByName.get(s.participantName.trim()), s.shareCents],
+      );
+    }
+    await recordAudit({
+      tenantId: ctx.tenantId,
+      actorUserId: ctx.userId,
+      actorKind: 'tenant_user',
+      action: 'assistant.split_transaction',
+      targetKind: 'transaction',
+      targetId: i.transactionId,
+      details: {
+        transactionAmountCents: txnAmount,
+        shares: i.shares,
+      },
+    });
+    return { ok: true, sharesWritten: i.shares.length };
+  },
+};
+
 export const ASSISTANT_TOOLS: AssistantTool[] = [
   queryTransactions,
   accountBalances,
@@ -539,11 +654,13 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   listBudgets,
   listBills,
   listGoals,
+  shareSummary,
   updateTransactionCategory,
   bulkRecategorize,
   createBudget,
   markBillPaid,
   updateSavingsGoal,
+  splitTransaction,
 ];
 
 export function findTool(name: string): AssistantTool | undefined {
