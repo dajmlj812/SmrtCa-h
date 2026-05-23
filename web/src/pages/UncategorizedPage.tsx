@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  api,
-  type Account,
-  type Category,
-  type Transaction,
-} from '../api';
+import { api, type Category, type Transaction } from '../api';
 import { TransactionTable } from '../components/TransactionTable';
 import { BulkActionBar } from '../components/BulkActionBar';
 import { SplitsModal } from '../components/SplitsModal';
@@ -12,12 +7,9 @@ import { SplitsModal } from '../components/SplitsModal';
 const PAGE_SIZE = 100;
 
 export function UncategorizedPage() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
-  const [accountId, setAccountId] = useState('');
-  const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,23 +17,16 @@ export function UncategorizedPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.listAccounts().then(setAccounts).catch(() => undefined);
     api.listCategories().then(setCategories).catch(() => undefined);
   }, []);
 
-  async function load(opts: {
-    accountId: string;
-    search: string;
-    offset: number;
-  }) {
+  async function load(nextOffset: number) {
     setLoading(true);
     setError(null);
     try {
       const page = await api.listTransactions({
-        accountId: opts.accountId || undefined,
-        search: opts.search || undefined,
         limit: PAGE_SIZE,
-        offset: opts.offset,
+        offset: nextOffset,
         uncategorized: true,
       });
       setTransactions(page.transactions);
@@ -54,13 +39,8 @@ export function UncategorizedPage() {
   }
 
   useEffect(() => {
-    void load({ accountId, search, offset });
-  }, [accountId, offset]);
-
-  function runSearch() {
-    setOffset(0);
-    void load({ accountId, search, offset: 0 });
-  }
+    void load(offset);
+  }, [offset]);
 
   async function onTxnUpdate(
     id: string,
@@ -68,7 +48,7 @@ export function UncategorizedPage() {
   ) {
     try {
       await api.updateTransaction(id, updates);
-      // Once a row is categorized, drop it from the list.
+      // Once a row gets a category, it disappears from the triage list.
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       setTotal((n) => Math.max(0, n - 1));
       setSelectedIds((prev) => {
@@ -91,46 +71,17 @@ export function UncategorizedPage() {
         <div>
           <h1>Uncategorized</h1>
           <div className="subtitle">
-            Transactions that still need a category. Categorize them inline,
-            or use the bulk bar to rename, merge, or remove duplicates.
+            Triage queue — transactions that need a human touch before they
+            can fit anywhere else. Pick a category (or split) and the row
+            disappears from this list.
           </div>
         </div>
+        <span className="muted">
+          {total === 0 ? '0' : `${from}–${to} of ${total}`}
+        </span>
       </div>
 
       {error && <div className="banner error">{error}</div>}
-
-      <div className="toolbar">
-        <select
-          value={accountId}
-          onChange={(e) => {
-            setOffset(0);
-            setAccountId(e.target.value);
-          }}
-        >
-          <option value="">All accounts</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-        <input
-          type="search"
-          placeholder="Search descriptions…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') runSearch();
-          }}
-        />
-        <button className="btn secondary" onClick={runSearch}>
-          Search
-        </button>
-        <div className="spacer" />
-        <span className="muted">
-          {from}–{to} of {total}
-        </span>
-      </div>
 
       <BulkActionBar
         selectedIds={Array.from(selectedIds)}
@@ -138,7 +89,7 @@ export function UncategorizedPage() {
         onClear={() => setSelectedIds(new Set())}
         onApplied={() => {
           setSelectedIds(new Set());
-          void load({ accountId, search, offset });
+          void load(offset);
         }}
         onCaptureRule={async (input) => {
           try {
@@ -197,27 +148,29 @@ export function UncategorizedPage() {
           onClose={() => setSplittingFor(null)}
           onSaved={() => {
             setSplittingFor(null);
-            void load({ accountId, search, offset });
+            void load(offset);
           }}
         />
       )}
 
-      <div className="pagination">
-        <button
-          className="btn secondary"
-          disabled={offset === 0}
-          onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-        >
-          ← Previous
-        </button>
-        <button
-          className="btn secondary"
-          disabled={to >= total}
-          onClick={() => setOffset(offset + PAGE_SIZE)}
-        >
-          Next →
-        </button>
-      </div>
+      {total > PAGE_SIZE && (
+        <div className="pagination">
+          <button
+            className="btn secondary"
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+          >
+            ← Previous
+          </button>
+          <button
+            className="btn secondary"
+            disabled={to >= total}
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
