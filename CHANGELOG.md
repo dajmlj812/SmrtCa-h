@@ -13,6 +13,34 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.9.2] — 2026-05-23 — Auth providers move to super-admin
+
+Auth provider configuration is a platform-operator concern — deciding
+which login methods exist (Google / Microsoft / GitHub / generic OIDC)
+isn't something a tenant admin should be able to do on their own
+shared instance.
+
+### Changed
+
+- **`/api/auth-provider-configs/*`** (GET/POST/PATCH/DELETE) — gated
+  to super admin. Tenant admins get 403 across the board.
+- **`/workspace`** drops its Auth providers section entirely.
+- **`/system`** Overview tab gains the Auth providers section
+  (extracted into `components/AuthProvidersSection.tsx` and rendered
+  below Super admins).
+
+### Tests
+
+- `+2` integration tests in `multi-tenant.test.ts`: tenant admin gets
+  403 on POST and GET. The existing CRUD test now uses a super-admin
+  cookie throughout.
+- DELETE-test gotcha: Fastify rejects `DELETE` requests when
+  `content-type: application/json` is set with no body — pass cookie
+  only on DELETE.
+- **Total: 381** (server 375 + web 6).
+
+---
+
 ## [0.9.1] — 2026-05-23 — Health, backups, SMTP, security keys: super-admin only
 
 Tightens the 0.9.0 RBAC boundary. Anything platform-level moves out of

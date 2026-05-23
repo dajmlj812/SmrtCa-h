@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { makeTestApp, pool, resetDb } from '../setup/test-db.js';
+import { makeSuperAdminCookie, makeTestApp, pool, resetDb } from '../setup/test-db.js';
 
 describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
   let app: FastifyInstance;
@@ -155,8 +155,38 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
     expect(ownerRemoves.statusCode).toBe(204);
   });
 
-  // ── Auth provider configs ───────────────────────────────
-  it('owner can create + toggle + delete an auth provider config', async () => {
+  // ── Auth provider configs (super-admin only as of 0.9.2) ─
+  it('tenant admin gets 403 on POST /api/auth-provider-configs', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/auth-provider-configs',
+      payload: {
+        kind: 'oidc',
+        slug: 'sneaky',
+        displayName: 'Sneaky',
+        enabled: false,
+        config: {},
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('tenant admin gets 403 on GET /api/auth-provider-configs', async () => {
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/auth-provider-configs',
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('super admin can create + toggle + delete an auth provider config', async () => {
+    const superCookie = await makeSuperAdminCookie(app);
+    const asSuper = (extra: Record<string, string> = {}) => ({
+      headers: { 'content-type': 'application/json', cookie: superCookie, ...extra },
+      skipAuth: true,
+    });
+
     const created = await app.inject({
       method: 'POST',
       url: '/api/auth-provider-configs',
@@ -172,38 +202,47 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
           discovery_url: 'https://example.com/.well-known/openid-configuration',
         },
       },
-      headers: { 'content-type': 'application/json' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper() as any),
     });
     expect(created.statusCode).toBe(201);
     const id = created.json().id as string;
 
-    // List masks the client_secret.
     const list = await app.inject({
       method: 'GET',
       url: '/api/auth-provider-configs',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper() as any),
     });
     expect(list.statusCode).toBe(200);
     const row = list.json().providers.find((p: { id: string }) => p.id === id);
     expect(row.config_json.client_secret).toMatch(/^••••/);
 
-    // Toggle enabled.
     const patched = await app.inject({
       method: 'PATCH',
       url: `/api/auth-provider-configs/${id}`,
       payload: { enabled: true },
-      headers: { 'content-type': 'application/json' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper() as any),
     });
     expect(patched.statusCode).toBe(200);
 
-    // Delete.
+    // DELETE has no body — pass only the cookie, no content-type, or
+    // Fastify rejects with "Body cannot be empty when content-type is
+    // set to application/json".
     const deleted = await app.inject({
       method: 'DELETE',
       url: `/api/auth-provider-configs/${id}`,
-    });
+      headers: { cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(deleted.statusCode).toBe(204);
   });
 
   it('duplicate slug returns 409', async () => {
+    const superCookie = await makeSuperAdminCookie(app);
+    const headers = { 'content-type': 'application/json', cookie: superCookie };
     await app.inject({
       method: 'POST',
       url: '/api/auth-provider-configs',
@@ -219,8 +258,10 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
           discovery_url: 'https://x/.well-known/openid-configuration',
         },
       },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     const dup = await app.inject({
       method: 'POST',
       url: '/api/auth-provider-configs',
@@ -236,8 +277,10 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
           discovery_url: 'https://x/.well-known/openid-configuration',
         },
       },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(dup.statusCode).toBe(409);
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
+import { AuthProvidersSection } from '../components/AuthProvidersSection';
 
 interface TenantRow {
   id: string;
@@ -246,6 +247,8 @@ function OverviewTab() {
           {' '}across all tenants.
         </p>
       </div>
+
+      <AuthProvidersSection />
     </div>
   );
 }

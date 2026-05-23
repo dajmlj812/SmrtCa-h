@@ -1,19 +1,20 @@
 import type { FastifyInstance } from 'fastify';
-import { pool, query } from '../db/pool.js';
+import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
-import {
-  clearProviderCache,
-} from '../auth/providers/registry.js';
+import { clearProviderCache } from '../auth/providers/registry.js';
 import { PRESET_OIDC } from '../auth/providers/oidc.js';
+import { requireSuperAdmin } from '../auth/rbac.js';
 
 /**
- *   GET    /api/auth-provider-configs            — list configs (admin/owner)
+ *   GET    /api/auth-provider-configs            — list configs
  *   POST   /api/auth-provider-configs            — create
  *   PATCH  /api/auth-provider-configs/:id        — update enabled/config
  *   DELETE /api/auth-provider-configs/:id        — remove
  *
- * Only owners can mutate provider configs (this is the security
- * boundary for who can let strangers in). Listing is admin-or-owner.
+ * Super-admin only (0.9.2). Auth providers determine who can sign in
+ * to the entire platform; that's a platform-operator decision, not a
+ * per-tenant one. Tenant admins manage who joins THEIR tenant via
+ * invitations; super admins choose which login methods exist.
  *
  * NOTE: client_secret is stored in clear text in jsonb. That mirrors
  * the rest of the secret storage in this app (ANTHROPIC_API_KEY etc.).
@@ -24,22 +25,9 @@ import { PRESET_OIDC } from '../auth/providers/oidc.js';
 const ALLOWED_KINDS = ['oidc', 'saml'] as const;
 type Kind = (typeof ALLOWED_KINDS)[number];
 
-async function currentRole(userId: string, tenantId: string | null): Promise<string | null> {
-  if (!tenantId) return null;
-  const r = await pool.query<{ role: string }>(
-    `SELECT role FROM memberships WHERE user_id = $1 AND tenant_id = $2`,
-    [userId, tenantId],
-  );
-  return r.rows[0]?.role ?? null;
-}
-
 export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/auth-provider-configs', async (req, reply) => {
-    if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
-    const role = await currentRole(req.user.id, req.user.tenantId);
-    if (role !== 'admin') {
-      return reply.code(403).send({ error: 'Forbidden' });
-    }
+    if (!requireSuperAdmin(req, reply)) return;
     const r = await query<{
       id: string;
       kind: string;
@@ -55,7 +43,6 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
          FROM auth_provider_configs
         ORDER BY created_at`,
     );
-    // Mask client_secret on the way out.
     const masked = r.rows.map((row) => ({
       ...row,
       config_json: maskSecrets(row.config_json),
@@ -64,11 +51,7 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/auth-provider-configs', async (req, reply) => {
-    if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
-    const role = await currentRole(req.user.id, req.user.tenantId);
-    if (role !== 'admin') {
-      return reply.code(403).send({ error: 'Only admins can add providers' });
-    }
+    if (!requireSuperAdmin(req, reply)) return;
     const body = (req.body ?? {}) as {
       kind?: unknown;
       slug?: unknown;
@@ -110,9 +93,7 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/auth-provider-configs/:id',
     async (req, reply) => {
-      if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
-      const role = await currentRole(req.user.id, req.user.tenantId);
-      if (role !== 'admin') return reply.code(403).send({ error: 'Forbidden' });
+      if (!requireSuperAdmin(req, reply)) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const body = (req.body ?? {}) as {
@@ -155,9 +136,7 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/auth-provider-configs/:id',
     async (req, reply) => {
-      if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
-      const role = await currentRole(req.user.id, req.user.tenantId);
-      if (role !== 'admin') return reply.code(403).send({ error: 'Forbidden' });
+      if (!requireSuperAdmin(req, reply)) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const r = await query(
