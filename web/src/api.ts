@@ -76,6 +76,68 @@ export interface NetWorthRow {
   net_worth_cents: number;
 }
 
+// ── Phase 6 types ─────────────────────────────────────────
+export interface Budget {
+  id: string;
+  period_month: string;
+  category_id: string | null;
+  category_name: string | null;
+  parent_id: string | null;
+  amount_cents: number;
+  created_at: string;
+}
+
+export interface BudgetVsActualRow {
+  id: string;
+  category_id: string | null;
+  category_name: string | null;
+  budgeted_cents: number;
+  actual_cents: number;
+}
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  target_amount_cents: number;
+  current_amount_cents: number;
+  target_date: string | null;
+  created_at: string;
+  /** Server-computed: current / target, capped at 1. */
+  progress: number;
+}
+
+export type BillFrequency =
+  | 'monthly'
+  | 'weekly'
+  | 'biweekly'
+  | 'yearly'
+  | 'one-time';
+export type IncomeFrequency = 'monthly' | 'weekly' | 'biweekly' | 'yearly';
+
+export interface Bill {
+  id: string;
+  name: string;
+  amount_cents: number;
+  frequency: BillFrequency;
+  next_due_date: string;
+  category_id: string | null;
+  category_name?: string | null;
+  account_id: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface RecurringIncome {
+  id: string;
+  name: string;
+  amount_cents: number;
+  frequency: IncomeFrequency;
+  next_expected_date: string;
+  account_id: string | null;
+  active: boolean;
+  created_at: string;
+}
+
 export interface Attachment {
   id: string;
   transaction_id: string;
@@ -486,4 +548,132 @@ export const api = {
     if (filters.end) q.set('end', filters.end);
     return `/api/transactions/export?${q.toString()}`;
   },
+
+  // ── Budgets (Phase 6) ────────────────────────────────────
+  listBudgets: (month: string) =>
+    http<{ month: string; budgets: Budget[] }>(
+      `/api/budgets?month=${encodeURIComponent(month)}`,
+    ).then((r) => r.budgets),
+
+  upsertBudget: (input: {
+    periodMonth: string;
+    categoryId: string | null;
+    amountCents: number;
+  }) =>
+    http<{ budget: Budget }>('/api/budgets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.budget),
+
+  deleteBudget: (id: string) =>
+    http<void>(`/api/budgets/${id}`, { method: 'DELETE' }),
+
+  copyBudgets: (fromMonth: string, toMonth: string) =>
+    http<{ copied: number }>('/api/budgets/copy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromMonth, toMonth }),
+    }),
+
+  budgetActuals: (month: string) =>
+    http<{
+      month: string;
+      rows: BudgetVsActualRow[];
+      totals: { budgeted_cents: number; actual_cents: number };
+    }>(`/api/budgets/actual?month=${encodeURIComponent(month)}`),
+
+  // ── Goals ────────────────────────────────────────────────
+  listGoals: () =>
+    http<{ goals: SavingsGoal[] }>('/api/goals').then((r) => r.goals),
+
+  createGoal: (input: {
+    name: string;
+    targetAmountCents: number;
+    currentAmountCents?: number;
+    targetDate?: string | null;
+  }) =>
+    http<{ goal: SavingsGoal }>('/api/goals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.goal),
+
+  updateGoal: (
+    id: string,
+    input: Partial<{
+      name: string;
+      targetAmountCents: number;
+      currentAmountCents: number;
+      targetDate: string | null;
+    }>,
+  ) =>
+    http<{ goal: SavingsGoal }>(`/api/goals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.goal),
+
+  deleteGoal: (id: string) =>
+    http<void>(`/api/goals/${id}`, { method: 'DELETE' }),
+
+  // ── Bills + recurring income + cash-flow ─────────────────
+  listBills: () =>
+    http<{ bills: Bill[] }>('/api/bills').then((r) => r.bills),
+
+  createBill: (input: {
+    name: string;
+    amountCents: number;
+    frequency: BillFrequency;
+    nextDueDate: string;
+    categoryId?: string;
+    accountId?: string;
+  }) =>
+    http<{ bill: Bill }>('/api/bills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.bill),
+
+  deleteBill: (id: string) =>
+    http<void>(`/api/bills/${id}`, { method: 'DELETE' }),
+
+  markBillPaid: (id: string) =>
+    http<{ bill: Bill }>(`/api/bills/${id}/mark-paid`, { method: 'POST' }).then(
+      (r) => r.bill,
+    ),
+
+  upcomingBills: (days = 30) =>
+    http<{ days: number; bills: Bill[] }>(
+      `/api/bills/upcoming?days=${days}`,
+    ),
+
+  listRecurringIncome: () =>
+    http<{ income: RecurringIncome[] }>('/api/recurring-income').then(
+      (r) => r.income,
+    ),
+
+  createRecurringIncome: (input: {
+    name: string;
+    amountCents: number;
+    frequency: IncomeFrequency;
+    nextExpectedDate: string;
+    accountId?: string;
+  }) =>
+    http<{ income: RecurringIncome }>('/api/recurring-income', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.income),
+
+  deleteRecurringIncome: (id: string) =>
+    http<void>(`/api/recurring-income/${id}`, { method: 'DELETE' }),
+
+  cashFlow: (days = 90) =>
+    http<{
+      days: number;
+      starting_cents: number;
+      ending_cents: number;
+      series: Array<{ date: string; projected_cents: number }>;
+    }>(`/api/cash-flow?days=${days}`),
 };

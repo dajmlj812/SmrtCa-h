@@ -70,8 +70,10 @@ export const config = {
   auth: {
     // Used by @fastify/cookie to sign the session-id cookie. Required for
     // sessions to survive process restarts; an ephemeral one is generated
-    // otherwise (dev convenience only).
-    sessionSecret: process.env.SESSION_SECRET ?? ephemeralSecret(),
+    // otherwise (dev convenience only). `||` (not `??`) so that an empty
+    // string from docker-compose interpolation falls through the same as
+    // unset — @fastify/cookie throws on an empty secret.
+    sessionSecret: process.env.SESSION_SECRET || ephemeralSecret(),
     sessionSecretEphemeral: !process.env.SESSION_SECRET,
     sessionMaxAgeMs: 7 * 24 * 60 * 60 * 1000, // 7 days
     // Set `secure: true` on cookies when a TLS-terminating proxy is in

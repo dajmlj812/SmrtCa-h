@@ -9,7 +9,90 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 6 work will land here._
+_Phase 7 work will land here._
+
+---
+
+## [0.6.0] — 2026-05-22 — Phase 6: Budgeting & Cash Flow
+
+Five tightly-related features in one release: flex budgets, monthly
+budget-vs-actual, savings goals, bill reminders, and a 90-day cash-flow
+forecast on the dashboard.
+
+### Added
+
+- **Flex budgeting.** New `budgets` table (migration 006) with one row
+  per `(period_month, category_id)` — `category_id IS NULL` is the
+  flex-pool catch-all.
+  - `GET /api/budgets?month=YYYY-MM-01` lists a month's budgets.
+  - `POST /api/budgets` upserts on the `(month, category)` key so the
+    same call creates new rows or updates existing ones.
+  - `POST /api/budgets/copy { fromMonth, toMonth }` clones rows month
+    to month, skipping any that already exist.
+  - `DELETE /api/budgets/:id`.
+- **Budget vs actual.** `GET /api/budgets/actual?month=YYYY-MM-01`
+  returns per-category budgeted vs actual spend. The flex-pool row's
+  actual is computed as spend in categories that **don't** have an
+  explicit budget that month (plus uncategorized rows). Transfers are
+  excluded from both sides.
+- **Savings goals.** `savings_goals` table with name, target, current,
+  optional target date. Server-computed `progress` is `current / target`
+  capped at 1. Full CRUD via `/api/goals`.
+- **Bill reminders.** `bills` table (name, amount, frequency, next due,
+  optional category + account, active flag). CRUD via `/api/bills`;
+  `POST /api/bills/:id/mark-paid` advances `next_due_date` by the
+  bill's frequency (monthly / weekly / biweekly / yearly) or sets
+  `active=false` for one-time bills.
+- **Upcoming bills view.** `GET /api/bills/upcoming?days=30` returns
+  active bills whose `next_due_date` is within the window. Shown as a
+  panel on the dashboard.
+- **Recurring income** as a sibling concept — `recurring_income` table
+  + `/api/recurring-income` CRUD. Kept separate from bills so the
+  cash-flow projection doesn't have to inspect signs everywhere.
+- **Cash-flow forecast.** `GET /api/cash-flow?days=90` walks the
+  current net worth forward through every projected bill / income event
+  in the window, returning a per-day balance series. Inactive bills
+  are ignored. Surfaced as a line chart on the dashboard.
+
+### Web
+
+- New **Budgets** page (`/budgets`): month picker, total-budgeted /
+  total-spent / remaining header, per-row progress bars (red when over
+  budget), flex-pool row, add-budget form, and a one-click
+  "Copy from previous month" affordance.
+- New **Goals** page (`/goals`): card grid with progress bars, create /
+  edit / delete modal, target-date countdown when set.
+- New **Bills** page (`/bills`): tables for bills and recurring income,
+  add / mark-paid / delete actions.
+- **Dashboard** gains two new tiles: "Upcoming bills (next 30 days)"
+  list and the 90-day cash-flow forecast line chart with the
+  start → end balance summary.
+
+### Tests
+
+- **+20 server tests** (230 → 250): 8 budget tests (CRUD, upsert,
+  flex-pool actuals, copy-from-previous-month, transfer exclusion),
+  5 goal tests (CRUD, progress cap, validation), 7 bills + cash-flow
+  tests (mark-paid advances date, one-time deactivates, upcoming
+  window, recurring income CRUD, projection math, inactive-bill
+  exclusion).
+- Total automated coverage: **263 tests** (server 250 + web 6 + e2e 7).
+
+### Fixed
+
+- **`SESSION_SECRET` empty-string handling.** When the host `.env` had no
+  `SESSION_SECRET`, docker-compose interpolated it to `""` and the
+  config's `??` fallback (catches only null/undefined) let the empty
+  string through to `@fastify/cookie`, which crashed on signing. The
+  fallback now uses `||` so an empty interpolation degrades the same as
+  unset — an ephemeral per-process secret is generated and the server
+  boots. Surfaced during Phase 6 dogfooding.
+
+### Migration notes
+
+- **Upgrading from 0.5.0:** `npm run migrate --prefix server` applies
+  migration 006 (`budgets`, `savings_goals`, `bills`, `recurring_income`
+  + indexes).
 
 ---
 

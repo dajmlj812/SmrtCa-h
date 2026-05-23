@@ -885,3 +885,167 @@ select:focus {
   font-size: 13px;
   padding: 6px 10px;
 }
+
+/* ── Phase 6: budgets, goals, bills ─────────────────────── */
+
+.toolbar.inline {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.month-label {
+  font-weight: 500;
+  min-width: 140px;
+  text-align: center;
+}
+
+.budget-totals {
+  display: flex;
+  gap: 24px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--card-border, #e5e7eb);
+  font-size: 14px;
+}
+.budget-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.budget-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.budget-row-head {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+.budget-row-name {
+  font-weight: 500;
+}
+.budget-row-num {
+  font-variant-numeric: tabular-nums;
+}
+.progress-track {
+  background: var(--app-bg, #f1f5f9);
+  border-radius: 4px;
+  height: 8px;
+  overflow: hidden;
+}
+.progress-fill {
+  background: #4f8cff;
+  height: 100%;
+  transition: width 0.2s ease;
+}
+.progress-fill.over {
+  background: #ef4444;
+}
+.budget-add-form {
+  margin-top: 24px;
+}
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--link, #4f8cff);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.btn-link.danger {
+  color: var(--danger, #dc2626);
+}
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.goal-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.goal-card-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+.goal-card-date {
+  font-size: 12px;
+}
+.goal-card-amount {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.goal-card-foot {
+  font-size: 13px;
+}
+.goal-card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.page-section {
+  margin-top: 32px;
+}
+.page-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.page-section-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.muted-row {
+  opacity: 0.55;
+}
+
+.upcoming-bills {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upcoming-bills li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  font-size: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--card-border, #e5e7eb);
+}
+.upcoming-bills li:last-child {
+  border-bottom: none;
+}
+.upcoming-bill-name {
+  font-weight: 500;
+}
+.upcoming-bill-date {
+  font-size: 13px;
+}

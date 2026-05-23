@@ -7,7 +7,7 @@ your own container, with your data staying on your machine.
 
 ## Status
 
-**Phases 1 through 5 — Foundation, Import, AI Normalization, Receipts, Insights, Auth & Hardening** ✅ Complete
+**Phases 1 through 6 — Foundation, Import, AI Normalization, Receipts, Insights, Auth & Hardening, Budgeting & Cash Flow** ✅ Complete
 
 The stack is live, verified, and **safe to deploy**: accounts with **true
 opening-balance reconciliation**, a CSV/XLSX importer with automatic
@@ -20,9 +20,11 @@ rest** that flags receipts whose amount or date don't match the
 transaction, **automatic transfer detection** between own accounts, a
 **dashboard** with spending-by-category, income-vs-expense, and
 net-worth-over-time charts plus filtered CSV export, **Argon2id
-single-user authentication** with first-boot password setup, and a
-**single-container Docker image** ready for `docker compose up`. See the
-[Roadmap](./docs/ROADMAP.md) for what's next.
+single-user authentication** with first-boot password setup, a
+**single-container Docker image** ready for `docker compose up`, and
+**flex budgeting + budget-vs-actual + savings goals + bill reminders +
+90-day cash-flow forecast** rounding out the everyday-finance experience.
+See the [Roadmap](./docs/ROADMAP.md) for what's next.
 
 ## Documentation
 
@@ -79,7 +81,7 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-243 automated tests spanning unit, integration, functional, security, smoke,
+263 automated tests spanning unit, integration, functional, security, smoke,
 performance, and end-to-end layers. With PostgreSQL running:
 
 ```sh

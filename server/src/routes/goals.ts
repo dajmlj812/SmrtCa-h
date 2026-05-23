@@ -1,0 +1,170 @@
+import type { FastifyInstance } from 'fastify';
+import { query } from '../db/pool.js';
+import { isUuid } from '../util.js';
+
+interface GoalBody {
+  name?: unknown;
+  targetAmountCents?: unknown;
+  currentAmountCents?: unknown;
+  targetDate?: unknown;
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function asNonNegativeInt(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(n) || n < 0) return null;
+  return n;
+}
+
+function asPositiveInt(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+function isYmdOrNull(value: unknown): value is string | null {
+  if (value === null) return true;
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+const GOAL_COLUMNS = `id, name, target_amount_cents, current_amount_cents,
+  target_date, created_at,
+  CASE WHEN target_amount_cents = 0 THEN 0
+       ELSE LEAST(1.0, current_amount_cents::numeric / target_amount_cents)
+  END AS progress`;
+
+export async function goalRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/goals', async () => {
+    const r = await query(
+      `SELECT ${GOAL_COLUMNS}
+         FROM savings_goals
+        ORDER BY (target_date IS NULL),  -- dated goals first
+                 target_date ASC,
+                 created_at`,
+    );
+    return { goals: r.rows };
+  });
+
+  app.post('/api/goals', async (req, reply) => {
+    const body = (req.body ?? {}) as GoalBody;
+    const name = asString(body.name);
+    if (name === '') {
+      return reply.code(400).send({ error: 'Name is required' });
+    }
+    const target = asPositiveInt(body.targetAmountCents);
+    if (target === null) {
+      return reply
+        .code(400)
+        .send({ error: 'targetAmountCents must be a positive integer' });
+    }
+    let current = 0;
+    if (body.currentAmountCents !== undefined) {
+      const c = asNonNegativeInt(body.currentAmountCents);
+      if (c === null) {
+        return reply
+          .code(400)
+          .send({ error: 'currentAmountCents must be ≥ 0' });
+      }
+      current = c;
+    }
+    if (body.targetDate !== undefined && !isYmdOrNull(body.targetDate)) {
+      return reply
+        .code(400)
+        .send({ error: 'targetDate must be YYYY-MM-DD or null' });
+    }
+    const r = await query(
+      `INSERT INTO savings_goals
+         (name, target_amount_cents, current_amount_cents, target_date)
+       VALUES ($1, $2, $3, $4)
+       RETURNING ${GOAL_COLUMNS}`,
+      [name, target, current, (body.targetDate as string | null) ?? null],
+    );
+    return reply.code(201).send({ goal: r.rows[0] });
+  });
+
+  app.patch<{ Params: { id: string } }>(
+    '/api/goals/:id',
+    async (req, reply) => {
+      if (!isUuid(req.params.id)) {
+        return reply.code(400).send({ error: 'Invalid goal id' });
+      }
+      const body = (req.body ?? {}) as GoalBody;
+      const updates: string[] = [];
+      const params: unknown[] = [];
+
+      if (body.name !== undefined) {
+        const n = asString(body.name);
+        if (n === '') {
+          return reply.code(400).send({ error: 'Name cannot be empty' });
+        }
+        params.push(n);
+        updates.push(`name = $${params.length}`);
+      }
+      if (body.targetAmountCents !== undefined) {
+        const t = asPositiveInt(body.targetAmountCents);
+        if (t === null) {
+          return reply
+            .code(400)
+            .send({ error: 'targetAmountCents must be a positive integer' });
+        }
+        params.push(t);
+        updates.push(`target_amount_cents = $${params.length}`);
+      }
+      if (body.currentAmountCents !== undefined) {
+        const c = asNonNegativeInt(body.currentAmountCents);
+        if (c === null) {
+          return reply
+            .code(400)
+            .send({ error: 'currentAmountCents must be ≥ 0' });
+        }
+        params.push(c);
+        updates.push(`current_amount_cents = $${params.length}`);
+      }
+      if (body.targetDate !== undefined) {
+        if (!isYmdOrNull(body.targetDate)) {
+          return reply
+            .code(400)
+            .send({ error: 'targetDate must be YYYY-MM-DD or null' });
+        }
+        params.push(body.targetDate);
+        updates.push(`target_date = $${params.length}`);
+      }
+      if (updates.length === 0) {
+        return reply
+          .code(400)
+          .send({ error: 'No updatable fields provided' });
+      }
+
+      params.push(req.params.id);
+      const r = await query(
+        `UPDATE savings_goals SET ${updates.join(', ')}
+          WHERE id = $${params.length}
+       RETURNING ${GOAL_COLUMNS}`,
+        params,
+      );
+      if (r.rowCount === 0) {
+        return reply.code(404).send({ error: 'Goal not found' });
+      }
+      return { goal: r.rows[0] };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/goals/:id',
+    async (req, reply) => {
+      if (!isUuid(req.params.id)) {
+        return reply.code(400).send({ error: 'Invalid goal id' });
+      }
+      const r = await query(`DELETE FROM savings_goals WHERE id = $1`, [
+        req.params.id,
+      ]);
+      if (r.rowCount === 0) {
+        return reply.code(404).send({ error: 'Goal not found' });
+      }
+      return reply.code(204).send();
+    },
+  );
+}

@@ -19,6 +19,9 @@ import { attachmentRoutes } from './routes/attachments.js';
 import { transferRoutes } from './routes/transfers.js';
 import { insightsRoutes } from './routes/insights.js';
 import { authRoutes } from './routes/auth.js';
+import { budgetRoutes } from './routes/budgets.js';
+import { goalRoutes } from './routes/goals.js';
+import { billRoutes } from './routes/bills.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 
 // Augment FastifyRequest with the authenticated user. Set by the auth
@@ -127,6 +130,9 @@ export async function buildApp(
   await app.register(attachmentRoutes);
   await app.register(transferRoutes);
   await app.register(insightsRoutes);
+  await app.register(budgetRoutes);
+  await app.register(goalRoutes);
+  await app.register(billRoutes);
 
   // Optional: serve the prebuilt web bundle from the same process. The
   // Docker image copies `web/dist` into `server/dist/public`; in dev the

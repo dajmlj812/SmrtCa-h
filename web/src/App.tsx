@@ -10,6 +10,9 @@ import { TransfersPage } from './pages/TransfersPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
+import { BudgetsPage } from './pages/BudgetsPage';
+import { GoalsPage } from './pages/GoalsPage';
+import { BillsPage } from './pages/BillsPage';
 
 type AuthState = 'loading' | 'needs-setup' | 'needs-login' | 'authenticated';
 
@@ -73,11 +76,14 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/accounts">Accounts</NavLink>
           <NavLink to="/transactions">Transactions</NavLink>
           <NavLink to="/transfers">Transfers</NavLink>
+          <NavLink to="/budgets">Budgets</NavLink>
+          <NavLink to="/goals">Goals</NavLink>
+          <NavLink to="/bills">Bills</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/import">Import</NavLink>
         </nav>
         <div className="sidebar-footer">
-          Phase 5 · Hardening
+          Phase 6 · Budgeting
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -94,6 +100,9 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/accounts/:id" element={<AccountDetailPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/transfers" element={<TransfersPage />} />
+          <Route path="/budgets" element={<BudgetsPage />} />
+          <Route path="/goals" element={<GoalsPage />} />
+          <Route path="/bills" element={<BillsPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
         </Routes>

@@ -16,8 +16,8 @@ nothing is "all or nothing."
 | 3 | Receipts & Attachments | ✅ Complete — 2026-05-22 |
 | 4 | Insights & Reconciliation | ✅ Complete — 2026-05-22 |
 | 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
-| 6 | Budgeting & Cash Flow | 🔜 Next |
-| 7 | Wealth & Net Worth | 📋 Planned |
+| 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
+| 7 | Wealth & Net Worth | 🔜 Next |
 | 8 | Connectivity & Automation | 📋 Planned |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
 
@@ -165,23 +165,33 @@ Delivered:
 
 ---
 
-## Phase 6 — Budgeting & Cash Flow 🔜
+## Phase 6 — Budgeting & Cash Flow ✅
 
 **Goal:** Match the everyday strengths of Monarch and Simplifi.
 
-- **Flex budgeting** — category budgets plus one flexible pool for variable
-  spending (Monarch-style), instead of rigid micro-categories
-- Monthly budget-vs-actual tracking
-- **Savings goals** with progress tracking (Simplifi-style)
-- **Recurring & subscription detection** — surface repeating charges
-  automatically (Rocket Money–style), powered by the Phase 2 AI / pattern
-  matching
-- **Bill reminders** and an upcoming-bills view (Chronicle-style)
-- Simple cash-flow forecast — projected balance from known recurring items
+Delivered:
+
+- [x] **Flex budgeting** — monthly per-category budgets plus one explicit
+      flex-pool row that catches spending in non-budgeted categories
+- [x] **Monthly budget-vs-actual** — `/api/budgets/actual` with the
+      flex-pool calculation; transfers excluded; full UI with red-when-over
+      progress bars
+- [x] **Savings goals** — name + target + current + optional date,
+      progress-capped server-side, full CRUD UI
+- [x] **Bill reminders + upcoming-bills view** — bills and recurring
+      income, mark-paid advances the next due date by frequency,
+      dashboard tile showing the next 30 days
+- [x] **Cash-flow forecast** — `/api/cash-flow` walks current net worth
+      forward through every projected bill/income event, plotted as a
+      90-day line chart on the dashboard
+
+**Auto-detection of recurring charges is deferred** — the manual entry
+path turned out to be plenty for a single-user instance, and auto-
+detection wants its own phase to handle the false-positive UX properly.
 
 ---
 
-## Phase 7 — Wealth & Net Worth 📋
+## Phase 7 — Wealth & Net Worth 🔜
 
 **Goal:** Add the wealth-tracking depth of Empower and Banktivity.
 

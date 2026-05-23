@@ -46,7 +46,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | AI-cleaned merchant names & categorization | ✅ |
 | Manual edit / re-categorize | ✅ |
 | Transfer linking between your own accounts | ✅ |
-| Recurring & subscription detection | 📋 Phase 6 |
+| Recurring & subscription detection | 📋 Backlog |
 | Receipt & file attachments | ✅ |
 
 ## AI
@@ -67,11 +67,11 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 
 | Feature | Status |
 |---------|--------|
-| Flex budgeting — fixed categories plus a variable-spending pool | 📋 Phase 6 |
-| Monthly budget-vs-actual tracking | 📋 Phase 6 |
-| Savings goals with progress tracking | 📋 Phase 6 |
-| Bill reminders & upcoming-bills view | 📋 Phase 6 |
-| Simple cash-flow forecast from recurring items | 📋 Phase 6 |
+| Flex budgeting — fixed categories plus a variable-spending pool | ✅ |
+| Monthly budget-vs-actual tracking | ✅ |
+| Savings goals with progress tracking | ✅ |
+| Bill reminders & upcoming-bills view | ✅ |
+| Simple cash-flow forecast from recurring items | ✅ |
 
 ## Wealth & Net Worth
 
@@ -106,7 +106,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 243-test automated suite (unit → e2e) | ✅ |
+| 263-test automated suite (unit → e2e) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | ✅ |
 | Encryption at rest (attachments AES-256-GCM; DB via host volume) | ✅ |

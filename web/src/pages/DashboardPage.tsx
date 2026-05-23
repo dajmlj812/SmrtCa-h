@@ -16,11 +16,12 @@ import {
 } from 'recharts';
 import {
   api,
+  type Bill,
   type IncomeExpenseRow,
   type NetWorthRow,
   type SpendingByCategoryRow,
 } from '../api';
-import { formatCents } from '../format';
+import { formatCents, formatDate } from '../format';
 
 // Recharts Tooltip's formatter widens `value` to ValueType | undefined; these
 // wrappers narrow it back to the numbers we know we put in.
@@ -42,6 +43,10 @@ interface DashboardData {
   spendingEnd: string;
   incomeExpense: IncomeExpenseRow[];
   netWorth: NetWorthRow[];
+  upcomingBills: Bill[];
+  cashFlow: Array<{ date: string; projected_cents: number }>;
+  cashFlowStart: number;
+  cashFlowEnd: number;
 }
 
 export function DashboardPage() {
@@ -52,17 +57,24 @@ export function DashboardPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [spending, incomeExpense, netWorth] = await Promise.all([
-          api.spendingByCategory({}),
-          api.incomeExpense({ months: 12 }),
-          api.netWorthOverTime({ months: 12 }),
-        ]);
+        const [spending, incomeExpense, netWorth, upcoming, flow] =
+          await Promise.all([
+            api.spendingByCategory({}),
+            api.incomeExpense({ months: 12 }),
+            api.netWorthOverTime({ months: 12 }),
+            api.upcomingBills(30),
+            api.cashFlow(90),
+          ]);
         setData({
           spending: spending.rows,
           spendingStart: spending.start,
           spendingEnd: spending.end,
           incomeExpense: incomeExpense.rows,
           netWorth: netWorth.rows,
+          upcomingBills: upcoming.bills,
+          cashFlow: flow.series,
+          cashFlowStart: flow.starting_cents,
+          cashFlowEnd: flow.ending_cents,
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load dashboard');
@@ -180,6 +192,54 @@ export function DashboardPage() {
               />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+
+        <div className="card chart-card chart-card-wide">
+          <div className="chart-title">
+            Cash-flow forecast (next 90 days){' '}
+            <span className="muted">
+              · {formatCents(data.cashFlowStart)} → {formatCents(data.cashFlowEnd)}
+            </span>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart
+              data={data.cashFlow.map((p) => ({
+                date: p.date,
+                Projected: p.projected_cents / 100,
+              }))}
+            >
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+              <XAxis dataKey="date" minTickGap={40} />
+              <YAxis tickFormatter={(v) => `$${Math.round(v)}`} />
+              <Tooltip formatter={tooltipDollarsToCents} />
+              <Line
+                type="monotone"
+                dataKey="Projected"
+                stroke="#52c41a"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="card chart-card">
+          <div className="chart-title">Upcoming bills (next 30 days)</div>
+          {data.upcomingBills.length === 0 ? (
+            <p className="empty">No bills scheduled in the window.</p>
+          ) : (
+            <ul className="upcoming-bills">
+              {data.upcomingBills.map((b) => (
+                <li key={b.id}>
+                  <span className="upcoming-bill-name">{b.name}</span>
+                  <span className="muted upcoming-bill-date">
+                    {formatDate(b.next_due_date)}
+                  </span>
+                  <span className="num neg">{formatCents(-b.amount_cents)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>

@@ -1,0 +1,377 @@
+import type { FastifyInstance } from 'fastify';
+import { query } from '../db/pool.js';
+import { isUuid } from '../util.js';
+
+type Frequency = 'monthly' | 'weekly' | 'biweekly' | 'yearly' | 'one-time';
+const BILL_FREQUENCIES: Frequency[] = [
+  'monthly',
+  'weekly',
+  'biweekly',
+  'yearly',
+  'one-time',
+];
+const INCOME_FREQUENCIES: Frequency[] = ['monthly', 'weekly', 'biweekly', 'yearly'];
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+function asString(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
+}
+function asPositiveInt(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** Advance a date by one period of the given frequency. Returns null for one-time. */
+export function advanceByFrequency(date: string, freq: Frequency): string | null {
+  if (freq === 'one-time') return null;
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  switch (freq) {
+    case 'weekly':
+      dt.setUTCDate(dt.getUTCDate() + 7);
+      break;
+    case 'biweekly':
+      dt.setUTCDate(dt.getUTCDate() + 14);
+      break;
+    case 'monthly':
+      dt.setUTCMonth(dt.getUTCMonth() + 1);
+      break;
+    case 'yearly':
+      dt.setUTCFullYear(dt.getUTCFullYear() + 1);
+      break;
+  }
+  return dt.toISOString().slice(0, 10);
+}
+
+const BILL_COLUMNS = `id, name, amount_cents, frequency, next_due_date,
+  category_id, account_id, active, created_at`;
+const INCOME_COLUMNS = `id, name, amount_cents, frequency, next_expected_date,
+  account_id, active, created_at`;
+
+export async function billRoutes(app: FastifyInstance): Promise<void> {
+  // ── Bills ───────────────────────────────────────────────
+  app.get('/api/bills', async () => {
+    const r = await query(
+      `SELECT ${BILL_COLUMNS} FROM bills
+        ORDER BY active DESC, next_due_date`,
+    );
+    return { bills: r.rows };
+  });
+
+  app.post('/api/bills', async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const name = asString(body.name);
+    if (name === '') return reply.code(400).send({ error: 'Name is required' });
+    const amount = asPositiveInt(body.amountCents);
+    if (amount === null)
+      return reply.code(400).send({ error: 'amountCents must be > 0' });
+    const freq = body.frequency as Frequency;
+    if (!BILL_FREQUENCIES.includes(freq))
+      return reply.code(400).send({
+        error: `frequency must be one of: ${BILL_FREQUENCIES.join(', ')}`,
+      });
+    if (typeof body.nextDueDate !== 'string' || !YMD.test(body.nextDueDate))
+      return reply.code(400).send({ error: 'nextDueDate must be YYYY-MM-DD' });
+    const r = await query(
+      `INSERT INTO bills (name, amount_cents, frequency, next_due_date,
+                          category_id, account_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING ${BILL_COLUMNS}`,
+      [
+        name,
+        amount,
+        freq,
+        body.nextDueDate,
+        typeof body.categoryId === 'string' && isUuid(body.categoryId)
+          ? body.categoryId
+          : null,
+        typeof body.accountId === 'string' && isUuid(body.accountId)
+          ? body.accountId
+          : null,
+      ],
+    );
+    return reply.code(201).send({ bill: r.rows[0] });
+  });
+
+  app.patch<{ Params: { id: string } }>(
+    '/api/bills/:id',
+    async (req, reply) => {
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid bill id' });
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const updates: string[] = [];
+      const params: unknown[] = [];
+
+      if (body.name !== undefined) {
+        const n = asString(body.name);
+        if (n === '') return reply.code(400).send({ error: 'Empty name' });
+        params.push(n);
+        updates.push(`name = $${params.length}`);
+      }
+      if (body.amountCents !== undefined) {
+        const a = asPositiveInt(body.amountCents);
+        if (a === null)
+          return reply.code(400).send({ error: 'amountCents must be > 0' });
+        params.push(a);
+        updates.push(`amount_cents = $${params.length}`);
+      }
+      if (body.frequency !== undefined) {
+        if (!BILL_FREQUENCIES.includes(body.frequency as Frequency))
+          return reply.code(400).send({ error: 'Invalid frequency' });
+        params.push(body.frequency);
+        updates.push(`frequency = $${params.length}`);
+      }
+      if (body.nextDueDate !== undefined) {
+        if (typeof body.nextDueDate !== 'string' || !YMD.test(body.nextDueDate))
+          return reply.code(400).send({ error: 'nextDueDate must be YYYY-MM-DD' });
+        params.push(body.nextDueDate);
+        updates.push(`next_due_date = $${params.length}`);
+      }
+      if (body.active !== undefined) {
+        params.push(Boolean(body.active));
+        updates.push(`active = $${params.length}`);
+      }
+      if (updates.length === 0)
+        return reply.code(400).send({ error: 'No updates' });
+      params.push(req.params.id);
+      const r = await query(
+        `UPDATE bills SET ${updates.join(', ')}
+          WHERE id = $${params.length}
+       RETURNING ${BILL_COLUMNS}`,
+        params,
+      );
+      if (r.rowCount === 0)
+        return reply.code(404).send({ error: 'Bill not found' });
+      return { bill: r.rows[0] };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/bills/:id',
+    async (req, reply) => {
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid bill id' });
+      const r = await query('DELETE FROM bills WHERE id = $1', [req.params.id]);
+      if (r.rowCount === 0)
+        return reply.code(404).send({ error: 'Bill not found' });
+      return reply.code(204).send();
+    },
+  );
+
+  // Advances next_due_date by one period. One-time bills are deactivated.
+  app.post<{ Params: { id: string } }>(
+    '/api/bills/:id/mark-paid',
+    async (req, reply) => {
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid bill id' });
+      const current = await query<{
+        id: string;
+        frequency: Frequency;
+        next_due_date: string;
+      }>(
+        `SELECT id, frequency, next_due_date FROM bills WHERE id = $1`,
+        [req.params.id],
+      );
+      if (current.rowCount === 0)
+        return reply.code(404).send({ error: 'Bill not found' });
+      const row = current.rows[0]!;
+      const next = advanceByFrequency(row.next_due_date, row.frequency);
+      const updated = next
+        ? await query(
+            `UPDATE bills SET next_due_date = $1::date WHERE id = $2
+              RETURNING ${BILL_COLUMNS}`,
+            [next, row.id],
+          )
+        : await query(
+            `UPDATE bills SET active = false WHERE id = $1
+              RETURNING ${BILL_COLUMNS}`,
+            [row.id],
+          );
+      return { bill: updated.rows[0] };
+    },
+  );
+
+  // Upcoming N days of active bills.
+  app.get<{ Querystring: { days?: string } }>(
+    '/api/bills/upcoming',
+    async (req) => {
+      const days = Math.min(
+        Math.max(Number(req.query.days) || 30, 1),
+        365,
+      );
+      // BILL_COLUMNS is unqualified; this query joins categories which
+      // also has a `name` column — so qualify explicitly here.
+      const r = await query(
+        `SELECT b.id, b.name, b.amount_cents, b.frequency, b.next_due_date,
+                b.category_id, b.account_id, b.active, b.created_at,
+                c.name AS category_name
+           FROM bills b
+      LEFT JOIN categories c ON c.id = b.category_id
+          WHERE b.active
+            AND b.next_due_date <= now()::date + make_interval(days => $1::int)
+       ORDER BY b.next_due_date`,
+        [days],
+      );
+      return { days, bills: r.rows };
+    },
+  );
+
+  // ── Recurring income ─────────────────────────────────────
+  app.get('/api/recurring-income', async () => {
+    const r = await query(
+      `SELECT ${INCOME_COLUMNS} FROM recurring_income
+        ORDER BY active DESC, next_expected_date`,
+    );
+    return { income: r.rows };
+  });
+
+  app.post('/api/recurring-income', async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const name = asString(body.name);
+    if (name === '') return reply.code(400).send({ error: 'Name is required' });
+    const amount = asPositiveInt(body.amountCents);
+    if (amount === null)
+      return reply.code(400).send({ error: 'amountCents must be > 0' });
+    const freq = body.frequency as Frequency;
+    if (!INCOME_FREQUENCIES.includes(freq))
+      return reply.code(400).send({
+        error: `frequency must be one of: ${INCOME_FREQUENCIES.join(', ')}`,
+      });
+    if (
+      typeof body.nextExpectedDate !== 'string' ||
+      !YMD.test(body.nextExpectedDate)
+    )
+      return reply
+        .code(400)
+        .send({ error: 'nextExpectedDate must be YYYY-MM-DD' });
+    const r = await query(
+      `INSERT INTO recurring_income
+         (name, amount_cents, frequency, next_expected_date, account_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING ${INCOME_COLUMNS}`,
+      [
+        name,
+        amount,
+        freq,
+        body.nextExpectedDate,
+        typeof body.accountId === 'string' && isUuid(body.accountId)
+          ? body.accountId
+          : null,
+      ],
+    );
+    return reply.code(201).send({ income: r.rows[0] });
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/recurring-income/:id',
+    async (req, reply) => {
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid id' });
+      const r = await query(`DELETE FROM recurring_income WHERE id = $1`, [
+        req.params.id,
+      ]);
+      if (r.rowCount === 0)
+        return reply.code(404).send({ error: 'Not found' });
+      return reply.code(204).send();
+    },
+  );
+
+  // ── Cash-flow projection ─────────────────────────────────
+  // Starts from the current net worth across all accounts and walks the
+  // next N days applying each bill / income event at its expected date.
+  // Recurring events are projected forward for the whole window.
+  app.get<{ Querystring: { days?: string } }>(
+    '/api/cash-flow',
+    async (req) => {
+      const days = Math.min(
+        Math.max(Number(req.query.days) || 90, 1),
+        365,
+      );
+
+      // Net worth today (mirrors the accounts list).
+      const nw = await query<{ total: number }>(
+        `SELECT COALESCE(SUM(
+            a.opening_balance_cents +
+            COALESCE(t.sum_amount, 0)
+          ), 0)::bigint AS total
+           FROM accounts a
+      LEFT JOIN (
+        SELECT t.account_id, SUM(t.amount_cents) AS sum_amount
+          FROM transactions t
+          JOIN accounts a ON a.id = t.account_id
+         WHERE a.opening_balance_date IS NULL
+            OR t.txn_date >= a.opening_balance_date
+      GROUP BY t.account_id
+      ) t ON t.account_id = a.id`,
+      );
+      let balance = Number(nw.rows[0]!.total);
+
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      const horizon = new Date(today);
+      horizon.setUTCDate(horizon.getUTCDate() + days);
+      const horizonStr = horizon.toISOString().slice(0, 10);
+
+      const events: Array<{ date: string; amount: number }> = [];
+
+      const bills = await query<{
+        amount_cents: number;
+        frequency: Frequency;
+        next_due_date: string;
+      }>(
+        `SELECT amount_cents, frequency, next_due_date
+           FROM bills WHERE active`,
+      );
+      for (const b of bills.rows) {
+        let date: string | null = b.next_due_date;
+        while (date !== null && date <= horizonStr) {
+          if (date >= today.toISOString().slice(0, 10)) {
+            events.push({ date, amount: -Number(b.amount_cents) });
+          }
+          date = advanceByFrequency(date, b.frequency);
+        }
+      }
+
+      const incomes = await query<{
+        amount_cents: number;
+        frequency: Frequency;
+        next_expected_date: string;
+      }>(
+        `SELECT amount_cents, frequency, next_expected_date
+           FROM recurring_income WHERE active`,
+      );
+      for (const i of incomes.rows) {
+        let date: string | null = i.next_expected_date;
+        while (date !== null && date <= horizonStr) {
+          if (date >= today.toISOString().slice(0, 10)) {
+            events.push({ date, amount: Number(i.amount_cents) });
+          }
+          date = advanceByFrequency(date, i.frequency);
+        }
+      }
+
+      events.sort((a, b) => a.date.localeCompare(b.date));
+
+      const series: Array<{ date: string; projected_cents: number }> = [];
+      let eventIdx = 0;
+      const cursor = new Date(today);
+      while (cursor <= horizon) {
+        const ds = cursor.toISOString().slice(0, 10);
+        while (eventIdx < events.length && events[eventIdx]!.date === ds) {
+          balance += events[eventIdx]!.amount;
+          eventIdx++;
+        }
+        series.push({ date: ds, projected_cents: balance });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+
+      return {
+        days,
+        starting_cents: Number(nw.rows[0]!.total),
+        ending_cents: balance,
+        series,
+      };
+    },
+  );
+}

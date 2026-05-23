@@ -46,7 +46,9 @@ export async function cleanupAttachmentDir(): Promise<void> {
  */
 export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> {
   await pool.query(
-    'TRUNCATE accounts, categories, import_batches, transactions, attachments, users, sessions RESTART IDENTITY CASCADE',
+    `TRUNCATE accounts, categories, import_batches, transactions, attachments,
+              users, sessions, budgets, savings_goals, bills, recurring_income
+       RESTART IDENTITY CASCADE`,
   );
   await seedDefaultCategories(pool);
   if (!opts.skipAuth) {
