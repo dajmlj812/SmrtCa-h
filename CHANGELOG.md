@@ -9,7 +9,81 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Multi-currency support and retirement projections still queued._
+_Retirement / long-term goal projections (the last queued Phase 7
+item) land next as 0.10.1._
+
+---
+
+## [0.10.0] — 2026-05-23 — Multi-currency (Phase 7.1)
+
+The first of two queued Phase-7 items lands. Accounts can now be in
+any ISO 4217 currency; the dashboard converts every balance into a
+shared display currency for cross-account totals.
+
+### Schema (migration 020)
+
+- **`exchange_rates`** table — one row per (from, to, fetched_at).
+  History is kept; lookups pick the most-recent row per pair via a
+  `DISTINCT ON (from, to)` ORDER BY fetched_at DESC.
+- New settings: `DISPLAY_CURRENCY` (ISO 4217, default 'USD') and
+  `FX_PROVIDER` ('open-er-api' for the auto-refresher). Both
+  super-admin-only.
+
+### Domain
+
+- **`domain/fx.ts`** — `convert(amountCents, from, to, snapshot)`
+  resolves a rate (direct lookup, inverse fallback at 1/rate, or
+  pass-through when neither known) and returns cents in the target
+  currency plus a `rateKnown` flag for UI.
+- **`refreshRatesFromOpenErApi()`** — pulls fresh rates from the
+  free `open.er-api.com/v6/latest/<base>` endpoint and writes one
+  row per non-base target. No API key required; the IP rate-limit is
+  generous (daily refresh well within it).
+- **`setManualRate()`** — operator override, stored with
+  `source='manual'`. Manual rows aren't preferred — the most-recent
+  row per pair wins regardless of source, so writing a manual rate
+  effectively pins it until the next refresh.
+
+### Routes
+
+- `GET /api/exchange-rates` — readable by any authenticated user
+  (the dashboard needs it); returns latest rate per pair plus the
+  display currency.
+- `POST /api/exchange-rates/refresh` — super-admin only.
+- `POST /api/exchange-rates` — set a manual rate.
+- `DELETE /api/exchange-rates/:from/:to` — drop all rows for a pair.
+- **`GET /api/accounts`** now attaches `display_currency`,
+  `balance_display_cents`, and `rate_known` to every account row.
+  Net-worth-style aggregations across mixed currencies just sum
+  `balance_display_cents`.
+
+### Web
+
+- **`/system`** Overview tab gets an Exchange rates section under
+  Super admins: rate table with source pill, "Refresh from provider"
+  button, and a manual-override form.
+- **Accounts page** sums `balance_display_cents` for the Net Worth
+  stat and labels the value with the display currency when accounts
+  use multiple currencies. A warning banner appears when any
+  account's currency has no rate configured.
+
+### Tests
+
+- `+7` integration tests (`fx.test.ts`): tenant can read but not
+  mutate, manual rate persistence, validation (negative rate, same
+  from/to), accounts-list projection (direct + inverse + unknown),
+  pair delete.
+- **Total: 397** (server 391 + web 6).
+
+### Notes
+
+- Per-transaction currency conversion isn't done yet — every
+  transaction is in its account's currency. Cross-currency totals
+  use account-level balances (already-summed cents) projected at the
+  current rate, which is the right tradeoff for a household app.
+- `open.er-api.com` is the only auto-provider wired today;
+  `frankfurter` is in the source-CHECK constraint but not yet
+  fetched. Manual rates cover any gap.
 
 ---
 

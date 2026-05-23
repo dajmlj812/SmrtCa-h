@@ -3,6 +3,7 @@ import { query } from '../db/pool.js';
 import { ACCOUNT_TYPES, type AccountType } from '../import/types.js';
 import { isUuid } from '../util.js';
 import { loadUserContext, scopedAccountIds } from '../auth/rbac.js';
+import { convert, getDisplayCurrency, loadRatesSnapshot } from '../domain/fx.js';
 
 /** Coerce an unknown request-body field to a trimmed string (or ''). */
 function asString(value: unknown): string {
@@ -55,7 +56,20 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       params.push(scopedIds);
       scopeClause = `WHERE a.id = ANY($${params.length}::uuid[])`;
     }
-    const result = await query(
+    const result = await query<{
+      id: string;
+      name: string;
+      institution: string | null;
+      type: string;
+      last4: string | null;
+      currency: string;
+      created_at: string;
+      opening_balance_cents: number;
+      opening_balance_date: string | null;
+      balance_cents: number;
+      holdings_value_cents: number;
+      transaction_count: number;
+    }>(
       `SELECT
         a.id, a.name, a.institution, a.type, a.last4, a.currency, a.created_at,
         a.opening_balance_cents, a.opening_balance_date,
@@ -69,7 +83,22 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       ORDER BY a.created_at`,
       params,
     );
-    return { accounts: result.rows };
+    // Multi-currency (0.10.0): tag each row with its display-currency
+    // value so the dashboard can sum cross-account net worth correctly.
+    // rate_known=false means we have no FX pair for that currency — UI
+    // can surface "set a rate" affordance.
+    const display = await getDisplayCurrency();
+    const snapshot = await loadRatesSnapshot();
+    const accounts = result.rows.map((row) => {
+      const cv = convert(Number(row.balance_cents), row.currency, display, snapshot);
+      return {
+        ...row,
+        display_currency: display,
+        balance_display_cents: cv.cents,
+        rate_known: cv.rateKnown,
+      };
+    });
+    return { accounts, display_currency: display };
   });
 
   app.get<{ Params: { id: string } }>(

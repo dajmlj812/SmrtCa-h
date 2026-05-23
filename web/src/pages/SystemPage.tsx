@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { AuthProvidersSection } from '../components/AuthProvidersSection';
+import { ExchangeRatesSection } from '../components/ExchangeRatesSection';
 
 interface TenantRow {
   id: string;
@@ -247,6 +248,8 @@ function OverviewTab() {
           {' '}across all tenants.
         </p>
       </div>
+
+      <ExchangeRatesSection />
 
       <AuthProvidersSection />
     </div>

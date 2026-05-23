@@ -38,6 +38,7 @@ import { reportRoutes } from './routes/reports.js';
 import { tenantRoutes } from './routes/tenants.js';
 import { authProviderRoutes } from './routes/auth-providers.js';
 import { systemRoutes } from './routes/system.js';
+import { exchangeRatesRoutes } from './routes/exchange-rates.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { metricsRecorder } from './domain/metrics-recorder.js';
@@ -194,6 +195,7 @@ export async function buildApp(
   await app.register(tenantRoutes);
   await app.register(authProviderRoutes);
   await app.register(systemRoutes);
+  await app.register(exchangeRatesRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.

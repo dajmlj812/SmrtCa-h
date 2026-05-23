@@ -12,6 +12,20 @@ export interface Account {
   transaction_count: number;
   opening_balance_cents: number;
   opening_balance_date: string | null;
+  /** 0.10.0: balance converted to the global DISPLAY_CURRENCY. */
+  display_currency?: string;
+  balance_display_cents?: number;
+  /** False when no FX pair is known and the converted value passes through. */
+  rate_known?: boolean;
+}
+
+export interface ExchangeRate {
+  id: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  source: 'manual' | 'open-er-api' | 'frankfurter';
+  fetched_at: string;
 }
 
 export type VehicleFuelType =
@@ -1640,6 +1654,31 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to }),
     }),
+
+  // ── Exchange rates (Phase 7.1 / 0.10.0) ──────────────────
+  listExchangeRates: () =>
+    http<{ rates: ExchangeRate[]; display_currency: string }>(
+      '/api/exchange-rates',
+    ),
+
+  refreshExchangeRates: () =>
+    http<{ inserted: number; base: string; fetchedAt: string }>(
+      '/api/exchange-rates/refresh',
+      { method: 'POST' },
+    ),
+
+  setExchangeRate: (input: { fromCurrency: string; toCurrency: string; rate: number }) =>
+    http<{ rate: ExchangeRate }>('/api/exchange-rates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
+  deleteExchangeRate: (fromCurrency: string, toCurrency: string) =>
+    http<{ removed: number }>(
+      `/api/exchange-rates/${encodeURIComponent(fromCurrency)}/${encodeURIComponent(toCurrency)}`,
+      { method: 'DELETE' },
+    ),
 
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),

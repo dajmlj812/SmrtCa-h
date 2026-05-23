@@ -37,7 +37,19 @@ export function AccountsPage() {
     void load();
   }, []);
 
-  const netWorth = accounts.reduce((sum, a) => sum + a.balance_cents, 0);
+  // Sum in the global display currency when the server attached
+  // converted values; fall back to raw cents (single-currency case).
+  const netWorth = accounts.reduce(
+    (sum, a) =>
+      sum + (a.balance_display_cents !== undefined ? a.balance_display_cents : a.balance_cents),
+    0,
+  );
+  const displayCurrency = accounts[0]?.display_currency;
+  const hasMixedCurrency =
+    new Set(accounts.map((a) => a.currency)).size > 1;
+  const anyUnknownRate = accounts.some(
+    (a) => a.rate_known === false && a.currency !== displayCurrency,
+  );
 
   return (
     <div>
@@ -63,16 +75,27 @@ export function AccountsPage() {
       )}
 
       {!loading && accounts.length > 0 && (
-        <div className="stat-row">
-          <div className="stat">
-            <div className="stat-label">Net Worth</div>
-            <div className="stat-value">{formatCents(netWorth)}</div>
+        <>
+          <div className="stat-row">
+            <div className="stat">
+              <div className="stat-label">
+                Net Worth {hasMixedCurrency && displayCurrency && `(in ${displayCurrency})`}
+              </div>
+              <div className="stat-value">{formatCents(netWorth)}</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">Accounts</div>
+              <div className="stat-value">{accounts.length}</div>
+            </div>
           </div>
-          <div className="stat">
-            <div className="stat-label">Accounts</div>
-            <div className="stat-value">{accounts.length}</div>
-          </div>
-        </div>
+          {anyUnknownRate && (
+            <div className="banner warning">
+              At least one account is in a currency with no exchange rate
+              configured — its value passes through into the total at 1:1.
+              A super admin can fix this on the System page.
+            </div>
+          )}
+        </>
       )}
 
       {loading ? (

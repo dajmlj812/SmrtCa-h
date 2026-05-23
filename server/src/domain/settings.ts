@@ -39,6 +39,11 @@ export const KNOWN_SETTINGS = [
   { key: 'OLLAMA_MODEL', isSecret: false, restartRequired: false, superOnly: true, label: 'Ollama model' },
   // Fuel-price source — live, super-admin only (0.9.3).
   { key: 'EIA_API_KEY', isSecret: true, restartRequired: false, superOnly: true, label: 'EIA API key' },
+  // Multi-currency display (0.10.0). Money is stored in each account's
+  // own currency; dashboards convert to this one for cross-account
+  // totals. Default USD when unset.
+  { key: 'DISPLAY_CURRENCY', isSecret: false, restartRequired: false, superOnly: true, label: 'Display currency (ISO 4217)' },
+  { key: 'FX_PROVIDER', isSecret: false, restartRequired: false, superOnly: true, label: 'FX rate provider' },
   // Savings suggestion tuning — live, super-admin only (0.9.3).
   // Used by the budget wizard as global defaults; per-tenant overrides
   // are queued for a later release.
