@@ -37,7 +37,7 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/auth-provider-configs', async (req, reply) => {
     if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
     const role = await currentRole(req.user.id, req.user.tenantId);
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'admin') {
       return reply.code(403).send({ error: 'Forbidden' });
     }
     const r = await query<{
@@ -66,8 +66,8 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/auth-provider-configs', async (req, reply) => {
     if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
     const role = await currentRole(req.user.id, req.user.tenantId);
-    if (role !== 'owner') {
-      return reply.code(403).send({ error: 'Only owners can add providers' });
+    if (role !== 'admin') {
+      return reply.code(403).send({ error: 'Only admins can add providers' });
     }
     const body = (req.body ?? {}) as {
       kind?: unknown;
@@ -112,7 +112,7 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
       const role = await currentRole(req.user.id, req.user.tenantId);
-      if (role !== 'owner') return reply.code(403).send({ error: 'Forbidden' });
+      if (role !== 'admin') return reply.code(403).send({ error: 'Forbidden' });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const body = (req.body ?? {}) as {
@@ -157,7 +157,7 @@ export async function authProviderRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
       const role = await currentRole(req.user.id, req.user.tenantId);
-      if (role !== 'owner') return reply.code(403).send({ error: 'Forbidden' });
+      if (role !== 'admin') return reply.code(403).send({ error: 'Forbidden' });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const r = await query(

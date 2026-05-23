@@ -9,6 +9,7 @@ export interface Session {
   userId: string;
   expiresAt: Date;
   activeTenantId: string | null;
+  isSuperAdmin: boolean;
 }
 
 /** Create a session row + return the cookie value (the raw session id). */
@@ -23,7 +24,19 @@ export async function createSession(
      VALUES ($1, $2, $3, $4)`,
     [id, userId, expiresAt, activeTenantId],
   );
-  return { id, userId, expiresAt, activeTenantId };
+  // Look up the super-admin flag so the caller-facing Session shape
+  // matches loadSession's. Cheap — one row on PK.
+  const u = await pool.query<{ is_super_admin: boolean }>(
+    `SELECT is_super_admin FROM users WHERE id = $1`,
+    [userId],
+  );
+  return {
+    id,
+    userId,
+    expiresAt,
+    activeTenantId,
+    isSuperAdmin: u.rows[0]?.is_super_admin ?? false,
+  };
 }
 
 /** Look up a session by id. Returns null when missing OR expired. */
@@ -33,10 +46,13 @@ export async function loadSession(id: string): Promise<Session | null> {
     user_id: string;
     expires_at: Date;
     active_tenant_id: string | null;
+    is_super_admin: boolean;
   }>(
-    `SELECT id, user_id, expires_at, active_tenant_id
-       FROM sessions
-      WHERE id = $1 AND expires_at > now()`,
+    `SELECT s.id, s.user_id, s.expires_at, s.active_tenant_id,
+            u.is_super_admin
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+      WHERE s.id = $1 AND s.expires_at > now()`,
     [id],
   );
   if (r.rowCount === 0) return null;
@@ -46,6 +62,7 @@ export async function loadSession(id: string): Promise<Session | null> {
     userId: row.user_id,
     expiresAt: row.expires_at,
     activeTenantId: row.active_tenant_id,
+    isSuperAdmin: row.is_super_admin,
   };
 }
 

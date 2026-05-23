@@ -18,7 +18,7 @@ interface Invitation {
   tenant_id: string;
   tenant_name: string;
   email_hint: string | null;
-  role: 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'spouse' | 'child';
   expires_at: string;
 }
 

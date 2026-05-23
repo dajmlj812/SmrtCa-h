@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { ACCOUNT_TYPES, type AccountType } from '../import/types.js';
 import { isUuid } from '../util.js';
+import { loadUserContext, scopedAccountIds } from '../auth/rbac.js';
 
 /** Coerce an unknown request-body field to a trimmed string (or ''). */
 function asString(value: unknown): string {
@@ -35,10 +36,27 @@ const HOLDINGS_VALUE = `
 `;
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
-  // List accounts with computed balance + transaction count.
-  app.get('/api/accounts', async () => {
-    const result = await query(`
-      SELECT
+  // List accounts with computed balance + transaction count. Children
+  // see only the accounts the admin assigned to them via the per-account
+  // ACL (account_user_access); admins + spouses see everything.
+  app.get('/api/accounts', async (req) => {
+    let scopedIds: string[] | null = null;
+    if (req.user) {
+      const ctx = await loadUserContext(req.user.id, req.user.tenantId);
+      scopedIds = await scopedAccountIds(ctx);
+    }
+    if (scopedIds && scopedIds.length === 0) {
+      // Child with no assigned accounts — empty list, not "all".
+      return { accounts: [] };
+    }
+    const params: unknown[] = [];
+    let scopeClause = '';
+    if (scopedIds && scopedIds.length > 0) {
+      params.push(scopedIds);
+      scopeClause = `WHERE a.id = ANY($${params.length}::uuid[])`;
+    }
+    const result = await query(
+      `SELECT
         a.id, a.name, a.institution, a.type, a.last4, a.currency, a.created_at,
         a.opening_balance_cents, a.opening_balance_date,
         (${BALANCE_SELECT})::bigint           AS balance_cents,
@@ -46,9 +64,11 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         COUNT(t.id)::bigint                    AS transaction_count
       FROM accounts a
       LEFT JOIN transactions t ON t.account_id = a.id
+      ${scopeClause}
       GROUP BY a.id
-      ORDER BY a.created_at
-    `);
+      ORDER BY a.created_at`,
+      params,
+    );
     return { accounts: result.rows };
   });
 

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { loadUserContext, scopedAccountIds } from '../auth/rbac.js';
 
 interface TransactionQuery {
   accountId?: string;
@@ -181,6 +182,23 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       const search = req.query.search?.trim() || null;
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
       const offset = Math.max(Number(req.query.offset) || 0, 0);
+      // Child role: scope to accounts the admin assigned. If they
+      // asked for a specific account they don't have access to, return
+      // an empty page rather than 403 — the inline filter wouldn't
+      // have surfaced it on the frontend in the first place.
+      let scopedIds: string[] | null = null;
+      if (req.user) {
+        const ctx = await loadUserContext(req.user.id, req.user.tenantId);
+        scopedIds = await scopedAccountIds(ctx);
+      }
+      if (scopedIds) {
+        if (scopedIds.length === 0) {
+          return { transactions: [], total: 0, limit, offset };
+        }
+        if (accountId && !scopedIds.includes(accountId)) {
+          return { transactions: [], total: 0, limit, offset };
+        }
+      }
       // Uncategorized = no direct category AND no splits. A split-only row
       // is considered categorized via its slices.
       // "Uncategorized" means: no direct category OR the row points at
@@ -231,9 +249,10 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
               OR t.category_id = (SELECT id FROM categories WHERE name = 'Uncategorized' AND parent_id IS NULL LIMIT 1))
              AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
            ))
+           AND ($6::uuid[] IS NULL OR t.account_id = ANY($6::uuid[]))
          ORDER BY t.txn_date DESC, t.created_at DESC
          LIMIT $3 OFFSET $4`,
-        [accountId, search, limit, offset, uncategorized],
+        [accountId, search, limit, offset, uncategorized, scopedIds],
       );
 
       const count = await query<{ total: number }>(
@@ -245,8 +264,9 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
              (t.category_id IS NULL
               OR t.category_id = (SELECT id FROM categories WHERE name = 'Uncategorized' AND parent_id IS NULL LIMIT 1))
              AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
-           ))`,
-        [accountId, search, uncategorized],
+           ))
+           AND ($4::uuid[] IS NULL OR t.account_id = ANY($4::uuid[]))`,
+        [accountId, search, uncategorized, scopedIds],
       );
 
       return {

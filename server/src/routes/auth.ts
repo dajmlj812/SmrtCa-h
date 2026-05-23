@@ -19,6 +19,7 @@ import {
   listProviders,
 } from '../auth/providers/registry.js';
 import { resolveIdentity } from '../auth/identities.js';
+import { recordAudit } from '../domain/audit.js';
 
 const OIDC_STATE_COOKIE = 'smrtcash_oidc_state';
 
@@ -106,47 +107,43 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
     const hash = await hashPassword(body.password as string);
 
+    // Phase 9: first user on a fresh install is a super_admin. They
+    // are NOT a tenant member — managing tenants is their job; they'll
+    // create tenants + invite tenant admins from /system. Existing
+    // upgrades keep their tenant_admin role unchanged via the
+    // migration.
     const result = await withTransaction(async (client) => {
       const u = await client.query<{ id: string; created_at: string }>(
-        `INSERT INTO users (email, name, password_hash)
-         VALUES ($1, $2, $3)
+        `INSERT INTO users (email, name, password_hash, is_super_admin)
+         VALUES ($1, $2, $3, true)
          RETURNING id, created_at`,
-        [email, name || 'Owner', hash],
+        [email, name || 'Operator', hash],
       );
       const userId = u.rows[0]!.id;
-      // Adopt the Default tenant created in migration 017; create it if
-      // missing (covers fresh installs where the migration ran on an
-      // empty DB and the tenant was created+immediately seeded, and
-      // also tests that truncate the table).
-      const existing = await client.query<{ id: string }>(
-        `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
-      );
-      const tenantId = existing.rowCount && existing.rowCount > 0
-        ? existing.rows[0]!.id
-        : (
-            await client.query<{ id: string }>(
-              `INSERT INTO tenants (name, slug)
-               VALUES ('Default', 'default')
-               RETURNING id`,
-            )
-          ).rows[0]!.id;
-      await client.query(
-        `INSERT INTO memberships (tenant_id, user_id, role)
-         VALUES ($1, $2, 'owner')`,
-        [tenantId, userId],
-      );
       await client.query(
         `INSERT INTO user_identities (user_id, provider, provider_user_id, email)
          VALUES ($1, 'local', $2, $3)`,
         [userId, userId, email],
       );
-      return { userId, tenantId, createdAt: u.rows[0]!.created_at };
+      return { userId, createdAt: u.rows[0]!.created_at };
     });
 
-    const session = await createSession(result.userId, result.tenantId);
+    const session = await createSession(result.userId, null);
     setSessionCookie(reply, session.id, session.expiresAt);
+    await recordAudit({
+      actorUserId: result.userId,
+      actorKind: 'super_admin',
+      action: 'super_admin.bootstrap',
+      details: { email },
+    });
     return reply.code(201).send({
-      user: { id: result.userId, email, name, created_at: result.createdAt },
+      user: {
+        id: result.userId,
+        email,
+        name,
+        created_at: result.createdAt,
+        is_super_admin: true,
+      },
     });
   });
 
@@ -188,11 +185,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: err instanceof Error ? err.message : 'Login failed' });
     }
     const resolved = await resolveIdentity(identity);
-    const tenantId = await activeTenantForUser(resolved.userId);
-    if (!tenantId) {
-      return reply.code(403).send({
-        error: 'No tenant membership for this user',
-      });
+    // Super admins have no memberships by design — that's fine; they
+    // land on /system. Tenant users need at least one membership.
+    const userRow = await pool.query<{ is_super_admin: boolean }>(
+      `SELECT is_super_admin FROM users WHERE id = $1`,
+      [resolved.userId],
+    );
+    const isSuperAdmin = userRow.rows[0]?.is_super_admin ?? false;
+    let tenantId: string | null = null;
+    if (!isSuperAdmin) {
+      tenantId = await activeTenantForUser(resolved.userId);
+      if (!tenantId) {
+        return reply.code(403).send({
+          error: 'No tenant membership for this user',
+        });
+      }
     }
     await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [
       resolved.userId,
@@ -202,7 +209,20 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     );
     const session = await createSession(resolved.userId, tenantId);
     setSessionCookie(reply, session.id, session.expiresAt);
-    return { user: { id: resolved.userId, email: resolved.email, name: resolved.name } };
+    void recordAudit({
+      tenantId,
+      actorUserId: resolved.userId,
+      actorKind: isSuperAdmin ? 'super_admin' : 'tenant_user',
+      action: isSuperAdmin ? 'super_admin.login' : 'user.login',
+    });
+    return {
+      user: {
+        id: resolved.userId,
+        email: resolved.email,
+        name: resolved.name,
+        is_super_admin: isSuperAdmin,
+      },
+    };
   });
 
   // ── OIDC: begin + callback ───────────────────────────────
@@ -318,8 +338,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       name: string | null;
       created_at: string;
       last_login_at: string | null;
+      is_super_admin: boolean;
     }>(
-      `SELECT id, email, name, created_at::text, last_login_at::text
+      `SELECT id, email, name, created_at::text, last_login_at::text,
+              is_super_admin
          FROM users WHERE id = $1`,
       [req.user.id],
     );

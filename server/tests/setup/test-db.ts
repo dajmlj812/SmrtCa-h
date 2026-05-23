@@ -51,7 +51,8 @@ export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> 
               recurring_suggestions, normalization_rules, transaction_splits,
               holdings, vehicles, commute_routes, route_vehicle_assignments,
               fuel_prices, app_settings, backups, tenants, memberships,
-              invitations, user_identities, auth_provider_configs
+              invitations, user_identities, auth_provider_configs,
+              account_user_access, audit_log
        RESTART IDENTITY CASCADE`,
   );
   await seedDefaultCategories(pool);
@@ -71,7 +72,7 @@ export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> 
     const tenantId = tenant.rows[0]!.id;
     await pool.query(
       `INSERT INTO memberships (tenant_id, user_id, role)
-       VALUES ($1, $2, 'owner')`,
+       VALUES ($1, $2, 'admin')`,
       [tenantId, TEST_USER_ID],
     );
     await pool.query(

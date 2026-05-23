@@ -13,6 +13,129 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.9.0] — 2026-05-23 — RBAC: super admins, tenant admin/spouse/child, audit log
+
+Role model overhaul. Three orthogonal concepts:
+
+1. **Super admin** — platform operator. Manages tenants, system
+   settings, audit log. Orthogonal to tenant membership: a super admin
+   never has a `memberships` row, enforced by trigger.
+2. **Tenant role** — `admin` / `spouse` / `child` (replaces
+   `owner` / `admin` / `member` / `viewer`).
+3. **Per-account ACL** — children are scoped to admin-assigned accounts
+   only.
+
+### Schema (migration 019)
+
+- **`users.is_super_admin`** boolean. Two CHECK triggers enforce
+  super-admin-has-no-memberships in both directions:
+  - inserting a membership for a super-admin user fails
+  - flipping `is_super_admin=true` on a user with memberships fails
+- **`memberships.role` collapsed**:
+  - `owner` → `admin`
+  - `admin` → `admin`
+  - `member` → `spouse`
+  - `viewer` → `child`
+  - new CHECK enforces the set
+- **`invitations.role`** likewise rewritten.
+- **`account_user_access`** — per-tenant child ACL. PK
+  `(account_id, user_id)`; cascade-deletes when the account or user is
+  removed.
+- **`audit_log`** — append-only record of mutating actions. Fields:
+  `occurred_at`, `tenant_id` (null for system), `actor_user_id`,
+  `actor_kind` (`super_admin` / `tenant_user` / `system` / `public`),
+  `action` (dotted namespace), `target_kind`, `target_id`, `details`
+  jsonb. Three indexes for the common query shapes.
+
+### Permissions
+
+| Role          | Read/write financials | Manage members | Manage providers | See settings |
+|---------------|-----------------------|----------------|------------------|--------------|
+| admin         | ✅                    | ✅             | ✅               | ✅           |
+| spouse        | ✅                    | ❌             | ❌               | ❌           |
+| child         | scoped only           | ❌             | ❌               | ❌           |
+| super admin   | ❌ (never)            | n/a            | n/a              | system-only  |
+
+- **Children** see only accounts assigned via `account_user_access`.
+  `GET /api/accounts` filters; `GET /api/transactions` filters list +
+  count + ignores out-of-scope `accountId` query params. Other
+  endpoints (budgets, bills, etc.) aren't filtered yet — children are
+  admin-managed concepts; admins/spouses drive those views. Full
+  enforcement everywhere is queued behind RLS (next slice).
+
+### First-user flow
+
+- **Fresh install**: first user via `/setup` becomes a `super_admin`
+  with no tenant membership. The Setup page now reads "Create the
+  platform operator". They land on `/system` and create tenants from
+  there, then invite tenant admins.
+- **Upgrade from 0.8.x**: the migration leaves existing owners as
+  tenant admins of their existing tenant. No super admin exists by
+  default — create one with `npm run create-super-admin --email …
+  --password …`. The CLI script reads from `.env` and runs an
+  argon2id hash on the host.
+
+### Added
+
+- **`/api/system/*` endpoints** (super-admin only):
+  - `GET /api/system/tenants` — counts only, never balances
+  - `POST /api/system/tenants`
+  - `PATCH /api/system/tenants/:id` (rename)
+  - `DELETE /api/system/tenants/:id` (destructive — cascade-deletes
+    tenant data)
+  - `POST /api/system/tenants/:id/admin-invite` — mints an
+    `admin`-role invitation for a new tenant
+  - `GET /api/system/audit` — paginated, filterable by tenant +
+    action
+  - `GET /api/system/users`
+  - `POST /api/system/users/super` — create another super admin
+- **`/api/tenants/:id/members/:userId/accounts`** GET + PUT — manage
+  child-account assignments. Admins only.
+- **Audit writes** on: `super_admin.bootstrap`, `super_admin.login`,
+  `super_admin.create`, `user.login`, `tenant.create`,
+  `tenant.rename`, `tenant.delete`, `tenant.admin_invite`. More
+  routes will adopt `recordAudit()` in follow-up slices.
+- **Web: `/system` super-admin console** with Overview (tenants,
+  super admins) and Audit log tabs. Super-admin sessions see a
+  different sidebar that hides the financial app.
+- **Web: child-account assignment** — admin clicks "Accounts" on a
+  child's row in `/workspace` → modal lists every tenant account
+  with checkboxes.
+
+### Tests
+
+- `+10` integration tests (`rbac.test.ts`): trigger enforcement (×2),
+  `/api/system` gating + 200 path (×3), child scoping on
+  accounts (×2), child scoping on transactions, spouse blocked from
+  invites, admin assigns child accounts.
+- All previous tests updated to the new role names.
+- **Total: 373** (server 367 + web 6).
+
+### Breaking
+
+- Membership role names changed. API consumers expecting
+  `owner`/`member`/`viewer` will break — update to
+  `admin`/`spouse`/`child`. The migration rewrites existing rows in
+  place.
+- The fresh-install `/setup` flow now creates a super-admin, not a
+  tenant admin. An existing installation upgrading from 0.8.x keeps
+  its user as `tenant_admin`.
+
+### Deferred (next slices)
+
+- **RLS enforcement** — `tenant_id` columns are populated but no
+  policies are on yet. Today a tenant user could in principle query
+  another tenant's data by id (no UI surface lets you, but the
+  primary keys are guessable). RLS turns this off platform-wide.
+- **Child scoping on remaining endpoints** — budgets, bills,
+  attachments, splits, etc. Currently a child UI doesn't surface
+  these; backend enforcement is the next defense.
+- **Audit writes on every mutating route** — current coverage is
+  high-value mutations only. Settings changes, member-role flips, and
+  bulk imports will be added incrementally.
+
+---
+
 ## [0.8.1] — 2026-05-23 — SMTP for outbound communications
 
 GUI-managed SMTP plumbing with the first use case wired: invitation

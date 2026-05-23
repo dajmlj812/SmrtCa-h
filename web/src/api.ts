@@ -557,7 +557,7 @@ export interface TenantMembership {
   tenant_id: string;
   tenant_name: string;
   tenant_slug: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'spouse' | 'child';
 }
 
 export interface MeResponse {
@@ -567,6 +567,7 @@ export interface MeResponse {
     name: string | null;
     created_at: string;
     last_login_at: string | null;
+    is_super_admin: boolean;
   };
   memberships: TenantMembership[];
   active_tenant_id: string | null;
@@ -576,14 +577,14 @@ export interface TenantSummary {
   id: string;
   name: string;
   slug: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'spouse' | 'child';
 }
 
 export interface Member {
   user_id: string;
   email: string | null;
   name: string | null;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'spouse' | 'child';
   created_at: string;
   last_login_at: string | null;
 }
@@ -591,7 +592,7 @@ export interface Member {
 export interface Invitation {
   id: string;
   email_hint: string | null;
-  role: 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'spouse' | 'child';
   token: string;
   expires_at: string;
   accepted_at: string | null;
@@ -873,7 +874,7 @@ export const api = {
 
   createInvitation: (
     tenantId: string,
-    input: { emailHint?: string; role: 'admin' | 'member' | 'viewer' },
+    input: { emailHint?: string; role: 'admin' | 'spouse' | 'child' },
   ) =>
     http<{
       invitation: Invitation;
@@ -896,7 +897,7 @@ export const api = {
         tenant_id: string;
         tenant_name: string;
         email_hint: string | null;
-        role: 'admin' | 'member' | 'viewer';
+        role: 'admin' | 'spouse' | 'child';
         expires_at: string;
       };
     }>(`/api/invitations/${encodeURIComponent(token)}`),
@@ -949,6 +950,108 @@ export const api = {
 
   deleteAuthProviderConfig: (id: string) =>
     http<void>(`/api/auth-provider-configs/${id}`, { method: 'DELETE' }),
+
+  // ── Phase 9: super admin + RBAC ──────────────────────────
+  systemListTenants: () =>
+    http<{
+      tenants: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        created_at: string;
+        member_count: number;
+        account_count: number;
+        transaction_count: number;
+      }>;
+    }>('/api/system/tenants').then((r) => r.tenants),
+
+  systemCreateTenant: (input: { name: string; slug: string }) =>
+    http<{ tenant: { id: string; name: string; slug: string } }>(
+      '/api/system/tenants',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ).then((r) => r.tenant),
+
+  systemRenameTenant: (id: string, name: string) =>
+    http<{ ok: true }>(`/api/system/tenants/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+
+  systemDeleteTenant: (id: string) =>
+    http<void>(`/api/system/tenants/${id}`, { method: 'DELETE' }),
+
+  systemAdminInvite: (tenantId: string, emailHint?: string) =>
+    http<{
+      invitation: { id: string; token: string; expires_at: string };
+    }>(`/api/system/tenants/${tenantId}/admin-invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailHint }),
+    }).then((r) => r.invitation),
+
+  systemListAudit: (opts: { tenantId?: string; action?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.tenantId) q.set('tenantId', opts.tenantId);
+    if (opts.action) q.set('action', opts.action);
+    if (opts.limit) q.set('limit', String(opts.limit));
+    return http<{
+      entries: Array<{
+        id: string;
+        occurred_at: string;
+        tenant_id: string | null;
+        actor_user_id: string | null;
+        actor_kind: string;
+        action: string;
+        target_kind: string | null;
+        target_id: string | null;
+        details: Record<string, unknown>;
+      }>;
+    }>(`/api/system/audit?${q.toString()}`).then((r) => r.entries);
+  },
+
+  systemListUsers: () =>
+    http<{
+      super_admins: Array<{
+        id: string;
+        email: string | null;
+        name: string | null;
+        created_at: string;
+        last_login_at: string | null;
+      }>;
+      tenant_user_count: number;
+    }>('/api/system/users'),
+
+  systemCreateSuperAdmin: (input: {
+    email: string;
+    name?: string;
+    password: string;
+  }) =>
+    http<{ id: string }>('/api/system/users/super', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
+  // Child→account assignments (admin only)
+  listMemberAccounts: (tenantId: string, userId: string) =>
+    http<{ accounts: Array<{ account_id: string; account_name: string }> }>(
+      `/api/tenants/${tenantId}/members/${userId}/accounts`,
+    ).then((r) => r.accounts),
+
+  setMemberAccounts: (tenantId: string, userId: string, accountIds: string[]) =>
+    http<{ ok: true; count: number }>(
+      `/api/tenants/${tenantId}/members/${userId}/accounts`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountIds }),
+      },
+    ),
 
   // ── Transfers (Phase 4) ──────────────────────────────────
   listTransfers: () =>

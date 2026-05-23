@@ -37,6 +37,7 @@ import { backupRoutes } from './routes/backups.js';
 import { reportRoutes } from './routes/reports.js';
 import { tenantRoutes } from './routes/tenants.js';
 import { authProviderRoutes } from './routes/auth-providers.js';
+import { systemRoutes } from './routes/system.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { metricsRecorder } from './domain/metrics-recorder.js';
@@ -48,7 +49,11 @@ import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 // no memberships yet).
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: { id: string; tenantId: string | null };
+    user?: {
+      id: string;
+      tenantId: string | null;
+      isSuperAdmin: boolean;
+    };
   }
 }
 
@@ -112,7 +117,11 @@ export async function buildApp(
           if (unsigned.valid && unsigned.value) {
             const session = await loadSession(unsigned.value);
             if (session)
-              req.user = { id: session.userId, tenantId: session.activeTenantId };
+              req.user = {
+                id: session.userId,
+                tenantId: session.activeTenantId,
+                isSuperAdmin: session.isSuperAdmin,
+              };
           }
         }
       }
@@ -131,7 +140,11 @@ export async function buildApp(
     if (!session) {
       return reply.code(401).send({ error: 'Session expired' });
     }
-    req.user = { id: session.userId, tenantId: session.activeTenantId };
+    req.user = {
+      id: session.userId,
+      tenantId: session.activeTenantId,
+      isSuperAdmin: session.isSuperAdmin,
+    };
   });
 
   app.setErrorHandler(
@@ -180,6 +193,7 @@ export async function buildApp(
   await app.register(reportRoutes);
   await app.register(tenantRoutes);
   await app.register(authProviderRoutes);
+  await app.register(systemRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.

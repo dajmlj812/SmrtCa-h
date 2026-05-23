@@ -38,8 +38,11 @@ export function WorkspacePage() {
     );
   }, [me]);
   const myRole = activeTenant?.role ?? null;
-  const isAdmin = myRole === 'owner' || myRole === 'admin';
-  const isOwner = myRole === 'owner';
+  // Phase 9: roles collapse to admin / spouse / child. Admin is the
+  // only role that can manage members + providers; spouse and child
+  // are functionally restricted within the tenant.
+  const isAdmin = myRole === 'admin';
+  const isOwner = myRole === 'admin'; // kept for the JSX below; semantically "is the manager"
 
   return (
     <div>
@@ -93,6 +96,7 @@ function MembersSection({
   const [members, setMembers] = useState<Member[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [assigningChild, setAssigningChild] = useState<Member | null>(null);
 
   async function load() {
     try {
@@ -145,7 +149,7 @@ function MembersSection({
                 <td>{m.email ?? '—'}</td>
                 <td>{m.name ?? '—'}</td>
                 <td>
-                  <span className={`pill status-${m.role === 'owner' ? 'keep' : 'active'}-pill`}>
+                  <span className={`pill status-${m.role === 'admin' ? 'keep' : m.role === 'child' ? 'review' : 'active'}-pill`}>
                     {m.role}
                   </span>
                 </td>
@@ -155,7 +159,16 @@ function MembersSection({
                 </td>
                 {canManage && (
                   <td>
-                    {m.user_id !== currentUserId && m.role !== 'owner' && (
+                    {m.role === 'child' && (
+                      <button
+                        className="btn-link"
+                        type="button"
+                        onClick={() => setAssigningChild(m)}
+                      >
+                        Accounts
+                      </button>
+                    )}
+                    {m.user_id !== currentUserId && m.role !== 'admin' && (
                       <button
                         className="btn-link danger"
                         type="button"
@@ -171,6 +184,112 @@ function MembersSection({
             ))}
           </tbody>
         </table>
+      </div>
+      {assigningChild && (
+        <ChildAccountsModal
+          tenantId={tenantId}
+          member={assigningChild}
+          onClose={() => setAssigningChild(null)}
+          onSaved={() => setAssigningChild(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChildAccountsModal({
+  tenantId,
+  member,
+  onClose,
+  onSaved,
+}: {
+  tenantId: string;
+  member: Member;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [allAccounts, setAllAccounts] = useState<Array<{ id: string; name: string }>>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      api.listAccounts(),
+      api.listMemberAccounts(tenantId, member.user_id),
+    ])
+      .then(([all, current]) => {
+        setAllAccounts(all.map((a) => ({ id: a.id, name: a.name })));
+        setSelected(new Set(current.map((c) => c.account_id)));
+        setError(null);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
+      .finally(() => setLoading(false));
+  }, [tenantId, member.user_id]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.setMemberAccounts(tenantId, member.user_id, Array.from(selected));
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-header">
+          <h2>Accounts visible to {member.name ?? member.email ?? 'this child'}</h2>
+          <button className="modal-close" type="button" onClick={onClose}>
+            ✕
+          </button>
+        </header>
+        {error && <div className="banner error">{error}</div>}
+        {loading ? (
+          <p className="empty">Loading…</p>
+        ) : (
+          <>
+            <p className="muted">
+              Children only see transactions on accounts you check below.
+              Their copy of the app hides everything else.
+            </p>
+            <div style={{ maxHeight: 320, overflowY: 'auto', margin: '8px 0' }}>
+              {allAccounts.map((a) => (
+                <label key={a.id} style={{ display: 'block', padding: '4px 0' }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(a.id)}
+                    onChange={() => toggle(a.id)}
+                  />{' '}
+                  {a.name}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" type="button" disabled={saving} onClick={() => void save()}>
+                {saving ? 'Saving…' : 'Save assignments'}
+              </button>
+              <button className="btn secondary" type="button" onClick={onClose}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -308,7 +427,7 @@ function InviteForm({
   onSaved: () => void;
 }) {
   const [emailHint, setEmailHint] = useState('');
-  const [role, setRole] = useState<'admin' | 'member' | 'viewer'>('member');
+  const [role, setRole] = useState<'admin' | 'spouse' | 'child'>('spouse');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -360,9 +479,9 @@ function InviteForm({
             value={role}
             onChange={(e) => setRole(e.target.value as typeof role)}
           >
-            <option value="admin">admin</option>
-            <option value="member">member</option>
-            <option value="viewer">viewer</option>
+            <option value="admin">admin (co-manager)</option>
+            <option value="spouse">spouse (full access)</option>
+            <option value="child">child (own accounts only)</option>
           </select>
         </div>
       </div>

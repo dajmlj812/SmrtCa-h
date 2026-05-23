@@ -36,7 +36,7 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
     const body = r.json();
     expect(body.tenants).toHaveLength(1);
     expect(body.tenants[0].name).toBe('Default');
-    expect(body.tenants[0].role).toBe('owner');
+    expect(body.tenants[0].role).toBe('admin');
     expect(body.active_tenant_id).toBeDefined();
   });
 
@@ -47,7 +47,7 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
     const body = r.json();
     expect(body.user.email).toBe('test@local');
     expect(body.memberships).toHaveLength(1);
-    expect(body.memberships[0].role).toBe('owner');
+    expect(body.memberships[0].role).toBe('admin');
     expect(body.active_tenant_id).toBe(body.memberships[0].tenant_id);
   });
 
@@ -60,7 +60,7 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
     const inv = await app.inject({
       method: 'POST',
       url: `/api/tenants/${tenantId}/invitations`,
-      payload: { emailHint: 'newbie@local', role: 'member' },
+      payload: { emailHint: 'newbie@local', role: 'spouse' },
       headers: { 'content-type': 'application/json' },
     });
     expect(inv.statusCode).toBe(201);
@@ -107,7 +107,7 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
     const inv = await app.inject({
       method: 'POST',
       url: `/api/tenants/${tenantId}/invitations`,
-      payload: { role: 'member' },
+      payload: { role: 'spouse' },
       headers: { 'content-type': 'application/json' },
     });
     const token = inv.json().invitation.token as string;
@@ -143,7 +143,7 @@ describe('Multi-tenant + invitations + providers (Phase 8.0)', () => {
     );
     await pool.query(
       `INSERT INTO memberships (tenant_id, user_id, role)
-       VALUES ($1, $2, 'member')`,
+       VALUES ($1, $2, 'spouse')`,
       [tenantId, other.rows[0]!.id],
     );
 

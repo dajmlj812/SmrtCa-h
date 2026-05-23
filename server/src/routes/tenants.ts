@@ -45,7 +45,9 @@ async function roleOf(
 }
 
 function isAdmin(role: string | null): boolean {
-  return role === 'owner' || role === 'admin';
+  // Phase 9: 'admin' is the sole role that can manage members/invites.
+  // Spouses and children cannot.
+  return role === 'admin';
 }
 
 export async function tenantRoutes(app: FastifyInstance): Promise<void> {
@@ -119,6 +121,72 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ── Child account assignments ─────────────────────────────
+  app.get<{ Params: { id: string; userId: string } }>(
+    '/api/tenants/:id/members/:userId/accounts',
+    async (req, reply) => {
+      if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
+      if (!isUuid(req.params.id) || !isUuid(req.params.userId))
+        return reply.code(400).send({ error: 'Invalid id' });
+      const role = await roleOf(req.user.id, req.params.id);
+      // Children may only inspect their own assignments; admins/spouses
+      // inspect anyone's.
+      const isOwnLookup = req.params.userId === req.user.id;
+      if (!isAdmin(role) && role !== 'spouse' && !isOwnLookup) {
+        return reply.code(403).send({ error: 'Forbidden' });
+      }
+      const r = await query<{ account_id: string; account_name: string }>(
+        `SELECT a.id AS account_id, a.name AS account_name
+           FROM account_user_access aua
+           JOIN accounts a ON a.id = aua.account_id
+          WHERE aua.tenant_id = $1 AND aua.user_id = $2`,
+        [req.params.id, req.params.userId],
+      );
+      return { accounts: r.rows };
+    },
+  );
+
+  app.put<{ Params: { id: string; userId: string } }>(
+    '/api/tenants/:id/members/:userId/accounts',
+    async (req, reply) => {
+      if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
+      if (!isUuid(req.params.id) || !isUuid(req.params.userId))
+        return reply.code(400).send({ error: 'Invalid id' });
+      const role = await roleOf(req.user.id, req.params.id);
+      if (!isAdmin(role)) {
+        return reply.code(403).send({ error: 'Only admins can assign accounts' });
+      }
+      const body = (req.body ?? {}) as { accountIds?: unknown };
+      if (!Array.isArray(body.accountIds)) {
+        return reply.code(400).send({ error: 'accountIds must be an array' });
+      }
+      const ids: string[] = [];
+      for (const id of body.accountIds) {
+        if (typeof id !== 'string' || !isUuid(id)) {
+          return reply.code(400).send({ error: 'Invalid account id' });
+        }
+        ids.push(id);
+      }
+      await withTransaction(async (client) => {
+        await client.query(
+          `DELETE FROM account_user_access
+            WHERE tenant_id = $1 AND user_id = $2`,
+          [req.params.id, req.params.userId],
+        );
+        for (const aid of ids) {
+          await client.query(
+            `INSERT INTO account_user_access
+               (account_id, user_id, tenant_id, created_by)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT DO NOTHING`,
+            [aid, req.params.userId, req.params.id, req.user!.id],
+          );
+        }
+      });
+      return { ok: true, count: ids.length };
+    },
+  );
+
   app.delete<{ Params: { id: string; userId: string } }>(
     '/api/tenants/:id/members/:userId',
     async (req, reply) => {
@@ -126,11 +194,11 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
       if (!isUuid(req.params.id) || !isUuid(req.params.userId))
         return reply.code(400).send({ error: 'Invalid id' });
       const role = await roleOf(req.user.id, req.params.id);
-      if (role !== 'owner') {
-        return reply.code(403).send({ error: 'Only owners can remove members' });
+      if (role !== 'admin') {
+        return reply.code(403).send({ error: 'Only admins can remove members' });
       }
       if (req.params.userId === req.user.id) {
-        return reply.code(400).send({ error: 'Owners cannot remove themselves' });
+        return reply.code(400).send({ error: 'Admins cannot remove themselves' });
       }
       await query(
         `DELETE FROM memberships WHERE tenant_id = $1 AND user_id = $2`,
@@ -184,9 +252,9 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
       };
       const inviteRole =
         typeof body.role === 'string' &&
-        ['admin', 'member', 'viewer'].includes(body.role)
-          ? (body.role as 'admin' | 'member' | 'viewer')
-          : 'member';
+        ['admin', 'spouse', 'child'].includes(body.role)
+          ? (body.role as 'admin' | 'spouse' | 'child')
+          : 'spouse';
       const emailHint =
         typeof body.emailHint === 'string' ? body.emailHint.trim() || null : null;
       const token = randomBytes(24).toString('base64url');

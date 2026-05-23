@@ -48,9 +48,11 @@ export function SetupPage({ onAuthenticated }: Props) {
         <div className="brand auth-brand">
           Smrt<span>Cash</span>
         </div>
-        <h1>Create the owner account</h1>
+        <h1>Create the platform operator</h1>
         <p className="muted">
-          This becomes the owner of the default workspace. Pick a strong
+          The first user on a fresh install becomes a <strong>super admin</strong>:
+          they manage tenants, system settings, and the audit log. They
+          can't see financial data — those live in tenants. Pick a strong
           password (≥ {MIN_PASSWORD} characters). There's no email
           recovery, so store it in a password manager.
         </p>

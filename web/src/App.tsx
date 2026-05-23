@@ -23,8 +23,14 @@ import { BackupsPage } from './pages/BackupsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { InviteAcceptPage } from './pages/InviteAcceptPage';
 import { WorkspacePage } from './pages/WorkspacePage';
+import { SystemPage } from './pages/SystemPage';
 
-type AuthState = 'loading' | 'needs-setup' | 'needs-login' | 'authenticated';
+type AuthState =
+  | 'loading'
+  | 'needs-setup'
+  | 'needs-login'
+  | 'authenticated-tenant'
+  | 'authenticated-super';
 
 export function App() {
   const [authState, setAuthState] = useState<AuthState>('loading');
@@ -35,9 +41,19 @@ export function App() {
   const refreshAuth = useCallback(async () => {
     try {
       const status = await api.authStatus();
-      if (!status.isSetup) setAuthState('needs-setup');
-      else if (!status.authenticated) setAuthState('needs-login');
-      else setAuthState('authenticated');
+      if (!status.isSetup) {
+        setAuthState('needs-setup');
+        return;
+      }
+      if (!status.authenticated) {
+        setAuthState('needs-login');
+        return;
+      }
+      // Authenticated — but which kind? Super-admin sessions never see
+      // the financial dashboard; tenant sessions never see the system
+      // console.
+      const me = await api.authMe();
+      setAuthState(me.user.is_super_admin ? 'authenticated-super' : 'authenticated-tenant');
     } catch {
       // Network-down or server-down — show the login screen so the user
       // can retry. Avoids a permanent blank app if /status briefly fails.
@@ -69,8 +85,62 @@ export function App() {
   if (authState === 'needs-login') {
     return <LoginPage onAuthenticated={refreshAuth} />;
   }
-
+  if (authState === 'authenticated-super') {
+    return <SuperAdminApp onSignedOut={refreshAuth} />;
+  }
   return <AuthenticatedApp onSignedOut={refreshAuth} />;
+}
+
+function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
+  async function logout() {
+    try {
+      await api.authLogout();
+    } catch {
+      /* logout is idempotent */
+    }
+    onSignedOut();
+  }
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="brand">
+          Smrt<span>Cash</span>
+        </div>
+        <div className="muted" style={{ padding: '0 16px 8px', fontSize: 12 }}>
+          Super admin console
+        </div>
+        <nav className="nav">
+          <NavLink to="/system" end>
+            Overview
+          </NavLink>
+          <NavLink to="/system/audit">Audit log</NavLink>
+          <NavLink to="/health">Health</NavLink>
+          <NavLink to="/backups">Backups</NavLink>
+          <NavLink to="/settings">Settings</NavLink>
+        </nav>
+        <div className="sidebar-footer">
+          Platform operator
+          <button
+            className="btn secondary logout-btn"
+            type="button"
+            onClick={() => void logout()}
+          >
+            Sign out
+          </button>
+        </div>
+      </aside>
+      <main className="content">
+        <Routes>
+          <Route path="/" element={<SystemPage tab="overview" />} />
+          <Route path="/system" element={<SystemPage tab="overview" />} />
+          <Route path="/system/audit" element={<SystemPage tab="audit" />} />
+          <Route path="/health" element={<HealthPage />} />
+          <Route path="/backups" element={<BackupsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
+      </main>
+    </div>
+  );
 }
 
 function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {

@@ -60,7 +60,7 @@ describe('SMTP plumbing (Phase 8.1)', () => {
     const r = await app.inject({
       method: 'POST',
       url: `/api/tenants/${tenantId}/invitations`,
-      payload: { emailHint: 'invitee@example.com', role: 'member' },
+      payload: { emailHint: 'invitee@example.com', role: 'spouse' },
       headers: { 'content-type': 'application/json' },
     });
     expect(r.statusCode).toBe(201);
@@ -76,7 +76,7 @@ describe('SMTP plumbing (Phase 8.1)', () => {
     const r = await app.inject({
       method: 'POST',
       url: `/api/tenants/${tenantId}/invitations`,
-      payload: { role: 'viewer' },
+      payload: { role: 'child' },
       headers: { 'content-type': 'application/json' },
     });
     expect(r.statusCode).toBe(201);
