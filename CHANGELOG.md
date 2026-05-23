@@ -9,7 +9,86 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 4 work will land here._
+_Phase 5 work will land here._
+
+---
+
+## [0.4.0] — 2026-05-22 — Phase 4: Insights & Reconciliation
+
+### Added
+
+- **Transfer detection.** A new `POST /api/transfers/detect` pairs
+  equal-opposite amounts on different accounts within 5 days of each other
+  and tags both with a shared `transfer_group_id`. Ambiguity is resolved by
+  picking the closest-date candidate; one transaction can belong to at most
+  one group. A `POST /api/transfers` endpoint takes `{aId, bId}` for manual
+  linking (e.g. a wire transfer with a fee, where the two legs are not
+  penny-equal), and `DELETE /api/transfers/:groupId` unlinks. A
+  **Transfers** page in the web app drives all of this; rows already
+  in a transfer group show a `↔ transfer` pill on the Transactions page.
+- **Opening balances + true running balance.** `accounts.opening_balance_cents`
+  and `opening_balance_date` (migration 004). `PATCH /api/accounts/:id`
+  edits them. Account balance now equals `opening + sum(txns on/after
+  opening_date)`. The transactions list response gains a per-row
+  `running_balance_cents` (computed via a SQL window function, `NULL` for
+  pre-opening rows). The Account Detail page shows the running balance
+  column and an inline edit form for the opening balance. **Closes KI-01.**
+- **Insights endpoints**:
+  - `GET /api/insights/spending-by-category` — totals by category over a
+    date range, excludes transfers.
+  - `GET /api/insights/income-expense` — monthly buckets for the last N
+    months (default 12, capped at 60), excludes transfers.
+  - `GET /api/insights/net-worth-over-time` — end-of-month total across
+    all accounts for the last N months. Transfers self-cancel and need no
+    special handling here.
+- **Dashboard** (`/` route) — three Recharts panels: pie of spending by
+  parent-category for the current month, grouped bar of income vs. expense
+  for the last 12 months, and a line of net worth over time.
+- **Filtered CSV export.** `GET /api/transactions/export` streams a CSV
+  honoring the same filters as the list endpoint plus optional
+  `start`/`end` date bounds. Always-quoted cells with doubled internal
+  quotes for safety; UTF-8; date-stamped filename via
+  `Content-Disposition`. An **Export CSV** button on the Transactions page
+  triggers the download with the current filter state.
+
+### Changed
+
+- **Sidebar navigation** — `/` is now the Dashboard (was Accounts); the
+  Accounts list moves to `/accounts`. New entries for **Transfers** and
+  the dashboard.
+- **Transaction list query** restructured to compute `running_balance_cents`
+  in an inner query (against the full account history) and `transfer_group_id`
+  is included so the UI can render the transfer pill.
+- **Insights and CSV-export queries** explicitly skip rows with a non-null
+  `transfer_group_id` so internal moves don't pollute spending or income
+  totals. Net-worth aggregation does *not* filter — transfer debits and
+  credits cancel naturally across accounts.
+
+### Documentation
+
+- `docs/KNOWN_ISSUES.md` — KI-01 removed (resolved by opening balances).
+- `docs/FEATURES.md` — transfer linking, true balance reconciliation,
+  spending by category, income vs expense, net worth over time, dashboard
+  with charts, and filtered CSV export all flipped to ✅.
+
+### Tests
+
+- **+36 server tests** (178 → 214): 13 transfer integration tests
+  (detection edge cases, manual link, unlink, account scoping),
+  8 opening-balance + running-balance tests, 6 insights tests
+  (per-category, monthly buckets, net worth, transfer exclusion), 5 CSV
+  export tests (header, escaping, date filtering, empty result, bad input).
+- Total automated coverage: **227 tests** across server (214) + web (6) +
+  Playwright e2e (7).
+
+### Migration notes
+
+- **Upgrading from 0.3.0:** `npm run migrate --prefix server` to apply
+  migration 004 (opening-balance columns on `accounts` + partial index on
+  `transactions.transfer_group_id`). Default values are zero / null, so
+  existing data behaves the same as before until you set an opening balance.
+- New web dep: `recharts` for the dashboard charts (~40 packages, no
+  vulnerabilities).
 
 ---
 

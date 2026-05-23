@@ -10,6 +10,8 @@ import { importRoutes } from './routes/imports.js';
 import { normalizeRoutes } from './routes/normalize.js';
 import { suggestionRoutes } from './routes/suggestions.js';
 import { attachmentRoutes } from './routes/attachments.js';
+import { transferRoutes } from './routes/transfers.js';
+import { insightsRoutes } from './routes/insights.js';
 
 export interface BuildAppOptions {
   /** Enable Fastify's request logger. Off by default in tests. */
@@ -58,6 +60,8 @@ export async function buildApp(
   await app.register(normalizeRoutes);
   await app.register(suggestionRoutes);
   await app.register(attachmentRoutes);
+  await app.register(transferRoutes);
+  await app.register(insightsRoutes);
 
   return app;
 }

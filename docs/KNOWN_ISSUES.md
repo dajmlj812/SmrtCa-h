@@ -1,27 +1,9 @@
 # SmrtCash — Known Issues
 
-This page tracks current limitations as of **Phase 1 (2026-05-22)**.
+This page tracks current limitations as of **Phase 4 (2026-05-22)**.
 Each item lists its impact, a workaround if any, and the planned resolution.
 
 Severity: 🔴 high · 🟡 medium · 🟢 low / cosmetic
-
----
-
-## KI-01 — Account balance is "net of imported activity" 🟡
-
-**Description:** An account's balance is computed as the sum of all imported
-transaction amounts. It is **not** the institution's true current balance.
-
-**Impact:** For a credit card imported from near account opening, the figure is
-close to reality. For a checking account, it reflects net cash flow over the
-imported period, not the actual balance. Net Worth inherits the same caveat.
-
-**Workaround:** Treat the balance as "net change across imported transactions."
-The accurate running balance is preserved per-transaction (`balance_cents`)
-when the bank export includes it.
-
-**Planned resolution:** Phase 4 — opening balances + statement running-balance
-reconciliation.
 
 ---
 

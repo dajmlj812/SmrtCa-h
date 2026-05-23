@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, type Account, type Category, type Transaction } from '../api';
-import { accountTypeLabel, formatCents } from '../format';
+import { accountTypeLabel, formatCents, formatDate } from '../format';
 import { TransactionTable } from '../components/TransactionTable';
 import { AttachmentsModal } from '../components/AttachmentsModal';
 
@@ -18,6 +18,7 @@ export function AccountDetailPage() {
   const [attachmentsFor, setAttachmentsFor] = useState<Transaction | null>(
     null,
   );
+  const [editingBalance, setEditingBalance] = useState(false);
 
   async function load(searchTerm: string) {
     if (!id) return;
@@ -88,7 +89,7 @@ export function AccountDetailPage() {
 
   return (
     <div>
-      <Link to="/" className="back-link">
+      <Link to="/accounts" className="back-link">
         ← Accounts
       </Link>
       {error && <div className="banner error">{error}</div>}
@@ -122,10 +123,39 @@ export function AccountDetailPage() {
                 </div>
               </div>
               <div className="kv-item">
+                <div className="kv-label">Opening</div>
+                <div className="kv-value">
+                  {formatCents(account.opening_balance_cents)}
+                  {account.opening_balance_date && (
+                    <span className="muted" style={{ marginLeft: 8 }}>
+                      as of {formatDate(account.opening_balance_date)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="kv-item">
                 <div className="kv-label">Transactions</div>
                 <div className="kv-value">{account.transaction_count}</div>
               </div>
+              <div className="kv-item" style={{ alignSelf: 'center' }}>
+                <button
+                  className="btn secondary"
+                  onClick={() => setEditingBalance((v) => !v)}
+                >
+                  {editingBalance ? 'Cancel' : 'Edit opening balance'}
+                </button>
+              </div>
             </div>
+            {editingBalance && (
+              <OpeningBalanceForm
+                account={account}
+                onSaved={(saved) => {
+                  setAccount(saved);
+                  setEditingBalance(false);
+                  void load(search);
+                }}
+              />
+            )}
           </div>
         </>
       )}
@@ -153,6 +183,7 @@ export function AccountDetailPage() {
         <TransactionTable
           transactions={transactions}
           categories={categories}
+          showRunningBalance
           onUpdate={onTxnUpdate}
           onOpenAttachments={setAttachmentsFor}
         />
@@ -174,5 +205,78 @@ export function AccountDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+function OpeningBalanceForm({
+  account,
+  onSaved,
+}: {
+  account: Account;
+  onSaved: (saved: Account) => void;
+}) {
+  const [dollars, setDollars] = useState(
+    (account.opening_balance_cents / 100).toFixed(2),
+  );
+  const [date, setDate] = useState(account.opening_balance_date ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const cents = Math.round(Number(dollars) * 100);
+      if (!Number.isFinite(cents)) {
+        throw new Error('Opening balance must be a number');
+      }
+      const saved = await api.updateAccount(account.id, {
+        opening_balance_cents: cents,
+        opening_balance_date: date === '' ? null : date,
+      });
+      onSaved(saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="opening-balance-form" onSubmit={submit}>
+      {error && <div className="banner error">{error}</div>}
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor="opening-balance">Opening balance ($)</label>
+          <input
+            id="opening-balance"
+            type="number"
+            step="0.01"
+            value={dollars}
+            onChange={(e) => setDollars(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="opening-date">As of (optional)</label>
+          <input
+            id="opening-date"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
+        Leave the date blank to apply the opening balance against all imported
+        transactions. Set a date if your imports go back further than the
+        statement balance you know.
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <button className="btn" type="submit" disabled={saving}>
+          {saving ? 'Saving…' : 'Save opening balance'}
+        </button>
+      </div>
+    </form>
   );
 }

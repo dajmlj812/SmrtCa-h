@@ -18,7 +18,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Per-account balance and transaction count | ✅ |
 | Net-worth summary across all accounts | ✅ |
 | Delete an account (cascades to its transactions) | ✅ |
-| True balance reconciliation with opening balances | 📋 Phase 4 |
+| True balance reconciliation with opening balances | ✅ |
 | Manual assets & liabilities (property, vehicles, loans) | 📋 Phase 7 |
 
 ## Importing & Connectivity
@@ -45,7 +45,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money shown as exact currency, color-coded in/out | ✅ |
 | AI-cleaned merchant names & categorization | ✅ |
 | Manual edit / re-categorize | ✅ |
-| Transfer linking between your own accounts | 📋 Phase 4 |
+| Transfer linking between your own accounts | ✅ |
 | Recurring & subscription detection | 📋 Phase 6 |
 | Receipt & file attachments | ✅ |
 
@@ -78,7 +78,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Feature | Status |
 |---------|--------|
 | Investment holdings — cost basis & current value | 📋 Phase 7 |
-| Net worth over time across all accounts | 📋 Phase 4 → 7 |
+| Net worth over time across all accounts | ✅ |
 | Multi-currency support with exchange rates | 📋 Phase 7 |
 | Retirement / long-term goal projections | 📋 Phase 7 |
 
@@ -86,10 +86,10 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 
 | Feature | Status |
 |---------|--------|
-| Spending by category | 📋 Phase 4 |
-| Income vs. expense trends | 📋 Phase 4 |
-| Dashboard with charts | 📋 Phase 4 |
-| Filtered CSV export | 📋 Phase 4 |
+| Spending by category | ✅ |
+| Income vs. expense trends | ✅ |
+| Dashboard with charts | ✅ |
+| Filtered CSV export | ✅ |
 
 ## Mobile & Experience
 
@@ -106,7 +106,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 182-test automated suite (unit → e2e) | ✅ |
+| 227-test automated suite (unit → e2e) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | 📋 Phase 5 |
 | Encryption at rest (database + attachments) | 📋 Phase 5 |

@@ -7,15 +7,18 @@ your own container, with your data staying on your machine.
 
 ## Status
 
-**Phases 1, 2, and 3 — Foundation, Import, AI Normalization, and Receipts** ✅ Complete
+**Phases 1, 2, 3, and 4 — Foundation, Import, AI Normalization, Receipts, Insights** ✅ Complete
 
-The stack is live and verified: accounts, a CSV/XLSX importer with automatic
-bank-format detection, duplicate protection, a web UI for browsing
-transactions, **a pluggable AI normalization layer (rules / Claude API /
-Ollama) that cleans merchant names and categorizes transactions**, a
-user-editable category taxonomy, inline manual editing, and **drag-and-drop
-receipt attachments with Claude-vision OCR** that flags receipts whose
-amount or date don't match the transaction. See the
+The stack is live and verified: accounts with **true opening-balance
+reconciliation**, a CSV/XLSX importer with automatic bank-format detection,
+duplicate protection, a web UI for browsing transactions, **a pluggable AI
+normalization layer (rules / Claude API / Ollama)** that cleans merchant
+names and categorizes transactions, a user-editable category taxonomy,
+inline manual editing, **drag-and-drop receipt attachments with
+Claude-vision OCR** that flags receipts whose amount or date don't match
+the transaction, **automatic transfer detection** between own accounts,
+and a **dashboard** with spending-by-category, income-vs-expense, and
+net-worth-over-time charts plus filtered CSV export. See the
 [Roadmap](./docs/ROADMAP.md) for what's next.
 
 ## Documentation
@@ -58,7 +61,7 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-182 automated tests spanning unit, integration, functional, security, smoke,
+227 automated tests spanning unit, integration, functional, security, smoke,
 performance, and end-to-end layers. With PostgreSQL running:
 
 ```sh

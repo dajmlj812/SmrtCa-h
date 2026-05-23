@@ -14,8 +14,8 @@ nothing is "all or nothing."
 | 1 | Foundation & Import | ✅ Complete — 2026-05-22 |
 | 2 | AI Transaction Normalization | ✅ Complete — 2026-05-22 |
 | 3 | Receipts & Attachments | ✅ Complete — 2026-05-22 |
-| 4 | Insights & Reconciliation | 🔜 Next |
-| 5 | Dockerization, Auth & Hardening | 📋 Planned |
+| 4 | Insights & Reconciliation | ✅ Complete — 2026-05-22 |
+| 5 | Dockerization, Auth & Hardening | 🔜 Next |
 | 6 | Budgeting & Cash Flow | 📋 Planned |
 | 7 | Wealth & Net Worth | 📋 Planned |
 | 8 | Connectivity & Automation | 📋 Planned |
@@ -110,21 +110,31 @@ attachments directory.
 
 ---
 
-## Phase 4 — Insights & Reconciliation 🔜
+## Phase 4 — Insights & Reconciliation ✅
 
 **Goal:** Make the data answer real questions about your money.
 
-- **Transfer detection** — auto-link matching debits/credits between your own
-  accounts so they do not distort spending
-- **True balance reconciliation** — opening balances + statement running
-  balances (resolves [KI-01](./KNOWN_ISSUES.md))
-- Spending by category; income vs. expense trends
-- Net worth over time across all accounts
-- Dashboard with charts; filtered CSV export
+Delivered:
+
+- [x] **Transfer detection** — `POST /api/transfers/detect` pairs
+      equal-opposite amounts across different accounts within 5 days; the
+      Transfers page lists pairs and supports manual link / unlink; rows
+      show a `↔ transfer` pill on the Transactions page
+- [x] **True balance reconciliation** — opening balance + as-of date on
+      every account; account balance = opening + activity from opening date;
+      per-row running balance via SQL window function; **closes KI-01**
+- [x] **Insights endpoints** — spending-by-category, monthly
+      income-vs-expense, monthly net-worth-over-time; all exclude transfers
+      where it matters
+- [x] **Dashboard** — pie of spending by parent category, grouped bar of
+      income vs expense, line of net worth over time (Recharts)
+- [x] **Filtered CSV export** — `GET /api/transactions/export` honors all
+      list filters plus optional date range; UTF-8, always-quoted cells,
+      date-stamped filename
 
 ---
 
-## Phase 5 — Dockerization, Auth & Hardening 📋
+## Phase 5 — Dockerization, Auth & Hardening 🔜
 
 **Goal:** Ship the secure, self-contained container.
 

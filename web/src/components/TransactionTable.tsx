@@ -5,6 +5,8 @@ import { formatCents, formatDate } from '../format';
 interface Props {
   transactions: Transaction[];
   showAccount?: boolean;
+  /** When true, render the per-account running balance column. */
+  showRunningBalance?: boolean;
   /** When provided, the Category cell becomes an inline dropdown. */
   categories?: Category[];
   /**
@@ -56,6 +58,7 @@ function buildCategoryGroups(categories: Category[]): CategoryGroup[] {
 export function TransactionTable({
   transactions,
   showAccount = false,
+  showRunningBalance = false,
   categories,
   onUpdate,
   onOpenAttachments,
@@ -78,6 +81,7 @@ export function TransactionTable({
             <th>Description</th>
             <th>Category</th>
             <th className="num">Amount</th>
+            {showRunningBalance && <th className="num">Balance</th>}
             {onOpenAttachments && <th className="attach-col">Receipt</th>}
           </tr>
         </thead>
@@ -87,6 +91,7 @@ export function TransactionTable({
               key={t.id}
               transaction={t}
               showAccount={showAccount}
+              showRunningBalance={showRunningBalance}
               groups={groups}
               hasCategories={categories !== undefined}
               onUpdate={onUpdate}
@@ -102,6 +107,7 @@ export function TransactionTable({
 function TransactionRow({
   transaction,
   showAccount,
+  showRunningBalance,
   groups,
   hasCategories,
   onUpdate,
@@ -109,6 +115,7 @@ function TransactionRow({
 }: {
   transaction: Transaction;
   showAccount: boolean;
+  showRunningBalance: boolean;
   groups: CategoryGroup[];
   hasCategories: boolean;
   onUpdate?: Props['onUpdate'];
@@ -139,6 +146,14 @@ function TransactionRow({
         </span>
         <span className="desc-meta">
           <StatusPill status={t.normalization_status} />
+          {t.transfer_group_id && (
+            <span
+              className="pill transfer-pill"
+              title="Linked transfer — excluded from spending totals"
+            >
+              ↔ transfer
+            </span>
+          )}
           {t.normalized_merchant && (
             <span className="desc-sub">{t.raw_description}</span>
           )}
@@ -179,6 +194,15 @@ function TransactionRow({
       <td className={`num ${t.amount_cents < 0 ? 'neg' : 'pos'}`}>
         {formatCents(t.amount_cents)}
       </td>
+      {showRunningBalance && (
+        <td className="num">
+          {t.running_balance_cents !== null ? (
+            formatCents(t.running_balance_cents)
+          ) : (
+            <span className="muted">—</span>
+          )}
+        </td>
+      )}
       {onOpenAttachments && (
         <td className="attach-col">
           <button

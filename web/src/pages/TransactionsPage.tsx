@@ -219,6 +219,16 @@ export function TransactionsPage() {
         <button className="btn secondary" onClick={runSearch}>
           Search
         </button>
+        <a
+          className="btn secondary"
+          href={api.exportTransactionsUrl({
+            accountId: accountId || undefined,
+            search: search || undefined,
+          })}
+          title="Download the current filter as CSV"
+        >
+          Export CSV
+        </a>
         <div className="spacer" />
         <span className="muted">
           {from}–{to} of {total}

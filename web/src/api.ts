@@ -8,6 +8,8 @@ export interface Account {
   created_at: string;
   balance_cents: number;
   transaction_count: number;
+  opening_balance_cents: number;
+  opening_balance_date: string | null;
 }
 
 export interface Transaction {
@@ -25,10 +27,53 @@ export interface Transaction {
   category_id: string | null;
   normalization_status: string;
   normalization_note?: string | null;
+  transfer_group_id: string | null;
+  running_balance_cents: number | null;
   account_name: string;
   category_name: string | null;
   attachment_count?: number;
   created_at: string;
+}
+
+export interface TransferLeg {
+  id: string;
+  account_id: string;
+  account_name: string;
+  txn_date: string;
+  amount_cents: number;
+  raw_description: string;
+  normalized_merchant: string | null;
+}
+
+export interface Transfer {
+  group_id: string;
+  transactions: TransferLeg[];
+}
+
+export interface DetectTransfersSummary {
+  scanned: number;
+  paired: number;
+  pairs: Array<{ groupId: string; aId: string; bId: string; dateDiffDays: number }>;
+}
+
+export interface SpendingByCategoryRow {
+  category_id: string | null;
+  category_name: string | null;
+  parent_id: string | null;
+  parent_name: string | null;
+  total_cents: number;
+  transaction_count: number;
+}
+
+export interface IncomeExpenseRow {
+  month: string;
+  income_cents: number;
+  expense_cents: number;
+}
+
+export interface NetWorthRow {
+  month: string;
+  net_worth_cents: number;
 }
 
 export interface Attachment {
@@ -173,9 +218,24 @@ export interface CreateAccountInput {
   last4?: string;
 }
 
+export interface UpdateAccountInput {
+  name?: string;
+  institution?: string | null;
+  last4?: string | null;
+  opening_balance_cents?: number;
+  opening_balance_date?: string | null;
+}
+
 export interface UpdateTransactionInput {
   merchant?: string;
   categoryId?: string | null;
+}
+
+export interface ExportFilters {
+  accountId?: string;
+  search?: string;
+  start?: string;
+  end?: string;
 }
 
 export const api = {
@@ -190,6 +250,13 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+    }).then((r) => r.account),
+
+  updateAccount: (id: string, updates: UpdateAccountInput) =>
+    http<{ account: Account }>(`/api/accounts/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
     }).then((r) => r.account),
 
   deleteAccount: (id: string) =>
@@ -319,4 +386,66 @@ export const api = {
 
   attachmentPreviewUrl: (id: string) => `/api/attachments/${id}/preview`,
   attachmentDownloadUrl: (id: string) => `/api/attachments/${id}`,
+
+  // ── Transfers (Phase 4) ──────────────────────────────────
+  listTransfers: () =>
+    http<{ transfers: Transfer[] }>('/api/transfers').then((r) => r.transfers),
+
+  detectTransfers: (opts: { accountId?: string } = {}) =>
+    http<{ summary: DetectTransfersSummary }>('/api/transfers/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts),
+    }).then((r) => r.summary),
+
+  linkTransfer: (aId: string, bId: string) =>
+    http<{ groupId: string }>('/api/transfers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aId, bId }),
+    }),
+
+  unlinkTransfer: (groupId: string) =>
+    http<void>(`/api/transfers/${groupId}`, { method: 'DELETE' }),
+
+  // ── Insights (Phase 4) ───────────────────────────────────
+  spendingByCategory: (opts: {
+    start?: string;
+    end?: string;
+    accountId?: string;
+  } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.start) q.set('start', opts.start);
+    if (opts.end) q.set('end', opts.end);
+    if (opts.accountId) q.set('accountId', opts.accountId);
+    return http<{ start: string; end: string; rows: SpendingByCategoryRow[] }>(
+      `/api/insights/spending-by-category?${q.toString()}`,
+    );
+  },
+
+  incomeExpense: (opts: { months?: number; accountId?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.months) q.set('months', String(opts.months));
+    if (opts.accountId) q.set('accountId', opts.accountId);
+    return http<{ months: number; rows: IncomeExpenseRow[] }>(
+      `/api/insights/income-expense?${q.toString()}`,
+    );
+  },
+
+  netWorthOverTime: (opts: { months?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.months) q.set('months', String(opts.months));
+    return http<{ months: number; rows: NetWorthRow[] }>(
+      `/api/insights/net-worth-over-time?${q.toString()}`,
+    );
+  },
+
+  exportTransactionsUrl: (filters: ExportFilters = {}) => {
+    const q = new URLSearchParams();
+    if (filters.accountId) q.set('accountId', filters.accountId);
+    if (filters.search) q.set('search', filters.search);
+    if (filters.start) q.set('start', filters.start);
+    if (filters.end) q.set('end', filters.end);
+    return `/api/transactions/export?${q.toString()}`;
+  },
 };
