@@ -5,8 +5,31 @@ import {
   type BillFrequency,
   type BillReviewStatus,
   type RecurringSuggestion,
+  type ReportColumn,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { FilterableTable } from '../components/FilterableTable';
+
+const SUBSCRIPTION_TABLE_COLUMNS: ReportColumn[] = [
+  { key: 'name', label: 'Name', type: 'string' },
+  { key: 'frequency', label: 'Frequency', type: 'string' },
+  { key: 'next_due_date', label: 'Next due', type: 'date' },
+  { key: 'per_cycle_cents', label: 'Per cycle', type: 'cents' },
+  { key: 'monthly_cents', label: '≈ Monthly', type: 'cents' },
+  { key: 'status_label', label: 'Status', type: 'string' },
+];
+
+function formatSubscriptionCell(col: ReportColumn, raw: unknown): string {
+  if (raw === null || raw === undefined) return '—';
+  switch (col.type) {
+    case 'cents':
+      return formatCents(typeof raw === 'number' ? raw : Number(raw));
+    case 'date':
+      return formatDate(typeof raw === 'string' ? raw : null);
+    default:
+      return String(raw);
+  }
+}
 
 interface ScanSummary {
   ai_used: boolean;
@@ -306,47 +329,32 @@ export function SubscriptionsPage() {
             <strong>Bills</strong> page to populate this list.
           </p>
         ) : (
-          <div className="table-wrap">
-            <table className="txn-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Frequency</th>
-                  <th>Next due</th>
-                  <th className="num">Per cycle</th>
-                  <th className="num">≈ Monthly</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {settled.map((b) => {
-                  const monthly = monthlyEquivalentCents(b);
-                  return (
-                    <tr key={b.id}>
-                      <td>{b.name}</td>
-                      <td>{b.frequency}</td>
-                      <td className="nowrap">{formatDate(b.next_due_date)}</td>
-                      <td className="num neg">{formatCents(-b.amount_cents)}</td>
-                      <td className="num neg">
-                        {monthly === null ? '—' : formatCents(-monthly)}
-                      </td>
-                      <td>{STATUS_LABEL[b.review_status]}</td>
-                      <td>
-                        <button
-                          className="btn-link"
-                          type="button"
-                          onClick={() => void setStatus(b.id, 'review')}
-                        >
-                          Flag for review
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <FilterableTable
+            columns={SUBSCRIPTION_TABLE_COLUMNS}
+            rows={settled.map((b) => {
+              const monthly = monthlyEquivalentCents(b);
+              return {
+                id: b.id,
+                name: b.name,
+                frequency: b.frequency,
+                next_due_date: b.next_due_date,
+                per_cycle_cents: -b.amount_cents,
+                monthly_cents: monthly === null ? null : -monthly,
+                status_label: STATUS_LABEL[b.review_status],
+              };
+            })}
+            formatCell={formatSubscriptionCell}
+            storageKey="subscriptions:active"
+            rowActions={(row) => (
+              <button
+                className="btn-link"
+                type="button"
+                onClick={() => void setStatus(String(row.id), 'review')}
+              >
+                Flag for review
+              </button>
+            )}
+          />
         )}
       </div>
 

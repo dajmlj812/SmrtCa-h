@@ -1,5 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type BackupConfig, type BackupRecord } from '../api';
+import { api, type BackupConfig, type BackupRecord, type ReportColumn } from '../api';
+import { FilterableTable } from '../components/FilterableTable';
+
+const BACKUP_TABLE_COLUMNS: ReportColumn[] = [
+  { key: 'started_at', label: 'Started', type: 'date' },
+  { key: 'kind', label: 'Kind', type: 'string' },
+  { key: 'status', label: 'Status', type: 'string' },
+  { key: 'db_bytes', label: 'DB', type: 'number' },
+  { key: 'attachments_bytes', label: 'Attachments', type: 'number' },
+  { key: 'total_bytes', label: 'Total', type: 'number' },
+  { key: 'path', label: 'Path', type: 'string' },
+];
 
 const FREQUENCIES = ['hourly', 'daily', 'weekly', 'monthly'] as const;
 
@@ -249,59 +260,30 @@ export function BackupsPage() {
             your first snapshot.
           </p>
         ) : (
-          <div className="table-wrap">
-            <table className="txn-table">
-              <thead>
-                <tr>
-                  <th>Started</th>
-                  <th>Kind</th>
-                  <th>Status</th>
-                  <th className="num">DB</th>
-                  <th className="num">Attachments</th>
-                  <th className="num">Total</th>
-                  <th>Path</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((b) => (
-                  <tr key={b.id}>
-                    <td className="nowrap">{formatLocal(b.started_at)}</td>
-                    <td>{b.kind}</td>
-                    <td>
-                      <span
-                        className={`pill status-${b.status === 'success' ? 'keep' : b.status === 'failed' ? 'cancel' : 'review'}-pill`}
-                      >
-                        {b.status}
-                      </span>
-                      {b.error && (
-                        <div className="muted" style={{ fontSize: '0.85em' }}>
-                          {b.error}
-                        </div>
-                      )}
-                    </td>
-                    <td className="num">{formatBytes(b.db_bytes)}</td>
-                    <td className="num">{formatBytes(b.attachments_bytes)}</td>
-                    <td className="num">{formatBytes(b.total_bytes)}</td>
-                    <td>
-                      <code style={{ fontSize: '0.85em' }}>{b.path}</code>
-                    </td>
-                    <td>
-                      {b.status === 'success' && (
-                        <button
-                          className="btn-link danger"
-                          type="button"
-                          onClick={() => void deleteOne(b.id)}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FilterableTable
+            columns={BACKUP_TABLE_COLUMNS}
+            rows={history as unknown as Array<Record<string, unknown>>}
+            formatCell={(col, raw) => {
+              if (raw === null || raw === undefined) return '—';
+              if (col.key === 'started_at') return formatLocal(String(raw));
+              if (col.type === 'number')
+                return formatBytes(typeof raw === 'number' ? raw : Number(raw));
+              return String(raw);
+            }}
+            storageKey="backups:history"
+            rowActions={(row) => {
+              const b = row as unknown as BackupRecord;
+              return b.status === 'success' ? (
+                <button
+                  className="btn-link danger"
+                  type="button"
+                  onClick={() => void deleteOne(b.id)}
+                >
+                  Delete
+                </button>
+              ) : null;
+            }}
+          />
         )}
       </div>
 

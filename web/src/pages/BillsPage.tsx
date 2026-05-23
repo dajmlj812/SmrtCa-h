@@ -6,8 +6,36 @@ import {
   type IncomeFrequency,
   type RecurringIncome,
   type RecurringSuggestion,
+  type ReportColumn,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { FilterableTable } from '../components/FilterableTable';
+
+const BILL_TABLE_COLUMNS: ReportColumn[] = [
+  { key: 'name', label: 'Name', type: 'string' },
+  { key: 'frequency', label: 'Frequency', type: 'string' },
+  { key: 'next_due_date', label: 'Next due', type: 'date' },
+  { key: 'amount_cents', label: 'Amount', type: 'cents' },
+  { key: 'status_label', label: 'Status', type: 'string' },
+];
+const INCOME_TABLE_COLUMNS: ReportColumn[] = [
+  { key: 'name', label: 'Name', type: 'string' },
+  { key: 'frequency', label: 'Frequency', type: 'string' },
+  { key: 'next_expected_date', label: 'Next expected', type: 'date' },
+  { key: 'amount_cents', label: 'Amount', type: 'cents' },
+];
+
+function formatTableCell(col: ReportColumn, raw: unknown): string {
+  if (raw === null || raw === undefined) return '';
+  switch (col.type) {
+    case 'cents':
+      return formatCents(typeof raw === 'number' ? raw : Number(raw));
+    case 'date':
+      return formatDate(typeof raw === 'string' ? raw : null);
+    default:
+      return String(raw);
+  }
+}
 
 const BILL_FREQUENCIES: BillFrequency[] = [
   'monthly',
@@ -276,49 +304,40 @@ export function BillsPage() {
         ) : bills.length === 0 ? (
           <p className="empty">No bills yet.</p>
         ) : (
-          <div className="table-wrap">
-            <table className="txn-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Frequency</th>
-                  <th>Next due</th>
-                  <th className="num">Amount</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {bills.map((b) => (
-                  <tr key={b.id} className={b.active ? '' : 'muted-row'}>
-                    <td>{b.name}</td>
-                    <td>{b.frequency}</td>
-                    <td className="nowrap">{formatDate(b.next_due_date)}</td>
-                    <td className="num neg">{formatCents(-b.amount_cents)}</td>
-                    <td>{b.active ? 'Active' : 'Closed'}</td>
-                    <td>
-                      {b.active && (
-                        <button
-                          className="btn-link"
-                          type="button"
-                          onClick={() => void markPaid(b.id)}
-                        >
-                          Mark paid
-                        </button>
-                      )}
-                      <button
-                        className="btn-link danger"
-                        type="button"
-                        onClick={() => void deleteBill(b.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FilterableTable
+            columns={BILL_TABLE_COLUMNS}
+            rows={bills.map((b) => ({
+              ...b,
+              // Display amount as a negative outflow to match the old table.
+              amount_cents: -b.amount_cents,
+              status_label: b.active ? 'Active' : 'Closed',
+            }))}
+            formatCell={formatTableCell}
+            storageKey="bills:list"
+            rowActions={(row) => {
+              const r = row as unknown as Bill & { status_label: string };
+              return (
+                <>
+                  {r.active && (
+                    <button
+                      className="btn-link"
+                      type="button"
+                      onClick={() => void markPaid(r.id)}
+                    >
+                      Mark paid
+                    </button>
+                  )}
+                  <button
+                    className="btn-link danger"
+                    type="button"
+                    onClick={() => void deleteBill(r.id)}
+                  >
+                    Delete
+                  </button>
+                </>
+              );
+            }}
+          />
         )}
       </div>
 
@@ -332,38 +351,21 @@ export function BillsPage() {
         {loading ? null : income.length === 0 ? (
           <p className="empty">No recurring income yet.</p>
         ) : (
-          <div className="table-wrap">
-            <table className="txn-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Frequency</th>
-                  <th>Next expected</th>
-                  <th className="num">Amount</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {income.map((i) => (
-                  <tr key={i.id}>
-                    <td>{i.name}</td>
-                    <td>{i.frequency}</td>
-                    <td className="nowrap">{formatDate(i.next_expected_date)}</td>
-                    <td className="num pos">{formatCents(i.amount_cents)}</td>
-                    <td>
-                      <button
-                        className="btn-link danger"
-                        type="button"
-                        onClick={() => void deleteIncome(i.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FilterableTable
+            columns={INCOME_TABLE_COLUMNS}
+            rows={income as unknown as Array<Record<string, unknown>>}
+            formatCell={formatTableCell}
+            storageKey="income:list"
+            rowActions={(row) => (
+              <button
+                className="btn-link danger"
+                type="button"
+                onClick={() => void deleteIncome(String(row.id))}
+              >
+                Delete
+              </button>
+            )}
+          />
         )}
       </div>
 

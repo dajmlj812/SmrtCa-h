@@ -46,6 +46,11 @@ describe('Health metrics (Phase 7.6)', () => {
     expect(body.app).toBeDefined();
     expect(body.app.uptime_seconds).toBeGreaterThanOrEqual(0);
     expect(body.app.node_version).toMatch(/^v\d+/);
+    // heap_size_limit is the real V8 ceiling — the Health page uses it
+    // for the Heap % gauge so the reading reflects actual headroom.
+    expect(body.app.heap_size_limit_bytes).toBeGreaterThan(
+      body.app.heap_used_bytes,
+    );
     expect(body.db).toBeDefined();
     expect(body.db.connected).toBe(true);
     expect(body.db.ping_ms).toBeGreaterThanOrEqual(0);

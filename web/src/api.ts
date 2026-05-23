@@ -449,6 +449,8 @@ export interface HealthSnapshot {
     rss_bytes: number;
     heap_used_bytes: number;
     heap_total_bytes: number;
+    /** V8 hard heap ceiling — use this for "how close to OOM" gauges. */
+    heap_size_limit_bytes: number;
     ai_provider: string;
     ai_model: string;
   };

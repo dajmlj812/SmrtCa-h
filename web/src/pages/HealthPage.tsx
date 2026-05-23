@@ -14,8 +14,22 @@ import {
   type MetricSample,
 } from '../api';
 
-const POLL_MS = 5000;
 const WINDOW_SEC = 300; // 5 minutes of trend data on each chart
+
+interface RefreshOption {
+  label: string;
+  ms: number; // 0 == paused
+}
+const REFRESH_OPTIONS: RefreshOption[] = [
+  { label: '1s',  ms: 1000 },
+  { label: '5s',  ms: 5000 },
+  { label: '10s', ms: 10000 },
+  { label: '30s', ms: 30000 },
+  { label: '60s', ms: 60000 },
+  { label: 'Off', ms: 0 },
+];
+const REFRESH_LS_KEY = 'health:refresh_ms';
+const DEFAULT_REFRESH_MS = 5000;
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -49,9 +63,17 @@ export function HealthPage() {
   const [snapshot, setSnapshot] = useState<HealthSnapshot | null>(null);
   const [series, setSeries] = useState<MetricSample[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [paused, setPaused] = useState(false);
-  const pausedRef = useRef(false);
-  pausedRef.current = paused;
+  const [refreshMs, setRefreshMs] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem(REFRESH_LS_KEY));
+      if (REFRESH_OPTIONS.some((o) => o.ms === stored)) return stored;
+    } catch {
+      /* ignore */
+    }
+    return DEFAULT_REFRESH_MS;
+  });
+  const refreshRef = useRef<number>(refreshMs);
+  refreshRef.current = refreshMs;
 
   async function load() {
     try {
@@ -69,15 +91,32 @@ export function HealthPage() {
 
   useEffect(() => {
     void load();
-    const t = setInterval(() => {
-      if (!pausedRef.current) void load();
-    }, POLL_MS);
-    return () => clearInterval(t);
   }, []);
 
+  // Re-create the interval whenever the user picks a new cadence.
+  // ms === 0 means paused — no interval scheduled.
+  useEffect(() => {
+    if (refreshMs <= 0) return;
+    const t = setInterval(() => void load(), refreshMs);
+    return () => clearInterval(t);
+  }, [refreshMs]);
+
+  function changeRefresh(ms: number) {
+    setRefreshMs(ms);
+    try {
+      localStorage.setItem(REFRESH_LS_KEY, String(ms));
+    } catch {
+      /* ignore */
+    }
+  }
+
   const latest = series.length > 0 ? series[series.length - 1]! : null;
+  // Use V8's hard ceiling (heap_size_limit) as the denominator. The
+  // older heap_used / heap_total ratio routinely sits at 70–90% because
+  // V8 grows heap_total only when needed, which made the gauge look
+  // alarming when it wasn't.
   const heapPct = snapshot
-    ? (snapshot.app.heap_used_bytes / Math.max(snapshot.app.heap_total_bytes, 1)) * 100
+    ? (snapshot.app.heap_used_bytes / Math.max(snapshot.app.heap_size_limit_bytes, 1)) * 100
     : 0;
 
   return (
@@ -86,20 +125,27 @@ export function HealthPage() {
         <div>
           <h1>Health</h1>
           <div className="subtitle">
-            Live app + database + storage metrics. Refreshes every{' '}
-            {POLL_MS / 1000}s · charts show last {WINDOW_SEC / 60} min.
+            Live app + database + storage metrics ·
+            charts show last {WINDOW_SEC / 60} min.
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className="btn secondary"
-            type="button"
-            onClick={() => setPaused((p) => !p)}
-          >
-            {paused ? 'Resume' : 'Pause'}
-          </button>
-          <button className="btn" type="button" onClick={() => void load()}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label className="muted" htmlFor="refresh-sel">
             Refresh
+          </label>
+          <select
+            id="refresh-sel"
+            value={refreshMs}
+            onChange={(e) => changeRefresh(Number(e.target.value))}
+          >
+            {REFRESH_OPTIONS.map((o) => (
+              <option key={o.ms} value={o.ms}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <button className="btn" type="button" onClick={() => void load()}>
+            Refresh now
           </button>
         </div>
       </div>
@@ -123,7 +169,7 @@ export function HealthPage() {
               value={heapPct}
               max={100}
               suffix="%"
-              hint={`${formatBytes(snapshot.app.heap_used_bytes)} / ${formatBytes(snapshot.app.heap_total_bytes)}`}
+              hint={`${formatBytes(snapshot.app.heap_used_bytes)} of ${formatBytes(snapshot.app.heap_size_limit_bytes)} cap`}
               tone={toneForPct(heapPct, 70, 90)}
             />
             <Gauge
@@ -235,7 +281,10 @@ export function HealthPage() {
               <Row label="Uptime" value={formatUptime(snapshot.app.uptime_seconds)} />
               <Row label="PID" value={String(snapshot.app.pid)} />
               <Row label="RSS" value={formatBytes(snapshot.app.rss_bytes)} />
-              <Row label="Heap" value={`${formatBytes(snapshot.app.heap_used_bytes)} / ${formatBytes(snapshot.app.heap_total_bytes)}`} />
+              <Row
+                label="Heap used / total / cap"
+                value={`${formatBytes(snapshot.app.heap_used_bytes)} / ${formatBytes(snapshot.app.heap_total_bytes)} / ${formatBytes(snapshot.app.heap_size_limit_bytes)}`}
+              />
               <Row
                 label="AI"
                 value={

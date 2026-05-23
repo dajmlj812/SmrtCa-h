@@ -13,6 +13,57 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.7.9] — 2026-05-23 — Fuzzy filters, column show/hide rollout, heap fix, configurable refresh
+
+Three knobs the user asked for, plus a real bug fix that was making the
+Health page's Heap gauge alarmist.
+
+### Fixed
+
+- **Heap gauge denominator** — the gauge was reading
+  `heap_used / heap_total * 100`. V8 grows `heap_total` only on demand,
+  so that ratio sits at 70–90% in steady-state regardless of actual
+  headroom, which made the gauge look critical when it wasn't. The
+  server now exposes `heap_size_limit_bytes` (V8's hard ceiling, from
+  `v8.getHeapStatistics()`), and the Heap gauge uses that as the
+  denominator. Typical values drop into single digits, and a number
+  approaching 80% genuinely means OOM is near.
+
+### Added
+
+- **Configurable refresh interval on `/health`** — header dropdown
+  with 1s / 5s / 10s / 30s / 60s / Off. Choice persists to localStorage
+  (`health:refresh_ms`) so reloading the page keeps your cadence.
+  Replaces the Pause button (Off serves that role now).
+- **Fuzzy-search mode in `FilterableTable`** — the per-column string
+  filter now also accepts subsequence matches: typing `gth` finds
+  "Groceries Total Health" (substring still works first). A new
+  **global filter** input in the toolbar searches every visible cell
+  with subsequence semantics — the closest thing to "fuzzy as you
+  type" in the spirit of a command palette. Numeric/date operator
+  syntax (`>100`, `2026-01..2026-06`) is unchanged.
+- **`FilterableTable` rowActions slot** — table accepts a per-row
+  React fragment renderer so pages with per-row buttons (Bills,
+  Subscriptions, Backups) keep their existing actions while gaining
+  filters + column show/hide.
+- **Filter / column show-hide rolled out**:
+  - `BillsPage` — both tables (bills + recurring income).
+  - `SubscriptionsPage` — active subscriptions table.
+  - `BackupsPage` — history table.
+  - `ReportsPage` already had it (since 0.7.7).
+  - `TransactionTable` is unchanged in this slice; its inline
+    category dropdown + selection + attachment/split actions don't
+    slot into `FilterableTable` cleanly, and the page already has a
+    server-side search. A targeted column chooser is queued.
+
+### Tests
+
+- The health snapshot test now asserts `heap_size_limit_bytes >
+  heap_used_bytes` so a regression to the old denominator is caught.
+- **Total: 351** (server 345 + web 6).
+
+---
+
 ## [0.7.8] — 2026-05-23 — Live gauges + line charts on the Health page
 
 Operator metrics the way a systems engineer wants them: a rolling-buffer

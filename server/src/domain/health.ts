@@ -1,5 +1,6 @@
 import { stat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import v8 from 'node:v8';
 import { pool } from '../db/pool.js';
 import { config } from '../config.js';
 import { resolveBackupDir } from './backup-runner.js';
@@ -21,6 +22,13 @@ export interface AppMetrics {
   rss_bytes: number;
   heap_used_bytes: number;
   heap_total_bytes: number;
+  /**
+   * V8's hard heap ceiling. `heap_used / heap_size_limit` is the real
+   * "how close are we to OOM" signal — `heap_total` is dynamic and
+   * commonly sits at 70–90% of itself in steady-state, which makes
+   * `heap_used / heap_total` a misleading gauge.
+   */
+  heap_size_limit_bytes: number;
   ai_provider: string;
   ai_model: string;
 }
@@ -84,6 +92,7 @@ export async function collectHealth(): Promise<HealthSnapshot> {
 
 function collectApp(): Promise<AppMetrics> {
   const mem = process.memoryUsage();
+  const heap = v8.getHeapStatistics();
   return Promise.resolve({
     app_version: APP_VERSION,
     node_version: process.version,
@@ -93,6 +102,7 @@ function collectApp(): Promise<AppMetrics> {
     rss_bytes: mem.rss,
     heap_used_bytes: mem.heapUsed,
     heap_total_bytes: mem.heapTotal,
+    heap_size_limit_bytes: heap.heap_size_limit,
     ai_provider: config.ai.provider,
     ai_model:
       config.ai.provider === 'claude'

@@ -43,6 +43,14 @@ interface Props {
     columns: ReportColumn[];
     rows: Array<Record<string, unknown>>;
   }) => void;
+  /**
+   * When provided, a per-row React fragment renderer (e.g. for action
+   * buttons or inline editors). Each row gets one extra trailing cell
+   * with this content.
+   */
+  rowActions?: (row: Record<string, unknown>) => React.ReactNode;
+  /** Label for the row-actions header, when rowActions is provided. */
+  rowActionsLabel?: string;
 }
 
 export function FilterableTable({
@@ -51,6 +59,8 @@ export function FilterableTable({
   formatCell,
   storageKey,
   onProjectionChange,
+  rowActions,
+  rowActionsLabel,
 }: Props) {
   const allKeys = useMemo(() => columns.map((c) => c.key), [columns]);
 
@@ -61,6 +71,7 @@ export function FilterableTable({
   });
   const [filtersOn, setFiltersOn] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [globalFilter, setGlobalFilter] = useState('');
   const [chooserOpen, setChooserOpen] = useState(false);
   const chooserRef = useRef<HTMLDivElement>(null);
 
@@ -111,11 +122,27 @@ export function FilterableTable({
         pred: buildPredicate(c, filters[c.key] ?? '', formatCell),
       }))
       .filter((p) => p.pred !== null);
-    if (predicates.length === 0) return rows;
-    return rows.filter((row) =>
-      predicates.every((p) => p.pred!(row[p.col.key], row)),
-    );
-  }, [rows, visibleColumns, filters, formatCell]);
+
+    const globalNeedle = globalFilter.trim().toLowerCase();
+    if (predicates.length === 0 && globalNeedle === '') return rows;
+
+    return rows.filter((row) => {
+      // Per-column filters: every active filter must match.
+      for (const p of predicates) {
+        if (!p.pred!(row[p.col.key], row)) return false;
+      }
+      // Global filter: fuzzy subsequence against the joined display of
+      // every visible cell. "gth" matches "Groceries Total Health".
+      if (globalNeedle !== '') {
+        const haystack = visibleColumns
+          .map((c) => formatCell(c, row[c.key]))
+          .join(' ')
+          .toLowerCase();
+        if (!subsequenceMatch(haystack, globalNeedle)) return false;
+      }
+      return true;
+    });
+  }, [rows, visibleColumns, filters, globalFilter, formatCell]);
 
   // Emit projection upward whenever it changes.
   useEffect(() => {
@@ -138,31 +165,43 @@ export function FilterableTable({
     });
   }
 
-  const activeFilterCount = Object.values(filters).filter(
+  const perColumnFilterCount = Object.values(filters).filter(
     (v) => v.trim() !== '',
   ).length;
+  const globalActive = globalFilter.trim() !== '';
+  const activeFilterCount = perColumnFilterCount + (globalActive ? 1 : 0);
   const hiddenCount = columns.length - visibleColumns.length;
 
   return (
     <div>
       <div className="table-toolbar">
+        <input
+          type="search"
+          className="filter-global"
+          placeholder="Fuzzy filter…"
+          value={globalFilter}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+        />
         <button
           type="button"
           className="btn secondary"
           onClick={() => setFiltersOn((on) => !on)}
         >
-          {filtersOn ? 'Hide filters' : 'Filter'}
-          {activeFilterCount > 0 && (
-            <span className="badge">{activeFilterCount}</span>
+          {filtersOn ? 'Hide per-column' : 'Per-column'}
+          {perColumnFilterCount > 0 && (
+            <span className="badge">{perColumnFilterCount}</span>
           )}
         </button>
-        {filtersOn && activeFilterCount > 0 && (
+        {activeFilterCount > 0 && (
           <button
             type="button"
             className="btn-link"
-            onClick={() => setFilters({})}
+            onClick={() => {
+              setFilters({});
+              setGlobalFilter('');
+            }}
           >
-            Clear all filters
+            Clear all
           </button>
         )}
         <div className="spacer" />
@@ -222,6 +261,7 @@ export function FilterableTable({
                   {c.label}
                 </th>
               ))}
+              {rowActions && <th>{rowActionsLabel ?? ''}</th>}
             </tr>
             {filtersOn && (
               <tr className="filter-row">
@@ -241,13 +281,17 @@ export function FilterableTable({
                     />
                   </th>
                 ))}
+                {rowActions && <th></th>}
               </tr>
             )}
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={visibleColumns.length} className="empty">
+                <td
+                  colSpan={visibleColumns.length + (rowActions ? 1 : 0)}
+                  className="empty"
+                >
                   No rows match the current filters.
                 </td>
               </tr>
@@ -268,6 +312,7 @@ export function FilterableTable({
                       {formatCell(c, row[c.key])}
                     </td>
                   ))}
+                  {rowActions && <td>{rowActions(row)}</td>}
                 </tr>
               ))
             )}
@@ -276,6 +321,23 @@ export function FilterableTable({
       </div>
     </div>
   );
+}
+
+/**
+ * Fuzzy subsequence match: returns true when every character of
+ * `needle` appears in `haystack` in order (gaps allowed). Used by the
+ * global filter and by per-column string filters.
+ */
+function subsequenceMatch(haystack: string, needle: string): boolean {
+  if (needle === '') return true;
+  let h = 0;
+  for (let n = 0; n < needle.length; n++) {
+    const ch = needle.charCodeAt(n);
+    while (h < haystack.length && haystack.charCodeAt(h) !== ch) h++;
+    if (h >= haystack.length) return false;
+    h++;
+  }
+  return true;
 }
 
 function readStoredVisibility(storageKey: string | null | undefined): string[] | null {
@@ -302,7 +364,7 @@ function placeholderFor(c: ReportColumn): string {
     case 'date':
       return '>2026-01-01, 2026-01..2026-06';
     default:
-      return 'contains…';
+      return 'fuzzy…';
   }
 }
 
@@ -320,7 +382,9 @@ function buildPredicate(
     const needle = expr.toLowerCase();
     return (cell) => {
       const s = formatCell(col, cell).toLowerCase();
-      return s.includes(needle);
+      // Substring is a hit; otherwise fall through to subsequence so
+      // a user can type "gth" and find "Groceries Total Health".
+      return s.includes(needle) || subsequenceMatch(s, needle);
     };
   }
 
