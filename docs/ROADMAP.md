@@ -19,7 +19,7 @@ nothing is "all or nothing."
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
 | 8 | Connectivity & Automation | ✅ Complete — 2026-05-23 |
-| 9 | Mobile, Assistant & Experience | 🔜 In progress — 9.0 ✅ · 9.1 ✅ · 9.2 ✅ |
+| 9 | Mobile, Assistant & Experience | ✅ Complete — 2026-05-23 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -256,7 +256,7 @@ Sliced into four releases:
 
 ---
 
-## Phase 9 — Mobile, Assistant & Experience 🔜
+## Phase 9 — Mobile, Assistant & Experience ✅
 
 **Goal:** Make SmrtCash a pleasure to use anywhere.
 
@@ -285,7 +285,15 @@ Sliced into four releases:
   with split-equally + manual allocation. Two new assistant tools
   (`share_summary`, `split_transaction`) so the AI can answer "who
   owes me?" and "split this dinner 4 ways" in natural language.
-- **9.3** 📋 — **Calendar budget view**.
+- **9.3** ✅ (released as 0.12.3) — **Calendar budget view**.
+  Single new endpoint `GET /api/calendar/:month` returns per-day
+  spend / income / txn-count plus bill-due-marker ids, monthly
+  totals (spend, income, budget), and upcoming bills. New
+  `/calendar` page renders a 7-column grid with intensity-based
+  spending heatmap, bill-due markers, click-a-day drawer showing
+  that day's transactions. Tenant-scoped. One new assistant
+  read tool (`calendar_month_summary`) so the AI can answer
+  "what does my May calendar look like?".
 
 ---
 

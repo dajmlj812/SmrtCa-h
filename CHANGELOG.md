@@ -9,8 +9,82 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 9 in progress. 0.12.0–0.12.2 shipped. Next: 0.12.3 calendar
-view closes Phase 9._
+_All nine phases of the roadmap are complete. The product reached
+feature parity with the original plan in 0.12.3._
+
+---
+
+## [0.12.3] — 2026-05-23 — Calendar budget view (Phase 9.3, closes Phase 9 + roadmap)
+
+Final planned roadmap release. With this slice every Phase 9
+deliverable from the original roadmap is live, and **all nine
+phases are complete**.
+
+### Server
+
+- New `server/src/routes/calendar.ts` — `GET /api/calendar/:month`
+  (YYYY-MM). Returns per-day aggregates (spend / income / txn
+  count / bill-due-ids), monthly totals (spend / income / budget),
+  today's position within the month for pace math, and the next
+  14 days of upcoming bills. Tenant-scoped via the
+  `accounts.tenant_id` join — surfaced by a tenant-isolation test.
+  Postgres does the date math (`date_trunc`, `EXTRACT(DAY FROM …)`)
+  so JS Date's local-vs-UTC footguns can't bleed in.
+- `GET /api/transactions` extended (**additive**) with
+  optional `startDate` / `endDate` query params. Validated as
+  YYYY-MM-DD; existing callers unaffected. The CalendarPage day
+  drawer uses these to load just one day's worth.
+- New assistant tool `calendar_month_summary` (read, tenant-
+  scoped). Total assistant tools: **15**.
+
+### Web
+
+- New `web/src/pages/CalendarPage.tsx` and `/calendar` route in
+  the tenant sidebar. Month nav (prev / today / next), four
+  summary cards (spent / income / budgeted / pace), a 7-column
+  grid built from leading-blank + day-cells + trailing-blank so
+  the first row aligns to Sunday. Each day cell shows the date,
+  spend total, bill-due ▲ marker when applicable, and a faint red
+  background tint scaled by that day's spending vs. the month's
+  max.
+- Clicking a day loads that day's transactions via the new
+  date-filter params and renders them under the grid.
+- "Upcoming bills (next 14 days)" table below the grid surfaces
+  the response's `upcoming_bills` field.
+- Calendar CSS appended to `web/src/styles.css`.
+
+### Tests (+7 server)
+
+- `tests/integration/calendar.test.ts` — 7 tests: invalid month
+  format (400), days-in-month for May / Feb 2026 / Feb 2028
+  (leap), per-day spend + income + count aggregation, month-
+  boundary guards (Apr 30 and Jun 1 must NOT appear in the May
+  payload), bill-due markers on the right day, budget total
+  summed correctly across multiple budget rows for the month,
+  cross-tenant isolation (a transaction in another tenant must
+  not leak into the default tenant's calendar).
+- Total: **512 tests** (506 server + 6 web), all green.
+
+### Files
+
+```
+server/src/routes/calendar.ts                 (new)
+server/src/routes/transactions.ts             (+startDate/endDate filters)
+server/src/app.ts                             (register route)
+server/src/domain/assistant/tools.ts          (+calendar_month_summary)
+server/tests/integration/calendar.test.ts     (new)
+web/src/api.ts                                (calendarMonth + types)
+web/src/pages/CalendarPage.tsx                (new)
+web/src/styles.css                            (.calendar-* grid)
+web/src/App.tsx                               (nav + route)
+```
+
+### What's next
+
+This is the last planned release of the original nine-phase
+roadmap. From here, future work is **backlog items** (multi-user
+permission tuning, tax-category reports, crypto tracking, native
+mobile, etc.) or whatever the user decides is the next priority.
 
 ---
 

@@ -94,6 +94,36 @@ export interface OfxDcConnectionInput {
   enabled?: boolean;
 }
 
+export interface CalendarDay {
+  date: string;
+  spend_cents: number;
+  income_cents: number;
+  txn_count: number;
+  bill_due_ids: string[];
+}
+
+export interface CalendarMonthResponse {
+  year: number;
+  month: number;
+  daysInMonth: number;
+  monthStart: string;
+  monthEnd: string;
+  days: CalendarDay[];
+  totals: {
+    spend_cents: number;
+    income_cents: number;
+    budget_cents: number;
+    today_position: number | null;
+  };
+  upcoming_bills: Array<{
+    id: string;
+    name: string;
+    next_due_date: string;
+    amount_cents: number;
+    frequency: string;
+  }>;
+}
+
 export interface SplitParticipant {
   id: string;
   name: string;
@@ -899,6 +929,8 @@ export const api = {
     limit?: number;
     offset?: number;
     uncategorized?: boolean;
+    startDate?: string;
+    endDate?: string;
   }) => {
     const q = new URLSearchParams();
     if (params.accountId) q.set('accountId', params.accountId);
@@ -906,6 +938,8 @@ export const api = {
     if (params.limit != null) q.set('limit', String(params.limit));
     if (params.offset != null) q.set('offset', String(params.offset));
     if (params.uncategorized) q.set('uncategorized', 'true');
+    if (params.startDate) q.set('startDate', params.startDate);
+    if (params.endDate) q.set('endDate', params.endDate);
     return http<TransactionPage>(`/api/transactions?${q.toString()}`);
   },
 
@@ -2032,6 +2066,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages }),
     }),
+
+  // ── Calendar (Phase 9.3 / 0.12.3) ────────────────────────
+  calendarMonth: (month: string) =>
+    http<CalendarMonthResponse>(`/api/calendar/${month}`),
 
   // ── Bill-splitting (Phase 9.2 / 0.12.2) ──────────────────
   listSplitParticipants: (includeArchived = false) =>

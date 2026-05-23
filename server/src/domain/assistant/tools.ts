@@ -531,6 +531,56 @@ const updateSavingsGoal: AssistantTool = {
   },
 };
 
+const calendarMonth: AssistantTool = {
+  name: 'calendar_month_summary',
+  description:
+    'Per-day spend + income totals for a calendar month plus bills due in that month. Useful for "what does my May calendar look like?" or "which day did I spend the most?".',
+  kind: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      month: { type: 'string', description: 'YYYY-MM (defaults to current month)' },
+    },
+  },
+  async execute(ctx, input) {
+    const i = input as { month?: string };
+    const now = new Date();
+    const month =
+      i.month ||
+      `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    const m = month.match(/^(\d{4})-(\d{2})$/);
+    if (!m) throw new Error('month must be YYYY-MM');
+    const monthStart = `${m[1]}-${m[2]}-01`;
+
+    const days = await pool.query(
+      `SELECT t.txn_date::text AS date,
+              COALESCE(SUM(CASE WHEN t.amount_cents < 0 THEN -t.amount_cents ELSE 0 END), 0)::bigint
+                AS spend_cents,
+              COALESCE(SUM(CASE WHEN t.amount_cents > 0 THEN t.amount_cents ELSE 0 END), 0)::bigint
+                AS income_cents,
+              COUNT(*)::int AS txn_count
+         FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
+        WHERE a.tenant_id = $1
+          AND t.txn_date >= $2::date
+          AND t.txn_date <  (date_trunc('month', $2::date) + interval '1 month')::date
+        GROUP BY t.txn_date
+        ORDER BY t.txn_date`,
+      [ctx.tenantId, monthStart],
+    );
+    const bills = await pool.query(
+      `SELECT id, name, next_due_date::text AS next_due, amount_cents
+         FROM bills
+        WHERE tenant_id = $1 AND active = true
+          AND next_due_date >= $2::date
+          AND next_due_date <  (date_trunc('month', $2::date) + interval '1 month')::date
+        ORDER BY next_due_date`,
+      [ctx.tenantId, monthStart],
+    );
+    return { month, days: days.rows, bills: bills.rows };
+  },
+};
+
 const shareSummary: AssistantTool = {
   name: 'share_summary',
   description:
@@ -654,6 +704,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   listBudgets,
   listBills,
   listGoals,
+  calendarMonth,
   shareSummary,
   updateTransactionCategory,
   bulkRecategorize,

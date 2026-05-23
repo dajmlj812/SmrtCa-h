@@ -2229,6 +2229,76 @@ code {
 }
 
 /* ─────────────────────────────────────────────────────────────
+ * Phase 9.3 — Calendar grid
+ * ─────────────────────────────────────────────────────────── */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 16px;
+}
+.calendar-weekday {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.calendar-blank {
+  background: transparent;
+  min-height: 88px;
+}
+.calendar-day {
+  position: relative;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-height: 88px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  transition: transform 0.05s ease, border-color 0.15s ease;
+  /* Layer the intensity tint behind the surface so light + dark modes
+   * both still show readable text. --day-intensity is set per cell. */
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--neg) calc(var(--day-intensity, 0) * 26%), transparent),
+    color-mix(in srgb, var(--neg) calc(var(--day-intensity, 0) * 26%), transparent)
+  );
+}
+.calendar-day:hover {
+  border-color: var(--accent);
+}
+.calendar-day.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.calendar-day-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.calendar-day-num {
+  font-weight: 700;
+  font-size: 14px;
+}
+.calendar-bill-marker {
+  color: var(--accent);
+  font-size: 12px;
+}
+.calendar-spend {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neg);
+}
+.calendar-count {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* ─────────────────────────────────────────────────────────────
  * Phase 9.1 — Assistant chat UI
  * ─────────────────────────────────────────────────────────── */
 .assistant-page {

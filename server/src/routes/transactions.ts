@@ -9,6 +9,9 @@ interface TransactionQuery {
   limit?: string;
   offset?: string;
   uncategorized?: string;
+  /** Phase 9.3: inclusive date filters (YYYY-MM-DD). */
+  startDate?: string;
+  endDate?: string;
 }
 
 interface ExportQuery {
@@ -182,6 +185,15 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       const search = req.query.search?.trim() || null;
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
       const offset = Math.max(Number(req.query.offset) || 0, 0);
+      const startDate = req.query.startDate?.trim() || null;
+      const endDate = req.query.endDate?.trim() || null;
+      const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+      if (startDate && !isoDate.test(startDate)) {
+        return reply.code(400).send({ error: 'startDate must be YYYY-MM-DD' });
+      }
+      if (endDate && !isoDate.test(endDate)) {
+        return reply.code(400).send({ error: 'endDate must be YYYY-MM-DD' });
+      }
       // Child role: scope to accounts the admin assigned. If they
       // asked for a specific account they don't have access to, return
       // an empty page rather than 403 — the inline filter wouldn't
@@ -250,9 +262,11 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
              AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
            ))
            AND ($6::uuid[] IS NULL OR t.account_id = ANY($6::uuid[]))
+           AND ($7::date IS NULL OR t.txn_date >= $7)
+           AND ($8::date IS NULL OR t.txn_date <= $8)
          ORDER BY t.txn_date DESC, t.created_at DESC
          LIMIT $3 OFFSET $4`,
-        [accountId, search, limit, offset, uncategorized, scopedIds],
+        [accountId, search, limit, offset, uncategorized, scopedIds, startDate, endDate],
       );
 
       const count = await query<{ total: number }>(
@@ -265,8 +279,10 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
               OR t.category_id = (SELECT id FROM categories WHERE name = 'Uncategorized' AND parent_id IS NULL LIMIT 1))
              AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
            ))
-           AND ($4::uuid[] IS NULL OR t.account_id = ANY($4::uuid[]))`,
-        [accountId, search, uncategorized, scopedIds],
+           AND ($4::uuid[] IS NULL OR t.account_id = ANY($4::uuid[]))
+           AND ($5::date IS NULL OR t.txn_date >= $5)
+           AND ($6::date IS NULL OR t.txn_date <= $6)`,
+        [accountId, search, uncategorized, scopedIds, startDate, endDate],
       );
 
       return {
