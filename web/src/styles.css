@@ -2227,3 +2227,154 @@ code {
   padding: 10px 14px;
   margin-bottom: 14px;
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * Phase 9.0 — PWA + responsive
+ * ─────────────────────────────────────────────────────────── */
+
+/* Hamburger toggle — hidden on desktop, visible in the mobile bar. */
+.mobile-bar {
+  display: none;
+}
+.mobile-bar-spacer { flex: 1; }
+.hamburger {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* Install prompt — pinned to the bottom on small screens, inline
+ * card-style at the bottom-right on desktop. Never blocks content. */
+.install-prompt {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  max-width: 320px;
+}
+.install-prompt-actions { display: flex; gap: 8px; }
+
+/* Offline pill — small floating chip when the browser reports the
+ * connection is down. The service worker keeps already-fetched routes
+ * usable; this is just a heads-up. */
+.offline-pill {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 50;
+  padding: 6px 12px;
+  background: var(--neg);
+  color: #ffffff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Backdrop behind the mobile drawer. */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 30;
+}
+
+/* ── Narrow screens ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app {
+    flex-direction: column;
+  }
+
+  /* Sidebar becomes a slide-out drawer. Closed by default; open via
+   * data-open="true" set from the hamburger handler in App.tsx. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 80vw;
+    max-width: 280px;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 40;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.3);
+  }
+  .sidebar[data-open='true'] { transform: translateX(0); }
+  .sidebar[data-open='true'] + .sidebar-backdrop { display: block; }
+
+  .mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .mobile-bar .brand { padding: 0; font-size: 18px; }
+
+  .content {
+    padding: 16px;
+    max-width: 100%;
+  }
+
+  /* Page header reflows to two lines. */
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* Form grid stacks to one column. */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Cards lose horizontal padding so they don't look cramped. */
+  .card { padding: 14px; }
+  .card-grid { grid-template-columns: 1fr !important; }
+
+  /* Tables get the horizontal scroll affordance — already wrapped by
+   * .table-wrap but the scrollbar needs to be obvious on touch. */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table-wrap table { min-width: 480px; }
+
+  /* Touch-friendly tap targets. */
+  .btn,
+  .btn.small,
+  .nav a {
+    min-height: 44px;
+  }
+
+  /* Install prompt fills the bottom on phones. */
+  .install-prompt {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: none;
+  }
+}

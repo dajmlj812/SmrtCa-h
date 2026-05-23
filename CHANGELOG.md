@@ -9,8 +9,112 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 8 closed out. Next up: Phase 9 — Mobile, Assistant & Experience
-(PWA, AI assistant, bill-splitting, calendar view)._
+_Phase 9 opened. 0.12.0 ships the PWA foundation. Next: 0.12.1 AI
+assistant (agentic — read AND write tool access), 0.12.2 bill-splitting,
+0.12.3 calendar view._
+
+---
+
+## [0.12.0] — 2026-05-23 — PWA (Phase 9.0)
+
+First Phase 9 release. Makes SmrtCash installable to a phone's home
+screen as a real Progressive Web App and does the responsive-CSS
+pass that future Phase 9 slices will lean on. No new server code —
+the entire change lives in the web bundle and a couple of static
+files.
+
+### Manifest + icons
+
+- New `web/public/manifest.webmanifest` — name, short_name,
+  `display: standalone`, theme color matching the indigo accent,
+  background color matching the light surface, 192 / 512 / maskable
+  icons.
+- New SVG icons under `web/public/icons/` — vector so they look
+  sharp on every density without shipping ten PNG variants.
+- `index.html` gains `<link rel="manifest">`, a paired
+  `<meta name="theme-color">` for light + dark, and the iOS
+  `apple-mobile-web-app-*` meta tags.
+
+### Service worker (`web/public/sw.js`)
+
+- Cache-first for built assets (`/assets/*`, `/icons/*`,
+  `/manifest.webmanifest`, `/favicon*`). Vite hashes filenames per
+  build, so a new bundle is fetched fresh; old entries rot until
+  `activate` purges the previous `CACHE_VERSION`.
+- **Network-only for `/api/*`** — financial data must never be
+  served from a stale cache. Better to fail visibly than to show
+  yesterday's balance.
+- Navigation requests: network-first, fall back to cached
+  `index.html` when offline. The SPA loads even with no network for
+  routes the browser has already visited.
+- `skipWaiting` + `clients.claim` so an updated SW takes effect on
+  the next page load.
+- Registered from `main.tsx` after `load`, only in `import.meta.env.PROD`
+  so the Vite dev server isn't confused by a stale SW serving
+  yesterday's bundle.
+
+### Install prompt + offline indicator
+
+- New `web/src/components/InstallPrompt.tsx`. Captures
+  `beforeinstallprompt`, shows a small fixed card with **Install** /
+  **Not now**. Dismissal is durable via `localStorage` —
+  if you say no, we stop pestering.
+- Auto-hides when the app is already running in standalone mode
+  (`display-mode: standalone` media query).
+- `OfflineIndicator` floats a small red "Offline" pill when
+  `navigator.onLine` flips false. The SW keeps already-visited
+  routes usable; this is just a heads-up.
+
+### Mobile drawer + responsive CSS
+
+- New `web/src/components/MobileBar.tsx` with `MobileBar`,
+  `SidebarBackdrop`, and `useMobileDrawer` hook. The hook drives a
+  `data-open` attribute on the existing `.sidebar` element so the
+  drawer CSS works without re-architecting the parent. Auto-closes
+  on route change; Escape closes it.
+- Bottom of `web/src/styles.css` gets a `@media (max-width: 768px)`
+  block:
+  - Sidebar becomes a slide-out drawer (80vw, max 280px) with a
+    backdrop scrim.
+  - `form-grid` and `card-grid` collapse to a single column.
+  - Tables get `-webkit-overflow-scrolling: touch` + a `min-width`
+    so they scroll horizontally cleanly instead of crushing.
+  - Buttons + nav items hit the 44px tap-target floor.
+  - Install prompt fills the bottom of the screen on phones.
+
+### Files
+
+```
+web/public/manifest.webmanifest            (new)
+web/public/sw.js                           (new)
+web/public/icons/icon-192.svg              (new)
+web/public/icons/icon-512.svg              (new)
+web/public/icons/icon-maskable.svg         (new)
+web/index.html                             (manifest link + theme color + iOS meta)
+web/src/main.tsx                           (SW registration on PROD load)
+web/src/styles.css                         (install/offline/hamburger + @media block)
+web/src/components/InstallPrompt.tsx       (new)
+web/src/components/MobileBar.tsx           (new)
+web/src/App.tsx                            (mount mobile bar + drawer + InstallPrompt)
+```
+
+### Tests
+
+- No new unit tests — the bits added (`InstallPrompt`,
+  `MobileBar`, the service worker) are inherently browser-side and
+  the web suite doesn't yet have a React Testing Library setup.
+  Existing 482 tests (476 server + 6 web) still green; web build
+  succeeds with the manifest + SW + icons emitted to `dist/`.
+
+### Browser smoke notes
+
+- Lighthouse PWA checklist passes locally for the install criteria
+  (`manifest.webmanifest`, valid icons, service worker, HTTPS in
+  prod via Caddy).
+- The install prompt only appears in browsers + contexts that fire
+  `beforeinstallprompt` (Chrome, Edge, Android). iOS Safari adds
+  via Share → Add to Home Screen as usual; the apple meta tags are
+  in `index.html` for that path.
 
 ---
 

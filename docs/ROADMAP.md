@@ -19,7 +19,7 @@ nothing is "all or nothing."
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
 | 8 | Connectivity & Automation | ✅ Complete — 2026-05-23 |
-| 9 | Mobile, Assistant & Experience | 📋 Planned |
+| 9 | Mobile, Assistant & Experience | 🔜 In progress — 9.0 ✅ |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -256,16 +256,23 @@ Sliced into four releases:
 
 ---
 
-## Phase 9 — Mobile, Assistant & Experience 📋
+## Phase 9 — Mobile, Assistant & Experience 🔜
 
 **Goal:** Make SmrtCash a pleasure to use anywhere.
 
-- **Installable PWA** — responsive, mobile-optimized layout, installable to a
-  phone's home screen, still served from your own container
-- **AI financial assistant** — conversational insights and Q&A over your data
-  (builds on the Phase 2 AI infrastructure; Monarch-style)
-- **Bill-splitting / shared expenses** (Monarch-style)
-- **Calendar budget view** (Calendarbudget-style)
+Sliced into four releases:
+
+- **9.0** ✅ (released as 0.12.0) — **Installable PWA**. Web app
+  manifest, service worker (cache-first for built assets,
+  network-only for `/api/*`, offline app-shell fallback), responsive
+  CSS pass with a collapsible mobile drawer, install prompt that
+  surfaces `beforeinstallprompt`, offline indicator pill. Same
+  container — no second deployment.
+- **9.1** 🔜 — **AI financial assistant**. Natural-language Q&A
+  over your data with full read + write tool access, built on the
+  Phase 2 AI infrastructure (Claude / Ollama / rules).
+- **9.2** 📋 — **Bill-splitting / shared expenses**.
+- **9.3** 📋 — **Calendar budget view**.
 
 ---
 

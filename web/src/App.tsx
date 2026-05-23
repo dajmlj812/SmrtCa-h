@@ -27,6 +27,8 @@ import { SystemPage } from './pages/SystemPage';
 import { RetirementPage } from './pages/RetirementPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { ThemeToggle } from './components/ThemeToggle';
+import { MobileBar, SidebarBackdrop, useMobileDrawer } from './components/MobileBar';
+import { InstallPrompt, OfflineIndicator } from './components/InstallPrompt';
 
 type AuthState =
   | 'loading'
@@ -95,6 +97,7 @@ export function App() {
 }
 
 function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
+  const { open, setOpen } = useMobileDrawer();
   async function logout() {
     try {
       await api.authLogout();
@@ -105,6 +108,7 @@ function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
   }
   return (
     <div className="app">
+      <MobileBar open={open} onToggle={() => setOpen(!open)} label="SmrtCash · super" />
       <aside className="sidebar">
         <div className="brand">
           Smrt<span>Cash</span>
@@ -143,11 +147,15 @@ function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
+      <SidebarBackdrop open={open} onClose={() => setOpen(false)} />
+      <InstallPrompt />
+      <OfflineIndicator />
     </div>
   );
 }
 
 function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
+  const { open, setOpen } = useMobileDrawer();
   async function logout() {
     try {
       await api.authLogout();
@@ -159,6 +167,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <div className="app">
+      <MobileBar open={open} onToggle={() => setOpen(!open)} />
       <aside className="sidebar">
         <div className="brand">
           Smrt<span>Cash</span>
@@ -218,6 +227,9 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/workspace" element={<WorkspacePage />} />
         </Routes>
       </main>
+      <SidebarBackdrop open={open} onClose={() => setOpen(false)} />
+      <InstallPrompt />
+      <OfflineIndicator />
     </div>
   );
 }
