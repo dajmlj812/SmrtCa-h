@@ -26,6 +26,7 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { SystemPage } from './pages/SystemPage';
 import { RetirementPage } from './pages/RetirementPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
+import { AssistantPage } from './pages/AssistantPage';
 import { ThemeToggle } from './components/ThemeToggle';
 import { MobileBar, SidebarBackdrop, useMobileDrawer } from './components/MobileBar';
 import { InstallPrompt, OfflineIndicator } from './components/InstallPrompt';
@@ -190,6 +191,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/import">Import</NavLink>
           <NavLink to="/connections">Connections</NavLink>
+          <NavLink to="/assistant">Assistant</NavLink>
           <NavLink to="/reports">Reports</NavLink>
           <NavLink to="/workspace">Workspace</NavLink>
         </nav>
@@ -223,6 +225,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/assistant" element={<AssistantPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
         </Routes>

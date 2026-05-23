@@ -19,7 +19,7 @@ nothing is "all or nothing."
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
 | 8 | Connectivity & Automation | ✅ Complete — 2026-05-23 |
-| 9 | Mobile, Assistant & Experience | 🔜 In progress — 9.0 ✅ |
+| 9 | Mobile, Assistant & Experience | 🔜 In progress — 9.0 ✅ · 9.1 ✅ |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -268,9 +268,13 @@ Sliced into four releases:
   CSS pass with a collapsible mobile drawer, install prompt that
   surfaces `beforeinstallprompt`, offline indicator pill. Same
   container — no second deployment.
-- **9.1** 🔜 — **AI financial assistant**. Natural-language Q&A
-  over your data with full read + write tool access, built on the
-  Phase 2 AI infrastructure (Claude / Ollama / rules).
+- **9.1** ✅ (released as 0.12.1) — **AI financial assistant**.
+  Multi-turn tool-use loop against Claude with 12 tools (8 read,
+  4 write). Tenant-scoped on every call; every write tool calls
+  `recordAudit()` so the super-admin audit log captures every
+  change. Children blocked. Bulk operations hard-capped at 500.
+  New /assistant chat page with inline tool-call chips so the
+  user sees exactly what the assistant did.
 - **9.2** 📋 — **Bill-splitting / shared expenses**.
 - **9.3** 📋 — **Calendar budget view**.
 

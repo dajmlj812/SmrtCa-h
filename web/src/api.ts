@@ -94,6 +94,26 @@ export interface OfxDcConnectionInput {
   enabled?: boolean;
 }
 
+export interface AssistantClientMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AssistantToolCall {
+  name: string;
+  kind: 'read' | 'write';
+  input: unknown;
+  result?: unknown;
+  error?: string;
+}
+
+export interface AssistantChatResponse {
+  reply: string;
+  toolCalls: AssistantToolCall[];
+  iterations: number;
+  stopReason: 'end_turn' | 'tool_use_loop_cap' | 'error';
+}
+
 export interface PlaidItemSummary {
   id: string;
   plaid_item_id: string;
@@ -1952,6 +1972,17 @@ export const api = {
       ofxDc: { attempted: number; succeeded: number; failed: number };
       plaid: { attempted: number; succeeded: number; failed: number };
     }>('/api/auto-sync/run', { method: 'POST' }),
+
+  // ── Assistant (Phase 9.1 / 0.12.1) ───────────────────────
+  assistantStatus: () =>
+    http<{ available: boolean; reason?: string }>('/api/assistant/status'),
+
+  assistantChat: (messages: AssistantClientMessage[]) =>
+    http<AssistantChatResponse>('/api/assistant/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages }),
+    }),
 
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),

@@ -9,9 +9,128 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 9 opened. 0.12.0 ships the PWA foundation. Next: 0.12.1 AI
-assistant (agentic — read AND write tool access), 0.12.2 bill-splitting,
-0.12.3 calendar view._
+_Phase 9 in progress. 0.12.0 + 0.12.1 shipped. Next: 0.12.2 bill-
+splitting, 0.12.3 calendar view._
+
+---
+
+## [0.12.1] — 2026-05-23 — AI assistant (Phase 9.1, agentic)
+
+Second Phase 9 release. Adds an in-app AI assistant that can answer
+natural-language questions over your data **and** make changes —
+recategorize transactions, bulk re-tag, create budgets, mark bills
+paid, top up savings goals. Every write tool call records an entry in
+the existing super-admin audit log so the operator can see exactly
+what the assistant did and when.
+
+### Tools (`server/src/domain/assistant/tools.ts`)
+
+Twelve tools — 8 read + 4 write. Each tool runs **scoped to the
+authenticated session's tenant**. The model never picks the tenant;
+the runtime hard-wires it from `req.user.tenantId`.
+
+**Read tools:**
+
+- `query_transactions` — filter by date range, account, category,
+  description substring, amount range. Hard cap 200 rows.
+- `account_balances` — current balance per account.
+- `list_categories` — every category with parent.
+- `spending_by_category` — totals over a date range.
+- `list_budgets` — per-month budget rows.
+- `list_bills` — bill reminders + next-due dates.
+- `list_savings_goals` — target / current / deadline.
+
+**Write tools** (all call `recordAudit()` before returning):
+
+- `update_transaction_category` — single transaction.
+- `bulk_recategorize` — match by `descriptionContains` ILIKE +
+  optional date range, set category in one shot. **Hard cap: 500
+  transactions per call** so a confused model can't rewrite the
+  whole history.
+- `create_budget` — set/upsert a monthly budget. Honors the DB CHECK
+  (`amount_cents > 0`).
+- `mark_bill_paid` — advances `next_due_date` by the bill's
+  frequency.
+- `update_savings_goal` — accepts either `deltaCents` or
+  `currentCents`.
+
+Every write tool also returns the canonical row data so the assistant
+can confirm to the user what changed.
+
+### Runtime (`server/src/domain/assistant/runtime.ts`)
+
+- Tool-use loop against Anthropic's Messages API. Hard cap
+  `MAX_ITERATIONS=8` — if the model keeps requesting tools, the
+  loop bails with `stopReason='tool_use_loop_cap'` so the UI can
+  prompt the user to break the work into smaller asks.
+- System prompt explicitly tells the model:
+  - Data is tenant-scoped; you can't see other users' data.
+  - Prefer querying for current data over guessing.
+  - Amounts are integer cents; format as `$` for display.
+  - Never invent transaction IDs / category names — call `list_*`
+    first.
+  - For bulk writes, run the read tool first and confirm intent.
+- `assistantAvailable()` checks DB-effective settings (not just
+  boot-time config). Returns `{available: false, reason}` until
+  `AI_PROVIDER=claude` + `ANTHROPIC_API_KEY` are both set.
+
+### Routes (`server/src/routes/assistant.ts`)
+
+- `GET /api/assistant/status` — available / unavailable + reason.
+  Reports unavailable for `child` role regardless of config.
+- `POST /api/assistant/chat` — body `{messages: [{role, content}]}`.
+  Caps incoming history at last 40 messages. Returns
+  `{reply, toolCalls, iterations, stopReason}`. **Children get
+  403**; admins + spouses both allowed.
+
+### Web
+
+- New `web/src/pages/AssistantPage.tsx` — chat-style UI with
+  message bubbles, inline tool-call chips (🔍 read, ✎ write, red
+  on error), suggested starter prompts, Enter-to-send + Shift+Enter
+  newline, scroll-to-bottom on update. Hides itself if
+  `/api/assistant/status` reports unavailable.
+- New nav link in the tenant sidebar, between Connections and Reports.
+- Chat-specific styles appended to `styles.css`.
+
+### Test infra fix
+
+- `seedAccount()` previously created accounts with NULL
+  `tenant_id`. The new assistant tools correctly enforce tenant
+  scoping, which exposed the gap. `seedAccount()` now defaults to
+  the seeded Default tenant; existing tests unaffected. Pass
+  `tenantId: null` to opt out.
+
+### Tests (+15 server)
+
+- `tests/unit/assistant-tools.test.ts` — 7 tests: tool-registry
+  hygiene (unique names, valid input schemas), `query_transactions`
+  filters, tenant-isolation (cross-tenant data not leaked),
+  `update_transaction_category` + audit entry,
+  `bulk_recategorize` updates + audit entry, `create_budget`
+  positive-amount enforcement, `mark_bill_paid` date math,
+  `update_savings_goal` delta + absolute set.
+- `tests/integration/assistant.test.ts` — 8 tests: status off/on,
+  child role rejection, empty-payload rejection, read-only loop
+  end-to-end, write tool writes an audit entry, tool-error
+  recovery (loop continues), MAX_ITERATIONS cap engages.
+- Total: **498 tests** (492 server + 6 web), all green.
+
+### Files
+
+```
+server/src/domain/assistant/tools.ts          (new)
+server/src/domain/assistant/runtime.ts        (new)
+server/src/routes/assistant.ts                (new)
+server/src/app.ts                             (register routes)
+server/tests/setup/test-db.ts                 (seedAccount tenant default)
+server/tests/unit/assistant-tools.test.ts     (new)
+server/tests/integration/assistant.test.ts    (new)
+web/src/api.ts                                (assistantChat + types)
+web/src/pages/AssistantPage.tsx               (new)
+web/src/styles.css                            (.chat-* + .assistant-page)
+web/src/App.tsx                               (nav + route)
+```
 
 ---
 

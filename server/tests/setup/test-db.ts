@@ -156,23 +156,35 @@ export async function makeSuperAdminCookie(
   return `smrtcash_session=${app.signCookie(sessionId)}`;
 }
 
-/** Insert an account directly and return its id (test helper). */
+/** Insert an account directly and return its id (test helper).
+ *  Defaults to the seeded Default tenant so tenant-scoped queries
+ *  (Phase 9.1 assistant tools, etc.) see it. Pass tenantId: null
+ *  to explicitly leave it orphaned. */
 export async function seedAccount(
   overrides: Partial<{
     name: string;
     institution: string;
     type: string;
     last4: string;
+    tenantId: string | null;
   }> = {},
 ): Promise<string> {
+  let tenantId: string | null = overrides.tenantId ?? null;
+  if (tenantId === null && overrides.tenantId === undefined) {
+    const t = await pool.query<{ id: string }>(
+      `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+    );
+    tenantId = t.rows[0]?.id ?? null;
+  }
   const result = await pool.query<{ id: string }>(
-    `INSERT INTO accounts (name, institution, type, last4)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
+    `INSERT INTO accounts (name, institution, type, last4, tenant_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
     [
       overrides.name ?? 'Test Account',
       overrides.institution ?? 'Test Bank',
       overrides.type ?? 'checking',
       overrides.last4 ?? '0000',
+      tenantId,
     ],
   );
   return result.rows[0]!.id;
