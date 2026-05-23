@@ -1,6 +1,6 @@
 # SmrtCash — Known Issues
 
-This page tracks current limitations as of **Phase 4 (2026-05-22)**.
+This page tracks current limitations as of **Phase 5 (2026-05-22)**.
 Each item lists its impact, a workaround if any, and the planned resolution.
 
 Severity: 🔴 high · 🟡 medium · 🟢 low / cosmetic
@@ -18,40 +18,9 @@ XLSX file.
 
 **Workaround:** Import CSV exports rather than XLSX where possible.
 
-**Planned resolution:** Phase 5 hardening — replace `exceljs` with a smaller
-maintained XLSX library, or vendor a patched dependency tree. Run
-`npm audit` in CI.
-
----
-
-## KI-03 — No authentication 🔴 (by design, for now)
-
-**Description:** The app has no login. Anyone who can reach the web port can
-view and modify all data.
-
-**Impact:** Do **not** expose SmrtCash to the public internet or an untrusted
-network in its current state.
-
-**Workaround:** Run it only on `localhost` or a trusted LAN, behind a firewall.
-
-**Planned resolution:** Phase 5 — single-user authentication (Argon2-hashed
-password, session cookies).
-
----
-
-## KI-04 — Migrations must be run via `npm run migrate` 🟢
-
-**Description:** The TypeScript build (`npm run build`) compiles `.ts` files but
-does not copy the `.sql` migration files into `server/dist/`.
-
-**Impact:** Running migrations from the compiled output would fail. The provided
-`npm run migrate` script uses `tsx` and reads migrations from `server/src/`, so
-it works correctly — this only matters if you bypass that script.
-
-**Workaround:** Always run database migrations with `npm run migrate`.
-
-**Planned resolution:** Phase 5 — add a build step that copies migrations into
-`dist/`, or embed them.
+**Planned resolution:** Replace `exceljs` with a smaller maintained XLSX
+library, or vendor a patched dependency tree. Run `npm audit` in CI per the
+[dependency vulnerability policy](./ADMIN_GUIDE.md#dependency-vulnerability-policy).
 
 ---
 

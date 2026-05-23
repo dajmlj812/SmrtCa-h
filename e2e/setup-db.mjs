@@ -73,9 +73,11 @@ async function migrateAndReset() {
         throw err;
       }
     }
-    // Start every e2e run from a clean slate.
+    // Start every e2e run from a clean slate. `users` and `sessions` are
+    // truncated too so Playwright's globalSetup can drive the first-boot
+    // flow with a known password.
     await client.query(
-      'TRUNCATE accounts, categories, import_batches, transactions, attachments RESTART IDENTITY CASCADE',
+      'TRUNCATE accounts, categories, import_batches, transactions, attachments, users, sessions RESTART IDENTITY CASCADE',
     );
   } finally {
     client.release();

@@ -832,3 +832,56 @@ select:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Phase 5: auth pages + logout ──────────────────────────── */
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--app-bg, #f8fafc);
+}
+.auth-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--card-border, #e5e7eb);
+  border-radius: 12px;
+  padding: 32px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+.auth-brand {
+  font-size: 24px;
+  margin-bottom: 24px;
+}
+.auth-card h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.auth-card .muted {
+  font-size: 14px;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.auth-card .field {
+  margin-bottom: 16px;
+}
+.auth-submit {
+  width: 100%;
+  margin-top: 8px;
+}
+.field-hint {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.field-hint.error {
+  color: var(--danger, #dc2626);
+}
+.logout-btn {
+  margin-top: 12px;
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 10px;
+}

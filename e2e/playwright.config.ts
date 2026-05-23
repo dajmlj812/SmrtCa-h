@@ -30,9 +30,16 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
+  // global-setup drives /api/auth/setup once and saves the cookie so all
+  // specs start already authenticated. Without this, every spec would
+  // bounce to the setup page.
+  globalSetup: fileURLToPath(new URL('./global-setup.ts', import.meta.url)),
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'on-first-retry',
+    storageState: fileURLToPath(
+      new URL('./storage-state.json', import.meta.url),
+    ),
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [

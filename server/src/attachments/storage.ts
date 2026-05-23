@@ -1,6 +1,22 @@
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { config } from '../config.js';
+
+/**
+ * On-disk encryption format for v1:
+ *
+ *   [ 12 bytes random IV ][ ciphertext ][ 16 bytes GCM auth tag ]
+ *
+ * v0 means plaintext — i.e. the file was uploaded before Phase 5 or with
+ * ATTACHMENT_ENCRYPTION_KEY unset. The DB column `attachments.encryption_version`
+ * is the source of truth on read.
+ */
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+const ENC_ALGORITHM = 'aes-256-gcm';
+
+export type EncryptionVersion = 0 | 1;
 
 /**
  * Filesystem-backed attachment storage. Files are written under
@@ -82,14 +98,38 @@ function assertWithinRoot(storagePath: string): void {
 
 export interface StoredAttachmentInfo {
   storagePath: string;
+  /** Length of the PLAINTEXT, regardless of whether the file on disk is encrypted. */
   byteSize: number;
   safeFilename: string;
+  /** 1 when ATTACHMENT_ENCRYPTION_KEY was set at write time, else 0. */
+  encryptionVersion: EncryptionVersion;
+}
+
+function encryptBuffer(key: Buffer, plaintext: Buffer): Buffer {
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ENC_ALGORITHM, key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, ciphertext, tag]);
+}
+
+function decryptBuffer(key: Buffer, payload: Buffer): Buffer {
+  if (payload.length < IV_BYTES + TAG_BYTES) {
+    throw new Error('Attachment ciphertext is shorter than IV + tag');
+  }
+  const iv = payload.subarray(0, IV_BYTES);
+  const tag = payload.subarray(payload.length - TAG_BYTES);
+  const ciphertext = payload.subarray(IV_BYTES, payload.length - TAG_BYTES);
+  const decipher = createDecipheriv(ENC_ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
 /**
- * Validate, write to disk, return the resolved storage path. The caller is
- * responsible for inserting the database row (so the row + file are written
- * in the same logical step).
+ * Validate, encrypt-if-key-configured, write to disk. The caller is
+ * responsible for inserting the database row (so the row + file are
+ * written in the same logical step) AND for persisting the returned
+ * `encryptionVersion` on the row.
  */
 export async function storeAttachment(
   attachmentId: string,
@@ -102,13 +142,46 @@ export async function storeAttachment(
   const safeFilename = sanitizeFilename(filename);
   const storagePath = pathForAttachment(attachmentId, safeFilename);
   await mkdir(dirname(storagePath), { recursive: true });
-  await writeFile(storagePath, buffer);
-  return { storagePath, byteSize: buffer.byteLength, safeFilename };
+
+  const key = config.attachmentEncryptionKey;
+  let onDisk: Buffer;
+  let encryptionVersion: EncryptionVersion;
+  if (key) {
+    onDisk = encryptBuffer(key, buffer);
+    encryptionVersion = 1;
+  } else {
+    onDisk = buffer;
+    encryptionVersion = 0;
+  }
+  await writeFile(storagePath, onDisk);
+
+  return {
+    storagePath,
+    byteSize: buffer.byteLength,
+    safeFilename,
+    encryptionVersion,
+  };
 }
 
-export async function readAttachmentBuffer(storagePath: string): Promise<Buffer> {
+/**
+ * Read an attachment from disk, decrypting it when the row says it's
+ * encrypted. The encryption version lives on the DB row — never trust the
+ * file alone (a v1 file with no key is unrecoverable).
+ */
+export async function readAttachmentBuffer(
+  storagePath: string,
+  encryptionVersion: EncryptionVersion = 0,
+): Promise<Buffer> {
   assertWithinRoot(storagePath);
-  return readFile(storagePath);
+  const raw = await readFile(storagePath);
+  if (encryptionVersion === 0) return raw;
+  const key = config.attachmentEncryptionKey;
+  if (!key) {
+    throw new Error(
+      'Attachment is encrypted but ATTACHMENT_ENCRYPTION_KEY is not configured',
+    );
+  }
+  return decryptBuffer(key, raw);
 }
 
 export async function deleteAttachmentFile(storagePath: string): Promise<void> {

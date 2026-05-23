@@ -10,6 +10,7 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+e2e/storage-state.json
 
 # Environment / secrets
 .env

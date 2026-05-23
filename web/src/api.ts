@@ -195,8 +195,20 @@ export interface RejectSuggestionResult {
   transactionsCleared: number;
 }
 
+export class AuthRequiredError extends Error {
+  constructor() {
+    super('Authentication required');
+    this.name = 'AuthRequiredError';
+  }
+}
+
 async function http<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  // `credentials: 'include'` is required for the session cookie to ride
+  // along on cross-origin dev (vite -> api proxy) requests.
+  const res = await fetch(url, { credentials: 'include', ...init });
+  if (res.status === 401) {
+    throw new AuthRequiredError();
+  }
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -386,6 +398,32 @@ export const api = {
 
   attachmentPreviewUrl: (id: string) => `/api/attachments/${id}/preview`,
   attachmentDownloadUrl: (id: string) => `/api/attachments/${id}`,
+
+  // ── Auth (Phase 5) ───────────────────────────────────────
+  authStatus: () =>
+    http<{ isSetup: boolean; authenticated: boolean }>('/api/auth/status'),
+
+  authSetup: (password: string) =>
+    http<{ user: { id: string; created_at: string } }>('/api/auth/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }),
+
+  authLogin: (password: string) =>
+    http<{ user: { id: string } }>('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }),
+
+  authLogout: () =>
+    http<void>('/api/auth/logout', { method: 'POST' }),
+
+  authMe: () =>
+    http<{ user: { id: string; created_at: string; last_login_at: string | null } }>(
+      '/api/auth/me',
+    ),
 
   // ── Transfers (Phase 4) ──────────────────────────────────
   listTransfers: () =>

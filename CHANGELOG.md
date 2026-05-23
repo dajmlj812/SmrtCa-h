@@ -9,7 +9,112 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 5 work will land here._
+_Phase 6 work will land here._
+
+---
+
+## [0.5.0] — 2026-05-22 — Phase 5: Dockerization, Auth & Hardening
+
+Single-user authentication, encryption-at-rest for attachments, a
+single-container production image, and a backup tool — turns the dev
+stack into something safe to actually deploy. **Closes KI-03 (no auth)
+and KI-04 (migrations not in `dist/`).**
+
+### Added
+
+- **Single-user authentication.**
+  - Argon2id password hashing (`argon2` v0.44, OWASP 2024 defaults).
+  - Signed httpOnly + sameSite=strict session cookie via
+    `@fastify/cookie`. Sessions stored server-side in a new `sessions`
+    table; lookup on every request.
+  - Routes: `GET /api/auth/status`, `POST /api/auth/setup` (first boot
+    only), `POST /api/auth/login`, `POST /api/auth/logout`,
+    `GET /api/auth/me`.
+  - Auth gate on every `/api/*` route except health/status/setup/login/
+    logout. Static asset requests pass through so the login screen can
+    load before authentication.
+  - **First-boot UX** — when no user exists the web app shows a "Set
+    your password" screen; subsequent visits show the login page until
+    a session is established.
+- **Attachment encryption at rest.**
+  - `ATTACHMENT_ENCRYPTION_KEY` env var (32 bytes as base64 or hex).
+  - When set, new uploads are AES-256-GCM encrypted on disk
+    (12-byte IV + ciphertext + 16-byte tag).
+  - `attachments.encryption_version` column (migration 005) is the
+    source of truth; existing v=0 plaintext files keep working so the
+    upgrade is non-destructive.
+- **Single-container Docker image.**
+  - Multi-stage `Dockerfile` at the repo root: builds the web bundle,
+    builds the server, copies the SQL migrations into `dist/`, ships a
+    minimal `node:22-alpine` runtime as a non-root `node` user.
+  - Server registers `@fastify/static` to serve the prebuilt web SPA at
+    every non-API path — one container, one port.
+  - `docker-compose.yml` adds an `app` service alongside `db`, with a
+    named `smrtcash-attachments` volume mounted at `/data/attachments`,
+    healthchecks on both services, and full env wiring.
+  - `tini` is the entrypoint so signals + zombie reaping are clean.
+  - `.dockerignore` keeps `node_modules`, `data/`, `.env`, `.claude/`,
+    samples, and Playwright outputs out of the build context.
+- **Backup + restore tooling.**
+  - `npm run backup` (`scripts/backup.mjs`) — snapshots Postgres via
+    `pg_dump --format=custom` and the attachments tree as a `.tgz` into
+    `./backups/<timestamp>/`.
+  - `npm run restore -- <dir>` (`scripts/restore.mjs`) — destructive
+    restore with a "type `restore` to confirm" prompt; `--force` to
+    skip. Replaces the attachments directory atomically.
+- **Migrations now ship in `dist/`.** The Dockerfile copies
+  `src/db/migrations/*.sql` into `dist/db/migrations/` so the runner
+  works against the compiled output. Closes KI-04.
+
+### Changed
+
+- **CORS** registered with `credentials: true` so the session cookie
+  rides on dev cross-origin requests.
+- **Web `http()` fetch wrapper** sets `credentials: 'include'` on every
+  call; 401 responses throw a typed `AuthRequiredError` so the App can
+  bounce to the login screen.
+- **Web App shell** now wraps every existing route in an auth-state
+  gate: `loading` → `needs-setup` → `needs-login` → `authenticated`.
+- **e2e** — `setup-db.mjs` truncates `users` and `sessions` too;
+  Playwright `globalSetup` runs the first-boot flow once and stores the
+  resulting cookie via `storageState`, so every existing spec keeps
+  working unchanged.
+
+### Documentation
+
+- `docs/ADMIN_GUIDE.md` — backup/restore commands, security checklist
+  rewritten around the new env vars, HTTPS-via-Caddy section, and a
+  formal **Dependency vulnerability policy** (cadence, severity SLAs,
+  pinning approach).
+- `.env.example` — documents `SESSION_SECRET`, `COOKIE_SECURE`,
+  `ATTACHMENT_ENCRYPTION_KEY` with `node -e "..."` key-generation
+  snippets.
+- `docs/KNOWN_ISSUES.md` — KI-03 and KI-04 removed.
+
+### Tests
+
+- **+16 server tests** (214 → 230): 12 auth integration tests
+  (status / setup / login / logout / me / gate) and 4 encryption unit
+  tests (write-encrypts, round-trip, plaintext-backcompat, wrong-key
+  rejects).
+- Existing tests continue to pass — `makeTestApp()` was upgraded so
+  `app.inject()` auto-attaches a seeded session cookie; specs that
+  exercise the unauthenticated paths pass `skipAuth: true`.
+- Total automated coverage: **243 tests** across server (230) + web (6)
+  + Playwright e2e (7).
+
+### Migration notes
+
+- **Upgrading from 0.4.0:**
+  - `npm run migrate --prefix server` applies migration 005
+    (`users`, `sessions`, `attachments.encryption_version`).
+  - Add `SESSION_SECRET` to `.env`; without it the server generates an
+    ephemeral one and existing sessions are invalidated on every restart.
+  - Optionally set `ATTACHMENT_ENCRYPTION_KEY` to start encrypting new
+    uploads. Existing files remain readable as plaintext.
+  - First load of the web app shows the **Set your password** screen.
+- **Docker upgrade path:** `docker compose -p smrtcash build app` then
+  `docker compose -p smrtcash up -d`. The image self-migrates at boot.
 
 ---
 

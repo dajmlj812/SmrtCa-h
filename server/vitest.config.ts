@@ -24,6 +24,16 @@ process.env.ATTACHMENTS_DIR = testAttachmentsDir;
 // without shipping 100 MB of buffers through app.inject.
 const testMaxRequestBytes = String(1024 * 1024);
 process.env.ATTACHMENTS_MAX_REQUEST_BYTES = testMaxRequestBytes;
+// Deterministic session-cookie signature across the suite.
+const testSessionSecret =
+  process.env.SESSION_SECRET ??
+  'test-session-secret-not-for-production-use-please';
+process.env.SESSION_SECRET = testSessionSecret;
+// Deterministic 32-byte AES key (hex) so attachment encryption is exercised
+// in the suite. NOT a real secret; obviously safe to commit.
+const testAttachmentKey =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+process.env.ATTACHMENT_ENCRYPTION_KEY = testAttachmentKey;
 
 export default defineConfig({
   test: {
@@ -35,6 +45,8 @@ export default defineConfig({
       NODE_ENV: 'test',
       ATTACHMENTS_DIR: testAttachmentsDir,
       ATTACHMENTS_MAX_REQUEST_BYTES: testMaxRequestBytes,
+      SESSION_SECRET: testSessionSecret,
+      ATTACHMENT_ENCRYPTION_KEY: testAttachmentKey,
     },
     // DB-backed tests share one database and truncate between tests, so
     // test files must run serially, not in parallel.

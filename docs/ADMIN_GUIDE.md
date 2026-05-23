@@ -55,28 +55,34 @@ docker exec -it smrtcash-db psql -U smrtcash -d smrtcash
 Useful inside psql: `\dt` (list tables), `\d transactions` (describe a table),
 `\q` (quit).
 
-### Database backup
+### Backup (database + attachments)
 
-Dump inside the container, then copy the file out — this avoids shell-encoding
-problems on Windows:
-
-```powershell
-docker exec smrtcash-db pg_dump -U smrtcash -d smrtcash -f /tmp/smrtcash.sql
-docker cp smrtcash-db:/tmp/smrtcash.sql ./backup-smrtcash-$(Get-Date -Format yyyyMMdd).sql
-```
-
-Back up regularly — there is no automated backup yet. Store backups securely:
-they contain all of your financial data.
-
-### Database restore
+Phase 5 ships a one-shot backup script that snapshots both the Postgres
+database AND the attachments directory into `./backups/<timestamp>/`:
 
 ```powershell
-docker cp ./backup-smrtcash.sql smrtcash-db:/tmp/restore.sql
-docker exec smrtcash-db psql -U smrtcash -d smrtcash -f /tmp/restore.sql
+npm run backup
 ```
 
-Restore into an empty database. To start fresh first, see *Reset the database*
-below.
+Requires `pg_dump` and `tar` on PATH. Each run produces two files:
+
+- `db.dump` — `pg_dump --format=custom` archive (restored with `pg_restore`)
+- `attachments.tgz` — gzipped tar of the attachments tree
+
+Store backups off the same disk and treat them as sensitive financial data.
+Schedule a regular run via Task Scheduler (Windows) or cron (Linux/macOS).
+
+### Restore
+
+The restore script is destructive — it drops and recreates every table in
+the target database before reloading, then replaces the attachments tree.
+**Stop the server first**:
+
+```powershell
+npm run restore -- ./backups/2026-05-22_12-00-00
+```
+
+You'll be prompted to type `restore` to confirm; add `--force` to skip.
 
 ### Reset the database
 
@@ -157,16 +163,70 @@ The API logs every request (method, path, status, duration) as JSON.
 
 ## Security checklist
 
-Phase 1 has **no authentication** ([KI-03](./KNOWN_ISSUES.md)). Until Phase 5:
+- [ ] **Strong password.** Set at first launch on the setup screen. ≥ 8
+      characters minimum; treat like banking credentials. No recovery flow —
+      store in a password manager.
+- [ ] **`SESSION_SECRET`** is set in `.env` to a long random value. Without
+      it the server generates an ephemeral one and existing sessions are
+      invalidated on every restart. Generate one with:
+      `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+- [ ] **`ATTACHMENT_ENCRYPTION_KEY`** is set when you care about
+      attachment-at-rest encryption. New uploads are then AES-256-GCM
+      encrypted on disk. Generate the same way as `SESSION_SECRET`. Store
+      it OUT of band — losing it makes encrypted attachments unrecoverable.
+- [ ] **Strong `POSTGRES_PASSWORD`.** The DB credentials are stored in
+      `.env` and never sent to the client.
+- [ ] **`COOKIE_SECURE=1`** when running behind HTTPS — adds the `Secure`
+      flag to the session cookie so it never leaks over plain HTTP.
+- [ ] **Database volume on encrypted storage.** SmrtCash does not encrypt
+      Postgres data inside the container — encrypt the host volume
+      (LUKS / BitLocker / FileVault / encrypted ZFS dataset) instead.
+- [ ] **HTTPS in front.** Don't expose port 4000 directly — put Caddy or
+      nginx in front with a real cert. See *HTTPS via Caddy* below.
+- [ ] **Run on localhost or a trusted LAN.** Single-user auth makes
+      brute-force-by-network the main remaining risk.
+- [ ] **Keep dependencies current.** See *Dependency vulnerability policy*
+      below.
+- [ ] **Backups are sensitive.** `backups/` contains everything — store
+      with the same care as `.env`.
 
-- [ ] Run SmrtCash only on `localhost` or a trusted, firewalled LAN.
-- [ ] Do **not** port-forward or expose ports 5173 / 4000 / 5432 to the internet.
-- [ ] Set a strong, unique `POSTGRES_PASSWORD`.
-- [ ] Keep `.env` and database backups in a secure location.
-- [ ] Keep dependencies current; review `npm audit` (see [KI-02](./KNOWN_ISSUES.md)).
-- [ ] Treat exported backup files as sensitive financial data.
+---
 
-Phase 5 adds authentication, encryption at rest, and a hardened container.
+## HTTPS via Caddy
+
+Caddy auto-provisions Let's Encrypt certificates and reverse-proxies to
+SmrtCash with one line of config. From the host that runs Docker:
+
+```caddyfile
+finance.example.com {
+    reverse_proxy localhost:4000
+}
+```
+
+Set `COOKIE_SECURE=1` in `.env` so the session cookie is only sent over
+HTTPS, then restart the app container.
+
+For a LAN-only deployment, use Caddy's internal CA (`tls internal`) or
+self-signed certs.
+
+---
+
+## Dependency vulnerability policy
+
+- **Cadence.** Run `npm audit` in `server/`, `web/`, and `e2e/` monthly,
+  and after every dependency change.
+- **Triage by severity.**
+  - **Critical / High** — patch within 7 days, or document the
+    accepted-risk reason in `docs/KNOWN_ISSUES.md`.
+  - **Moderate** — patch within 30 days. Existing moderate advisories live
+    as KI entries with their planned resolution.
+  - **Low** — patch at next dependency-bump cycle.
+- **Pin majors, accept minors.** All dependencies in this repo use
+  caret ranges (`^x.y.z`) so patch & minor updates pull in automatically
+  on `npm install`; major bumps need an explicit review.
+- **Transitive vulnerabilities** — prefer overriding the offending
+  transitive dep via `overrides` in `package.json` rather than dropping
+  the direct dep that pulls it in.
 
 ---
 

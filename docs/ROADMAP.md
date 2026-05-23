@@ -15,8 +15,8 @@ nothing is "all or nothing."
 | 2 | AI Transaction Normalization | ✅ Complete — 2026-05-22 |
 | 3 | Receipts & Attachments | ✅ Complete — 2026-05-22 |
 | 4 | Insights & Reconciliation | ✅ Complete — 2026-05-22 |
-| 5 | Dockerization, Auth & Hardening | 🔜 Next |
-| 6 | Budgeting & Cash Flow | 📋 Planned |
+| 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
+| 6 | Budgeting & Cash Flow | 🔜 Next |
 | 7 | Wealth & Net Worth | 📋 Planned |
 | 8 | Connectivity & Automation | 📋 Planned |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
@@ -134,20 +134,38 @@ Delivered:
 
 ---
 
-## Phase 5 — Dockerization, Auth & Hardening 🔜
+## Phase 5 — Dockerization, Auth & Hardening ✅
 
 **Goal:** Ship the secure, self-contained container.
 
-- Multi-stage Dockerfiles; full `docker compose up` (db + api + web)
-- Single-user authentication (Argon2 password, session cookies)
-- Encryption at rest for the database and attachments
-- Secrets via Docker secrets / environment
-- Non-root container user, minimal base image, read-only root filesystem
-- HTTPS guidance; dependency-vulnerability policy; backup & restore tooling
+Delivered:
+
+- [x] **Single-container Docker stack** — multi-stage Dockerfile builds the
+      web bundle, builds the server, ships a minimal `node:22-alpine`
+      runtime; the server serves API + SPA from one port. `docker compose
+      up` brings up db + app together; both have healthchecks.
+- [x] **Single-user authentication** — Argon2id password, signed
+      httpOnly/sameSite=strict session cookie, first-boot "set your
+      password" flow, full auth gate on `/api/*`. **Closes KI-03.**
+- [x] **Attachment encryption at rest** — AES-256-GCM with
+      `ATTACHMENT_ENCRYPTION_KEY`; v=0 plaintext files keep working for
+      backward compatibility.
+- [x] **Database encryption at rest** — documented via host-volume
+      encryption (LUKS/BitLocker/FileVault/encrypted ZFS) in the admin
+      guide; no in-app column encryption.
+- [x] **Secrets via env**, **non-root `node` user**, **`tini` entrypoint**.
+- [x] **HTTPS guidance** — Caddy reverse-proxy snippet + `COOKIE_SECURE`
+      flag in the admin guide.
+- [x] **Dependency vulnerability policy** — cadence, severity SLAs, and
+      pinning approach in the admin guide.
+- [x] **Backup & restore tooling** — `npm run backup` and `npm run restore`
+      cover both database (pg_dump custom format) and attachments (tgz).
+- [x] **Migrations ship in `dist/`** — Dockerfile copies SQL into the
+      compiled output. **Closes KI-04.**
 
 ---
 
-## Phase 6 — Budgeting & Cash Flow 📋
+## Phase 6 — Budgeting & Cash Flow 🔜
 
 **Goal:** Match the everyday strengths of Monarch and Simplifi.
 

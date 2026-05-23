@@ -1,5 +1,18 @@
-# SmrtCash — Phase 1 brings up PostgreSQL only.
-# The API + web services will be added here in Phase 5 (full dockerization).
+# SmrtCash — full self-hosted stack.
+#
+# `docker compose -p smrtcash up -d` brings up PostgreSQL plus the
+# single-container API+web service. The image is built from the repo root
+# Dockerfile; the running service migrates the database at startup, serves
+# /api/* on port 4000, and serves the prebuilt web SPA at every other path.
+#
+# All persistent state lives in two named volumes:
+#   smrtcash-db-data       — PostgreSQL cluster
+#   smrtcash-attachments   — receipt files (uploaded via /api/attachments)
+#
+# Secrets (DB password, session secret, attachment encryption key) are
+# expected in .env (gitignored). Generate the keys with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
 services:
   db:
     image: postgres:17-alpine
@@ -9,8 +22,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - smrtcash-db-data:/var/lib/postgresql/data
     healthcheck:
@@ -19,5 +30,45 @@ services:
       timeout: 5s
       retries: 10
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smrtcash-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # `db` is the compose service name — resolved by the internal network.
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      NODE_ENV: production
+      PORT: 4000
+      ATTACHMENTS_DIR: /data/attachments
+      # Required for sessions to survive a restart.
+      SESSION_SECRET: ${SESSION_SECRET}
+      # Optional — when unset, attachments are written to disk in plaintext.
+      ATTACHMENT_ENCRYPTION_KEY: ${ATTACHMENT_ENCRYPTION_KEY:-}
+      # Set to 1 when a TLS-terminating reverse proxy is in front so the
+      # session cookie is sent with the Secure flag.
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      # AI provider (optional).
+      AI_PROVIDER: ${AI_PROVIDER:-rules}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
+    ports:
+      - "${APP_PORT:-4000}:4000"
+    volumes:
+      - smrtcash-attachments:/data/attachments
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   smrtcash-db-data:
+  smrtcash-attachments:

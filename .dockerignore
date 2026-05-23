@@ -1,0 +1,38 @@
+**/node_modules
+**/dist
+**/build
+**/.cache
+**/.vite
+**/.next
+**/coverage
+**/playwright-report
+**/test-results
+**/blob-report
+
+# Local data must never enter the image — bind it via a volume instead.
+data/
+
+# Sensitive — never bake into an image.
+.env
+.env.local
+*.local
+
+# Editor / OS noise
+.git
+.github
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Test fixtures with real financial data
+samples/*.csv
+samples/*.CSV
+samples/*.xlsx
+samples/*.xls
+
+# E2E + Playwright outputs
+e2e/storage-state.json
+
+# Claude Code local overrides
+.claude/settings.local.json

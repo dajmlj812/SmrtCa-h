@@ -1,5 +1,8 @@
 import { pool } from '../db/pool.js';
-import { readAttachmentBuffer } from '../attachments/storage.js';
+import {
+  type EncryptionVersion,
+  readAttachmentBuffer,
+} from '../attachments/storage.js';
 import type { OcrProvider } from './types.js';
 
 /**
@@ -93,8 +96,9 @@ export async function sweepPendingOcr(
     storage_path: string;
     mime_type: string;
     filename: string;
+    encryption_version: number;
   }>(
-    `SELECT id, storage_path, mime_type, filename
+    `SELECT id, storage_path, mime_type, filename, encryption_version
        FROM attachments
       WHERE ocr_status = 'pending'
         AND created_at < now() - make_interval(secs => $1::int)`,
@@ -105,7 +109,10 @@ export async function sweepPendingOcr(
   let failed = 0;
   for (const row of candidates.rows) {
     try {
-      const buffer = await readAttachmentBuffer(row.storage_path);
+      const buffer = await readAttachmentBuffer(
+        row.storage_path,
+        row.encryption_version as EncryptionVersion,
+      );
       await runOcrExtraction(
         row.id,
         provider,

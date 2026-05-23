@@ -7,18 +7,21 @@ your own container, with your data staying on your machine.
 
 ## Status
 
-**Phases 1, 2, 3, and 4 — Foundation, Import, AI Normalization, Receipts, Insights** ✅ Complete
+**Phases 1 through 5 — Foundation, Import, AI Normalization, Receipts, Insights, Auth & Hardening** ✅ Complete
 
-The stack is live and verified: accounts with **true opening-balance
-reconciliation**, a CSV/XLSX importer with automatic bank-format detection,
-duplicate protection, a web UI for browsing transactions, **a pluggable AI
-normalization layer (rules / Claude API / Ollama)** that cleans merchant
-names and categorizes transactions, a user-editable category taxonomy,
-inline manual editing, **drag-and-drop receipt attachments with
-Claude-vision OCR** that flags receipts whose amount or date don't match
-the transaction, **automatic transfer detection** between own accounts,
-and a **dashboard** with spending-by-category, income-vs-expense, and
-net-worth-over-time charts plus filtered CSV export. See the
+The stack is live, verified, and **safe to deploy**: accounts with **true
+opening-balance reconciliation**, a CSV/XLSX importer with automatic
+bank-format detection, duplicate protection, a web UI for browsing
+transactions, **a pluggable AI normalization layer (rules / Claude API /
+Ollama)** that cleans merchant names and categorizes transactions, a
+user-editable category taxonomy, inline manual editing, **drag-and-drop
+receipt attachments with Claude-vision OCR + AES-256-GCM encryption at
+rest** that flags receipts whose amount or date don't match the
+transaction, **automatic transfer detection** between own accounts, a
+**dashboard** with spending-by-category, income-vs-expense, and
+net-worth-over-time charts plus filtered CSV export, **Argon2id
+single-user authentication** with first-boot password setup, and a
+**single-container Docker image** ready for `docker compose up`. See the
 [Roadmap](./docs/ROADMAP.md) for what's next.
 
 ## Documentation
@@ -38,6 +41,21 @@ net-worth-over-time charts plus filtered CSV export. See the
 | [Known Issues](./docs/KNOWN_ISSUES.md) | Current limitations & planned fixes |
 
 ## Quick start
+
+**Production (single container):**
+
+```powershell
+Copy-Item .env.example .env
+# Generate a session secret + attachment key (paste into .env)
+node -e "console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('base64'))"
+node -e "console.log('ATTACHMENT_ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('base64'))"
+docker compose -p smrtcash up -d --build
+```
+
+Then open **http://localhost:4000** and set your password on the first
+screen.
+
+**Development (hot reload, no container build):**
 
 ```powershell
 Copy-Item .env.example .env
@@ -61,7 +79,7 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-227 automated tests spanning unit, integration, functional, security, smoke,
+243 automated tests spanning unit, integration, functional, security, smoke,
 performance, and end-to-end layers. With PostgreSQL running:
 
 ```sh
@@ -76,8 +94,12 @@ and exploratory-testing charters.
 
 - `.env` is gitignored — never commit real credentials.
 - The `samples/` folder is gitignored — never commit real financial exports.
-- Phase 1 has **no authentication** — run it only on localhost / a trusted
-  LAN. Authentication and encryption at rest arrive in Phase 5.
+- `SESSION_SECRET` and `ATTACHMENT_ENCRYPTION_KEY` must be set in `.env`
+  for a real deployment; the README quick-start shows how to generate them.
+- Database encryption at rest is via the host volume (LUKS / BitLocker /
+  FileVault / encrypted ZFS) — not in-app. Put HTTPS (Caddy / nginx) in
+  front and set `COOKIE_SECURE=1`.
 
 See the [Admin Guide](./docs/ADMIN_GUIDE.md#security-checklist) for the full
-security checklist.
+security checklist, HTTPS-via-Caddy snippet, and dependency vulnerability
+policy.

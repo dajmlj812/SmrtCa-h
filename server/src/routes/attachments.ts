@@ -1,12 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import {
   AttachmentValidationError,
+  type EncryptionVersion,
   MAX_REQUEST_BYTES,
   deleteAttachmentFile,
+  readAttachmentBuffer,
   sanitizeFilename,
   storeAttachment,
   validateMimeType,
@@ -25,6 +26,7 @@ interface AttachmentRow {
   mime_type: string;
   byte_size: number;
   storage_path: string;
+  encryption_version: number;
   created_at: string;
   extracted_amount_cents: number | null;
   extracted_date: string | null;
@@ -125,16 +127,18 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       }> = [];
       for (const item of staged) {
         const attachmentId = randomUUID();
-        const { storagePath, byteSize, safeFilename } = await storeAttachment(
-          attachmentId,
-          item.reportedName,
-          item.mimeType,
-          item.buffer,
-        );
+        const { storagePath, byteSize, safeFilename, encryptionVersion } =
+          await storeAttachment(
+            attachmentId,
+            item.reportedName,
+            item.mimeType,
+            item.buffer,
+          );
         const insert = await query<AttachmentRow>(
           `INSERT INTO attachments
-             (id, transaction_id, filename, mime_type, byte_size, storage_path)
-           VALUES ($1, $2, $3, $4, $5, $6)
+             (id, transaction_id, filename, mime_type, byte_size,
+              storage_path, encryption_version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING ${PUBLIC_COLUMNS}`,
           [
             attachmentId,
@@ -143,6 +147,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
             item.mimeType,
             byteSize,
             storagePath,
+            encryptionVersion,
           ],
         );
         created.push(insert.rows[0]!);
@@ -193,6 +198,9 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // Download (forces attachment disposition so the browser saves the file).
+  // Reads the full file into memory rather than streaming because the v1
+  // ciphertext is a single GCM frame that can only be verified after the
+  // last byte. File sizes are already capped at 25 MB.
   app.get<{ Params: { id: string } }>(
     '/api/attachments/:id',
     async (req, reply) => {
@@ -202,12 +210,17 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       }
       if (!row) return reply.code(404).send({ error: 'Attachment not found' });
 
+      const buffer = await readAttachmentBuffer(
+        row.storage_path,
+        row.encryption_version as EncryptionVersion,
+      );
       reply.header('Content-Type', row.mime_type);
       reply.header(
         'Content-Disposition',
         `attachment; filename="${row.filename}"`,
       );
-      return reply.send(createReadStream(row.storage_path));
+      reply.header('Content-Length', buffer.length);
+      return reply.send(buffer);
     },
   );
 
@@ -221,12 +234,17 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       }
       if (!row) return reply.code(404).send({ error: 'Attachment not found' });
 
+      const buffer = await readAttachmentBuffer(
+        row.storage_path,
+        row.encryption_version as EncryptionVersion,
+      );
       reply.header('Content-Type', row.mime_type);
       reply.header(
         'Content-Disposition',
         `inline; filename="${row.filename}"`,
       );
-      return reply.send(createReadStream(row.storage_path));
+      reply.header('Content-Length', buffer.length);
+      return reply.send(buffer);
     },
   );
 
@@ -258,14 +276,16 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
 }
 
 type LoadResult =
-  | (AttachmentRow & { storage_path: string })
+  | (AttachmentRow & { storage_path: string; encryption_version: number })
   | null
   | 'invalid';
 
 async function loadAttachment(id: string): Promise<LoadResult> {
   if (!isUuid(id)) return 'invalid';
-  const result = await query<AttachmentRow & { storage_path: string }>(
-    `SELECT ${PUBLIC_COLUMNS}, storage_path
+  const result = await query<
+    AttachmentRow & { storage_path: string; encryption_version: number }
+  >(
+    `SELECT ${PUBLIC_COLUMNS}, storage_path, encryption_version
        FROM attachments WHERE id = $1`,
     [id],
   );
