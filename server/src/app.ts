@@ -32,7 +32,11 @@ import { commuteRouteRoutes } from './routes/commute-routes.js';
 import { fuelPriceRoutes } from './routes/fuel-prices.js';
 import { budgetWizardRoutes } from './routes/budget-wizard.js';
 import { settingsRoutes } from './routes/settings.js';
+import { healthRoutes } from './routes/health.js';
+import { backupRoutes } from './routes/backups.js';
+import { reportRoutes } from './routes/reports.js';
 import { applyBootSettings } from './domain/settings.js';
+import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 
 // Augment FastifyRequest with the authenticated user. Set by the auth
@@ -159,6 +163,13 @@ export async function buildApp(
   await app.register(fuelPriceRoutes);
   await app.register(budgetWizardRoutes);
   await app.register(settingsRoutes);
+  await app.register(healthRoutes);
+  await app.register(backupRoutes);
+  await app.register(reportRoutes);
+
+  // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
+  // = true is set via the GUI; the loop reads settings on every tick.
+  startBackupScheduler();
 
   // Optional: serve the prebuilt web bundle from the same process. The
   // Docker image copies `web/dist` into `server/dist/public`; in dev the

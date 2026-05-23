@@ -1489,3 +1489,77 @@ tr.selected {
 .subscription-card.status-ai {
   border-left-color: #8b5cf6;
 }
+
+/* ── Phase 7.6 ── Health + Backups + Reports ─────────────── */
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+.health-card { padding: 16px; }
+.health-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+.health-row:last-child { border-bottom: 0; }
+.health-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  word-break: break-word;
+}
+.health-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.health-count {
+  background: #f3f4f6;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.9em;
+}
+
+.reports-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .reports-layout { grid-template-columns: 1fr; }
+}
+.reports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reports-list-item {
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: inherit;
+}
+.reports-list-item:hover { background: #f9fafb; }
+.reports-list-item.active {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+.reports-list-item .muted { font-size: 0.85em; }
+.reports-detail { min-width: 0; }
+
+.banner.info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}

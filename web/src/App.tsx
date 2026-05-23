@@ -18,6 +18,9 @@ import { UncategorizedPage } from './pages/UncategorizedPage';
 import { VehiclesPage } from './pages/VehiclesPage';
 import { RoutesPage } from './pages/RoutesPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { HealthPage } from './pages/HealthPage';
+import { BackupsPage } from './pages/BackupsPage';
+import { ReportsPage } from './pages/ReportsPage';
 
 type AuthState = 'loading' | 'needs-setup' | 'needs-login' | 'authenticated';
 
@@ -90,6 +93,9 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/routes">Routes</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/import">Import</NavLink>
+          <NavLink to="/reports">Reports</NavLink>
+          <NavLink to="/backups">Backups</NavLink>
+          <NavLink to="/health">Health</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="sidebar-footer">
@@ -119,6 +125,9 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/routes" element={<RoutesPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/backups" element={<BackupsPage />} />
+          <Route path="/health" element={<HealthPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

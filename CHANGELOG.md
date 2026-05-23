@@ -13,6 +13,77 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.7.6] — 2026-05-23 — Health, backups, reports
+
+Three operator-facing tools land together: a live health dashboard, a
+GUI-managed backup pipeline with a schedule, and a canned-reports
+catalog (the foundation for the AI natural-language reports planned
+for a later slice).
+
+### Added
+
+- **Migration 016** — new `backups` table tracking every snapshot
+  (kind, status, size, on-disk path, optional error).
+- **`/health` page** — auto-refreshing dashboard with three cards:
+  - **Application** — version, Node, uptime, PID, RSS / heap, AI
+    provider + model.
+  - **Database** — connection ok/down, ping latency, db size, pool
+    counts (total/idle/waiting), last applied migration, per-table
+    row counts (accounts, transactions, categories, bills, budgets,
+    goals, attachments, backups).
+  - **Storage** — attachments dir + backups dir size and file count,
+    plus the resolved on-disk paths.
+  - `GET /api/health/metrics` returns the JSON snapshot. Polls every
+    5s; Pause / Refresh buttons in the header.
+- **`/backups` page** — schedule editor + manual-run button + history.
+  - Schedule form writes `BACKUP_ENABLED`, `BACKUP_FREQUENCY` (hourly
+    / daily / weekly / monthly), `BACKUP_TIME` (HH:MM), `BACKUP_RETENTION_DAYS`,
+    and `BACKUP_DIR` into `app_settings`. Live — the in-process
+    scheduler picks up changes on its next tick.
+  - **Run backup now** triggers a synchronous snapshot via the same
+    pg_dump+tar pipeline as `scripts/backup.mjs` (custom-format dump
+    of the database, gzipped tar of the attachments directory) into
+    a timestamped folder. Restorable with `scripts/restore.mjs` or
+    `pg_restore` directly.
+  - **Prune old** removes anything past the retention window.
+  - History table shows kind, status, sizes, path, and a per-row
+    delete button.
+- **`/reports` page** — sidebar list + parameter form + result table
+  + CSV export. Initial canned set (6 reports):
+  - **Spending by category** (date range)
+  - **Top merchants by spend** (date range + top-N)
+  - **Monthly income vs expense** (months back)
+  - **Active subscriptions roll-up** (per-cycle + annualized)
+  - **Largest transactions** (date range + top-N)
+  - **Net worth by month** (months back)
+  - `GET /api/reports` lists definitions, `POST /api/reports/:id/run`
+    executes one with body-keyed parameters.
+- **In-process backup scheduler** — ticks every 60 s; reads
+  `BACKUP_*` settings every tick, so a config change takes effect on
+  the next minute without a restart. Last-run gate uses
+  `MAX(backups.finished_at)` so a process restart never re-fires a
+  backup that already ran today.
+
+### Tests
+
+- `+12` integration tests (`health-backups-reports.test.ts`):
+  health snapshot shape + table counts, backups config GET/PUT,
+  history filter (deleted excluded), delete idempotency + 400 path,
+  6 reports listed, spending-by-category with date filter,
+  subscription-costs annualization.
+- **Total: 349** (server 343 + web 6).
+
+### Notes
+
+- Backups need `pg_dump` on PATH. The runtime Docker image already
+  bundles `postgresql17-client`, so the container is good to go.
+- Restore is a manual step — `scripts/restore.mjs <path>` or
+  `pg_restore` against `db.dump`. A GUI restore is on the docket but
+  intentionally not in this slice (too destructive without dry-run +
+  confirmation flow design).
+
+---
+
 ## [0.7.5] — 2026-05-23 — AI subscription scan
 
 A "Find with AI" button on the Subscriptions page surfaces candidate

@@ -118,7 +118,10 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 336-test automated suite (unit → e2e) | ✅ |
+| 349-test automated suite (unit → e2e) | ✅ |
+| Live health dashboard (app / db / storage metrics) | ✅ |
+| GUI-managed backups (schedule + manual + retention) | ✅ |
+| Canned reports catalog (CSV export per report) | ✅ |
 | GUI-managed runtime settings (no .env edits for live config) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | ✅ |

@@ -35,6 +35,12 @@ export const KNOWN_SETTINGS = [
   // Savings suggestion tuning — live (whole-number percentages, default 20 and 50)
   { key: 'SAVINGS_INCOME_PCT', isSecret: false, restartRequired: false, label: 'Savings — % of income' },
   { key: 'SAVINGS_LEFTOVER_PCT', isSecret: false, restartRequired: false, label: 'Savings — % of leftover' },
+  // Backup config — live (scheduler re-reads on each tick)
+  { key: 'BACKUP_ENABLED', isSecret: false, restartRequired: false, label: 'Backup — enabled' },
+  { key: 'BACKUP_FREQUENCY', isSecret: false, restartRequired: false, label: 'Backup — frequency' },
+  { key: 'BACKUP_TIME', isSecret: false, restartRequired: false, label: 'Backup — time (HH:MM, 24h)' },
+  { key: 'BACKUP_RETENTION_DAYS', isSecret: false, restartRequired: false, label: 'Backup — retention (days)' },
+  { key: 'BACKUP_DIR', isSecret: false, restartRequired: false, label: 'Backup — directory' },
   // Security — restart required
   { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, label: 'Session secret' },
   { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, label: 'Attachment encryption key' },

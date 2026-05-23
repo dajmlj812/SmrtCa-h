@@ -437,6 +437,93 @@ export interface RejectSuggestionResult {
   transactionsCleared: number;
 }
 
+// ── Phase 7.6 types (health + backups + reports) ─────────────
+export interface HealthSnapshot {
+  generated_at: string;
+  app: {
+    app_version: string;
+    node_version: string;
+    uptime_seconds: number;
+    pid: number;
+    env: string;
+    rss_bytes: number;
+    heap_used_bytes: number;
+    heap_total_bytes: number;
+    ai_provider: string;
+    ai_model: string;
+  };
+  db: {
+    connected: boolean;
+    pool_total: number;
+    pool_idle: number;
+    pool_waiting: number;
+    size_bytes: number;
+    size_pretty: string;
+    table_counts: Record<string, number>;
+    last_migration: string | null;
+    last_migration_at: string | null;
+    ping_ms: number;
+  };
+  storage: {
+    attachments_dir: string;
+    attachments_bytes: number;
+    attachments_count: number;
+    backups_dir: string;
+    backups_bytes: number;
+    backup_count: number;
+  };
+}
+
+export interface BackupRecord {
+  id: string;
+  kind: 'manual' | 'scheduled';
+  status: 'running' | 'success' | 'failed' | 'deleted';
+  started_at: string;
+  finished_at: string | null;
+  path: string;
+  db_bytes: number | null;
+  attachments_bytes: number | null;
+  total_bytes: number | null;
+  error: string | null;
+}
+
+export interface BackupConfig {
+  enabled: boolean;
+  frequency: string;
+  time: string;
+  retention_days: number;
+  directory: string;
+  resolved_directory: string;
+}
+
+export interface ReportParamDef {
+  name: string;
+  label: string;
+  type: 'date' | 'int' | 'string';
+  default?: string;
+  required?: boolean;
+}
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+  type: 'string' | 'date' | 'cents' | 'number' | 'pct';
+}
+
+export interface ReportDef {
+  id: string;
+  label: string;
+  description: string;
+  params: ReportParamDef[];
+}
+
+export interface ReportResult {
+  columns: ReportColumn[];
+  rows: Array<Record<string, unknown>>;
+  total_rows: number;
+  summary?: string;
+}
+
 export class AuthRequiredError extends Error {
   constructor() {
     super('Authentication required');
@@ -1239,4 +1326,38 @@ export const api = {
 
   restartServer: () =>
     http<{ restarting: boolean }>('/api/admin/restart', { method: 'POST' }),
+
+  // ── Health (Phase 7.6) ───────────────────────────────────
+  healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),
+
+  // ── Backups (Phase 7.6) ──────────────────────────────────
+  listBackupsHistory: () =>
+    http<{ backups: BackupRecord[] }>('/api/backups').then((r) => r.backups),
+
+  getBackupConfig: () => http<BackupConfig>('/api/backups/config'),
+
+  runBackupNow: () =>
+    http<{ backup: BackupRecord }>('/api/backups/run', { method: 'POST' }).then(
+      (r) => r.backup,
+    ),
+
+  pruneBackups: () =>
+    http<{ removed: number }>('/api/backups/prune', { method: 'POST' }),
+
+  deleteBackupRecord: (id: string) =>
+    http<void>(`/api/backups/${id}`, { method: 'DELETE' }),
+
+  // ── Reports (Phase 7.6) ──────────────────────────────────
+  listReports: () =>
+    http<{ reports: ReportDef[] }>('/api/reports').then((r) => r.reports),
+
+  runReport: (id: string, params: Record<string, string>) =>
+    http<{ id: string; label: string; result: ReportResult }>(
+      `/api/reports/${id}/run`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      },
+    ),
 };
