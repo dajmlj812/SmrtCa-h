@@ -13,6 +13,53 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.7.5] — 2026-05-23 — AI subscription scan
+
+A "Find with AI" button on the Subscriptions page surfaces candidate
+subscriptions discovered in the transaction history. The rules-based
+recurring detector finds the candidates; Claude (when configured) then
+filters them down to actual cancelable/alterable services and cleans
+up their display names.
+
+### Added
+
+- **`POST /api/subscriptions/scan`** — runs the rules-based detector
+  on the transaction history, inserts new bill-kind candidates into
+  `recurring_suggestions` (skipping any already on file), and — when
+  `AI_PROVIDER=claude` — asks Claude to classify each pending
+  unrefined candidate as subscription / non-subscription. Subscriptions
+  get a polished `display_name` and `ai_refined=true`. Non-subscriptions
+  (utilities, rent, loans, insurance) get auto-rejected so they don't
+  clutter the queue. Returns `{ai_used, scanned, inserted, kept,
+  rejected}`.
+- **`GET /api/subscriptions/candidates`** — pending bill-kind
+  suggestions, ordered AI-refined first, then by confidence.
+- **`domain/subscription-ai.ts`** — Claude classifier. Single
+  Anthropic-SDK call per scan (batched, prompt-cached), Haiku-tier
+  model by default. Falls back to the rules-only path when
+  `AI_PROVIDER` isn't `claude` (Ollama support is not wired today).
+- **Subscriptions page UI** — new **Find with AI** button in the page
+  header. A "Candidates" section appears above the action queue,
+  showing each pending candidate as a card with Confirm / Snooze /
+  Not-a-subscription buttons. Confirm reuses the existing
+  `/api/recurring/suggestions/:id/confirm` flow, so the new bill
+  immediately shows up in the active list below.
+
+### Tests
+
+- `+4` integration tests (`subscriptions-scan.test.ts`): rules-only
+  fallback ignores income-kind, candidates GET filters out income +
+  rejected, scan idempotency.
+- **Total: 336** (server 330 + web 6).
+
+### Notes
+
+- The AI step is opt-in — without `AI_PROVIDER=claude` the scan still
+  works as a one-click rules-based detector limited to bill-kind
+  outflows. Cost per scan with Haiku is ~$0.001–0.01.
+
+---
+
 ## [0.7.4] — 2026-05-23 — Uncategorized hub + subscription action queue
 
 Two adjacent gaps closed: a dedicated landing pad for transactions that

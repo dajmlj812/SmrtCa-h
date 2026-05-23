@@ -827,6 +827,23 @@ export const api = {
       body: JSON.stringify(input),
     }).then((r) => r.bill),
 
+  // ── Subscription scan (Phase 7.5) ────────────────────────
+  scanSubscriptions: () =>
+    http<{
+      ai_used: boolean;
+      scanned: number;
+      inserted: number;
+      refined: number;
+      kept: number;
+      rejected: number;
+      reason?: string;
+    }>('/api/subscriptions/scan', { method: 'POST' }),
+
+  listSubscriptionCandidates: () =>
+    http<{ candidates: RecurringSuggestion[] }>(
+      '/api/subscriptions/candidates',
+    ).then((r) => r.candidates),
+
   createBill: (input: {
     name: string;
     amountCents: number;

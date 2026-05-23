@@ -4,8 +4,19 @@ import {
   type Bill,
   type BillFrequency,
   type BillReviewStatus,
+  type RecurringSuggestion,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+
+interface ScanSummary {
+  ai_used: boolean;
+  scanned: number;
+  inserted: number;
+  refined: number;
+  kept: number;
+  rejected: number;
+  reason?: string;
+}
 
 const RECURRING_FREQUENCIES: BillFrequency[] = [
   'weekly',
@@ -51,16 +62,23 @@ function monthlyEquivalentCents(b: Bill): number | null {
 
 export function SubscriptionsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
+  const [candidates, setCandidates] = useState<RecurringSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<Bill | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanSummary | null>(null);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const b = await api.listBills();
+      const [b, c] = await Promise.all([
+        api.listBills(),
+        api.listSubscriptionCandidates(),
+      ]);
       setBills(b);
+      setCandidates(c);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load bills');
     } finally {
@@ -71,6 +89,48 @@ export function SubscriptionsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function runScan() {
+    setScanning(true);
+    setError(null);
+    setScanResult(null);
+    try {
+      const r = await api.scanSubscriptions();
+      setScanResult(r);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Scan failed');
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function confirmCandidate(id: string) {
+    try {
+      await api.confirmRecurringSuggestion(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Confirm failed');
+    }
+  }
+
+  async function rejectCandidate(id: string) {
+    try {
+      await api.rejectRecurringSuggestion(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reject failed');
+    }
+  }
+
+  async function snoozeCandidate(id: string) {
+    try {
+      await api.snoozeRecurringSuggestion(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Snooze failed');
+    }
+  }
 
   async function setStatus(
     id: string,
@@ -124,9 +184,79 @@ export function SubscriptionsPage() {
             a note about why.
           </div>
         </div>
+        <button
+          className="btn"
+          type="button"
+          disabled={scanning}
+          onClick={() => void runScan()}
+          title="Use AI to find subscription-like recurring outflows in your transactions"
+        >
+          {scanning ? 'Scanning…' : 'Find with AI'}
+        </button>
       </div>
 
       {error && <div className="banner error">{error}</div>}
+
+      {scanResult && (
+        <div className={`banner ${scanResult.ai_used ? 'success' : 'info'}`}>
+          {scanResult.ai_used ? (
+            <>
+              AI scanned {scanResult.scanned} transactions, found{' '}
+              <strong>{scanResult.kept}</strong> subscription
+              {scanResult.kept === 1 ? '' : 's'}
+              {scanResult.rejected > 0 && (
+                <>
+                  {' '}
+                  · auto-rejected <strong>{scanResult.rejected}</strong>{' '}
+                  non-subscription{scanResult.rejected === 1 ? '' : 's'}{' '}
+                  (utilities, loans, etc)
+                </>
+              )}
+              .
+            </>
+          ) : (
+            <>
+              Scanned {scanResult.scanned} transactions, inserted{' '}
+              {scanResult.inserted} candidate
+              {scanResult.inserted === 1 ? '' : 's'}.
+              {scanResult.reason && (
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {scanResult.reason}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="page-section">
+        <div className="page-section-head">
+          <h2>Candidates</h2>
+          <span className="muted">
+            {candidates.length} pending · confirm to add to your list
+          </span>
+        </div>
+        {loading ? (
+          <p className="empty">Loading…</p>
+        ) : candidates.length === 0 ? (
+          <p className="empty">
+            No candidates yet. Click <strong>Find with AI</strong> above to
+            scan your transactions for subscription-like patterns.
+          </p>
+        ) : (
+          <div className="subscription-list">
+            {candidates.map((c) => (
+              <CandidateCard
+                key={c.id}
+                candidate={c}
+                onConfirm={() => void confirmCandidate(c.id)}
+                onReject={() => void rejectCandidate(c.id)}
+                onSnooze={() => void snoozeCandidate(c.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="page-section">
         <div className="page-section-head">
@@ -354,6 +484,54 @@ function NoteModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function CandidateCard({
+  candidate,
+  onConfirm,
+  onReject,
+  onSnooze,
+}: {
+  candidate: RecurringSuggestion;
+  onConfirm: () => void;
+  onReject: () => void;
+  onSnooze: () => void;
+}) {
+  const pct = Math.round(Number(candidate.confidence) * 100);
+  return (
+    <div
+      className={`card subscription-card ${candidate.ai_refined ? 'status-ai' : ''}`}
+    >
+      <div className="subscription-head">
+        <div>
+          <span
+            className={`pill ${candidate.ai_refined ? 'status-ai-pill' : 'status-active-pill'}`}
+          >
+            {candidate.ai_refined ? 'AI-verified' : 'Detected'}
+          </span>
+          <span className="subscription-name">{candidate.name}</span>
+        </div>
+        <span className="num neg">
+          {formatCents(-candidate.amount_cents)} / {candidate.detected_frequency}
+        </span>
+      </div>
+      <div className="muted subscription-meta">
+        {pct}% confidence · {candidate.sample_txn_ids.length} sample
+        {candidate.sample_txn_ids.length === 1 ? '' : 's'}
+      </div>
+      <div className="subscription-actions">
+        <button className="btn" type="button" onClick={onConfirm}>
+          Confirm
+        </button>
+        <button className="btn secondary" type="button" onClick={onSnooze}>
+          Snooze
+        </button>
+        <button className="btn-link danger" type="button" onClick={onReject}>
+          Not a subscription
+        </button>
       </div>
     </div>
   );

@@ -53,6 +53,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Transfer linking between your own accounts | ✅ |
 | Recurring & subscription detection (AI-suggested, human-verified) | ✅ |
 | Subscription action queue (flag → cancel / alter / keep with notes) | ✅ |
+| AI subscription discovery (Claude-powered, filters out non-subscriptions) | ✅ |
 | Receipt & file attachments | ✅ |
 
 ## AI
@@ -117,7 +118,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 332-test automated suite (unit → e2e) | ✅ |
+| 336-test automated suite (unit → e2e) | ✅ |
 | GUI-managed runtime settings (no .env edits for live config) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | ✅ |
