@@ -303,7 +303,7 @@ User asked to work through the backlog after Phase 9 closed. Active
 backlog plan: ship five small releases (`0.13.0` → `0.13.4`), defer
 native mobile.
 
-- Multi-user / household mode with per-user permissions — _planned 0.13.4_
+- Multi-user / household mode with per-user permissions — ✅ **0.13.4** (per-account read/read_write tuning; 2026-05-23)
 - Tax-category tagging and year-end reports — ✅ **0.13.1** (2026-05-23)
 - Cryptocurrency tracking (Simplifi-style) — ✅ **0.13.3** (2026-05-23)
 - Non-AI rules engine for auto-categorization

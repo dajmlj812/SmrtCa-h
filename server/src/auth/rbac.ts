@@ -79,20 +79,94 @@ export function canManageProviders(ctx: UserContext): boolean {
 }
 
 /**
- * Children may only see / edit data on accounts the admin assigned to
- * them. This returns the set of account ids they can touch. For
- * admins/spouses it returns null — meaning "no scope, see everything."
+ * Account scope for the current user.
+ *
+ *   - admin           → null (no scope, see everything)
+ *   - child           → ALWAYS scoped — every child-visible account
+ *                       MUST appear in account_user_access. Returning
+ *                       `[]` means "no accounts assigned yet".
+ *   - spouse          → 0.13.4 generalization: if the spouse has ANY
+ *                       account_user_access rows for this tenant, they
+ *                       are scoped to those. Zero rows = unrestricted
+ *                       (preserves pre-0.13.4 behavior — spouse who
+ *                       was never restricted keeps full access).
  */
 export async function scopedAccountIds(
   ctx: UserContext,
 ): Promise<string[] | null> {
-  if (ctx.role !== 'child' || !ctx.tenantId) return null;
+  if (!ctx.tenantId) return null;
+  if (ctx.role === 'admin') return null;
+  if (ctx.role !== 'child' && ctx.role !== 'spouse') return null;
+
   const r = await pool.query<{ account_id: string }>(
     `SELECT account_id FROM account_user_access
       WHERE user_id = $1 AND tenant_id = $2`,
     [ctx.userId, ctx.tenantId],
   );
-  return r.rows.map((row) => row.account_id);
+  const ids = r.rows.map((row) => row.account_id);
+  if (ctx.role === 'spouse' && ids.length === 0) {
+    // No scope rows = legacy unrestricted spouse.
+    return null;
+  }
+  return ids;
+}
+
+/**
+ * Returns true if the user can WRITE to the given account.
+ *
+ *   - admin           → always
+ *   - spouse          → always when no access rows exist; otherwise
+ *                       requires a row with permission='read_write'
+ *   - child           → requires a row with permission='read_write'
+ *
+ * Route handlers should call this BEFORE running a mutation that
+ * targets a specific account.
+ */
+export async function canWriteAccount(
+  ctx: UserContext,
+  accountId: string,
+): Promise<boolean> {
+  if (!ctx.tenantId) return false;
+  if (ctx.role === 'admin') return true;
+  if (ctx.role !== 'spouse' && ctx.role !== 'child') return false;
+
+  if (ctx.role === 'spouse') {
+    const any = await pool.query(
+      `SELECT 1 FROM account_user_access
+        WHERE user_id = $1 AND tenant_id = $2 LIMIT 1`,
+      [ctx.userId, ctx.tenantId],
+    );
+    if (any.rowCount === 0) return true; // unrestricted spouse
+  }
+
+  const r = await pool.query(
+    `SELECT 1 FROM account_user_access
+      WHERE user_id = $1 AND tenant_id = $2
+        AND account_id = $3 AND permission = 'read_write' LIMIT 1`,
+    [ctx.userId, ctx.tenantId, accountId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Gate a mutation that targets a specific account. Returns null when
+ * the request should proceed; otherwise a `{status, error}` object the
+ * route handler can send. Reads use scopedAccountIds() — this helper
+ * is specifically for writes.
+ */
+export async function assertAccountWriteAccess(
+  ctx: UserContext,
+  accountId: string,
+): Promise<{ status: number; error: string } | null> {
+  // First the role-level financial-mutation gate (children blocked
+  // outright unless they have a read_write row).
+  const denied = requireFinancialMutation(ctx);
+  if (denied && ctx.role !== 'child') return denied;
+  if (await canWriteAccount(ctx, accountId)) return null;
+  return {
+    status: 403,
+    error: 'You do not have write access to this account',
+  };
 }
 
 /**

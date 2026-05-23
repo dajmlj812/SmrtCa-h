@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
-import { loadUserContext, scopedAccountIds } from '../auth/rbac.js';
+import {
+  assertAccountWriteAccess,
+  loadUserContext,
+  scopedAccountIds,
+} from '../auth/rbac.js';
 
 interface TransactionQuery {
   accountId?: string;
@@ -124,6 +128,25 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid transaction id' });
+      }
+      // 0.13.4: per-account write gate. Look up the transaction's
+      // account, then ask rbac whether this user can write to it.
+      const owner = await query<{ account_id: string }>(
+        `SELECT account_id FROM transactions WHERE id = $1`,
+        [req.params.id],
+      );
+      if (owner.rowCount === 0) {
+        return reply.code(404).send({ error: 'Transaction not found' });
+      }
+      if (req.user) {
+        const ctx = await loadUserContext(req.user.id, req.user.tenantId);
+        const denied = await assertAccountWriteAccess(
+          ctx,
+          owner.rows[0]!.account_id,
+        );
+        if (denied) {
+          return reply.code(denied.status).send({ error: denied.error });
+        }
       }
       const body = (req.body ?? {}) as Record<string, unknown>;
 

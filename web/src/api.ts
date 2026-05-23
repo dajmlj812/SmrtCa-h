@@ -1353,17 +1353,27 @@ export const api = {
 
   // Child→account assignments (admin only)
   listMemberAccounts: (tenantId: string, userId: string) =>
-    http<{ accounts: Array<{ account_id: string; account_name: string }> }>(
+    http<{
+      accounts: Array<{
+        account_id: string;
+        account_name: string;
+        permission: 'read' | 'read_write';
+      }>;
+    }>(
       `/api/tenants/${tenantId}/members/${userId}/accounts`,
     ).then((r) => r.accounts),
 
-  setMemberAccounts: (tenantId: string, userId: string, accountIds: string[]) =>
+  setMemberAccounts: (
+    tenantId: string,
+    userId: string,
+    accounts: Array<{ accountId: string; permission: 'read' | 'read_write' }>,
+  ) =>
     http<{ ok: true; count: number }>(
       `/api/tenants/${tenantId}/members/${userId}/accounts`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountIds }),
+        body: JSON.stringify({ accounts }),
       },
     ),
 

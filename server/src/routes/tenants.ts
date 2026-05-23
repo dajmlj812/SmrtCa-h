@@ -135,8 +135,12 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
       if (!isAdmin(role) && role !== 'spouse' && !isOwnLookup) {
         return reply.code(403).send({ error: 'Forbidden' });
       }
-      const r = await query<{ account_id: string; account_name: string }>(
-        `SELECT a.id AS account_id, a.name AS account_name
+      const r = await query<{
+        account_id: string;
+        account_name: string;
+        permission: string;
+      }>(
+        `SELECT a.id AS account_id, a.name AS account_name, aua.permission
            FROM account_user_access aua
            JOIN accounts a ON a.id = aua.account_id
           WHERE aua.tenant_id = $1 AND aua.user_id = $2`,
@@ -156,16 +160,44 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
       if (!isAdmin(role)) {
         return reply.code(403).send({ error: 'Only admins can assign accounts' });
       }
-      const body = (req.body ?? {}) as { accountIds?: unknown };
-      if (!Array.isArray(body.accountIds)) {
-        return reply.code(400).send({ error: 'accountIds must be an array' });
-      }
-      const ids: string[] = [];
-      for (const id of body.accountIds) {
-        if (typeof id !== 'string' || !isUuid(id)) {
-          return reply.code(400).send({ error: 'Invalid account id' });
+      // 0.13.4: accept either the legacy `accountIds: string[]` (all
+      // default to read_write) OR the new structured form
+      // `accounts: [{accountId, permission}]`. The structured form is
+      // what the web UI sends; the legacy shape stays for external
+      // callers / older clients.
+      const body = (req.body ?? {}) as {
+        accountIds?: unknown;
+        accounts?: unknown;
+      };
+      const entries: Array<{ accountId: string; permission: string }> = [];
+      if (Array.isArray(body.accounts)) {
+        for (const raw of body.accounts) {
+          if (typeof raw !== 'object' || raw === null) {
+            return reply.code(400).send({ error: 'Invalid accounts entry' });
+          }
+          const e = raw as { accountId?: unknown; permission?: unknown };
+          if (typeof e.accountId !== 'string' || !isUuid(e.accountId)) {
+            return reply.code(400).send({ error: 'Invalid accountId' });
+          }
+          const p = typeof e.permission === 'string' ? e.permission : 'read_write';
+          if (p !== 'read' && p !== 'read_write') {
+            return reply
+              .code(400)
+              .send({ error: 'permission must be read or read_write' });
+          }
+          entries.push({ accountId: e.accountId, permission: p });
         }
-        ids.push(id);
+      } else if (Array.isArray(body.accountIds)) {
+        for (const id of body.accountIds) {
+          if (typeof id !== 'string' || !isUuid(id)) {
+            return reply.code(400).send({ error: 'Invalid account id' });
+          }
+          entries.push({ accountId: id, permission: 'read_write' });
+        }
+      } else {
+        return reply
+          .code(400)
+          .send({ error: 'accounts[] or accountIds[] is required' });
       }
       await withTransaction(async (client) => {
         await client.query(
@@ -173,17 +205,17 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
             WHERE tenant_id = $1 AND user_id = $2`,
           [req.params.id, req.params.userId],
         );
-        for (const aid of ids) {
+        for (const e of entries) {
           await client.query(
             `INSERT INTO account_user_access
-               (account_id, user_id, tenant_id, created_by)
-             VALUES ($1, $2, $3, $4)
+               (account_id, user_id, tenant_id, permission, created_by)
+             VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING`,
-            [aid, req.params.userId, req.params.id, req.user!.id],
+            [e.accountId, req.params.userId, req.params.id, e.permission, req.user!.id],
           );
         }
       });
-      return { ok: true, count: ids.length };
+      return { ok: true, count: entries.length };
     },
   );
 

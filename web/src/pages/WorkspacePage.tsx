@@ -207,7 +207,9 @@ function ChildAccountsModal({
   onSaved: () => void;
 }) {
   const [allAccounts, setAllAccounts] = useState<Array<{ id: string; name: string }>>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [permissions, setPermissions] = useState<
+    Map<string, 'read' | 'read_write'>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,27 +221,37 @@ function ChildAccountsModal({
     ])
       .then(([all, current]) => {
         setAllAccounts(all.map((a) => ({ id: a.id, name: a.name })));
-        setSelected(new Set(current.map((c) => c.account_id)));
+        setPermissions(
+          new Map(current.map((c) => [c.account_id, c.permission])),
+        );
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Load failed'))
       .finally(() => setLoading(false));
   }, [tenantId, member.user_id]);
 
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
+  function toggleAccount(id: string) {
+    setPermissions((prev) => {
+      const next = new Map(prev);
       if (next.has(id)) next.delete(id);
-      else next.add(id);
+      else next.set(id, 'read_write');
       return next;
     });
+  }
+
+  function setPerm(id: string, p: 'read' | 'read_write') {
+    setPermissions((prev) => new Map(prev).set(id, p));
   }
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      await api.setMemberAccounts(tenantId, member.user_id, Array.from(selected));
+      const accounts = [...permissions.entries()].map(([accountId, permission]) => ({
+        accountId,
+        permission,
+      }));
+      await api.setMemberAccounts(tenantId, member.user_id, accounts);
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -263,20 +275,46 @@ function ChildAccountsModal({
         ) : (
           <>
             <p className="muted">
-              Children only see transactions on accounts you check below.
-              Their copy of the app hides everything else.
+              Check the accounts this member can see. For each one, pick
+              read-only (view) or read+write (can edit). Leaving every box
+              unchecked makes a spouse fully unrestricted (legacy
+              behavior); a child with no checks sees nothing.
             </p>
             <div style={{ maxHeight: 320, overflowY: 'auto', margin: '8px 0' }}>
-              {allAccounts.map((a) => (
-                <label key={a.id} style={{ display: 'block', padding: '4px 0' }}>
-                  <input
-                    type="checkbox"
-                    checked={selected.has(a.id)}
-                    onChange={() => toggle(a.id)}
-                  />{' '}
-                  {a.name}
-                </label>
-              ))}
+              {allAccounts.map((a) => {
+                const perm = permissions.get(a.id);
+                return (
+                  <div
+                    key={a.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '4px 0',
+                    }}
+                  >
+                    <label style={{ flex: 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={perm !== undefined}
+                        onChange={() => toggleAccount(a.id)}
+                      />{' '}
+                      {a.name}
+                    </label>
+                    <select
+                      value={perm ?? 'read_write'}
+                      disabled={perm === undefined}
+                      onChange={(e) =>
+                        setPerm(a.id, e.target.value as 'read' | 'read_write')
+                      }
+                      style={{ fontSize: 13 }}
+                    >
+                      <option value="read_write">read + write</option>
+                      <option value="read">read only</option>
+                    </select>
+                  </div>
+                );
+              })}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn" type="button" disabled={saving} onClick={() => void save()}>

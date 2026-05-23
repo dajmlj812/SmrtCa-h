@@ -9,8 +9,108 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Backlog progressing. 0.13.0–0.13.3 shipped. Next: 0.13.4 permission
-tuning. Native mobile deferred._
+_0.13.0–0.13.4 shipped. **Original backlog complete** except native
+mobile (deferred). Open backlog item: non-AI rules engine for
+auto-categorization. Future direction is whatever the user picks
+next._
+
+---
+
+## [0.13.4] — 2026-05-23 — Per-account permission tuning (closes original backlog)
+
+Last of the five planned backlog releases. Adds per-account
+permission tuning so spouses can be restricted to specific accounts,
+and any non-admin role can be granted read-only access. Existing
+behavior is preserved: a spouse with no access rows keeps full
+tenant access.
+
+### Schema (migration 028)
+
+- `account_user_access.permission text NOT NULL DEFAULT 'read_write'`
+  with CHECK on `{read, read_write}`. Existing rows default to
+  `read_write` so today's children keep their current edit
+  capability.
+- Partial index `(user_id, tenant_id) WHERE permission = 'read_write'`
+  for the dominant mutation-route lookup.
+
+### rbac generalization
+
+- `scopedAccountIds(ctx)` extended:
+  - admin → null (unrestricted; no change)
+  - child → always scoped (no change)
+  - spouse → **NEW**: scoped to access rows when any exist; null
+    (unrestricted) when zero rows exist. Preserves legacy spouse
+    behavior for tenants that never set explicit scopes.
+- **New** `canWriteAccount(ctx, accountId)`:
+  - admin → true
+  - spouse → true when no access rows exist (legacy); otherwise
+    requires a `read_write` row for THIS account
+  - child → requires a `read_write` row
+- **New** `assertAccountWriteAccess(ctx, accountId)` — returns
+  `{status, error}` or null. Route handlers call this BEFORE running
+  a mutation that targets a specific account.
+
+### Routes
+
+- `PUT /api/tenants/:id/members/:userId/accounts` now accepts EITHER
+  the legacy `accountIds: string[]` (all default to read_write) OR
+  the new structured `accounts: [{accountId, permission}]`. The web
+  UI sends the structured form; external scripts that send
+  `accountIds` keep working.
+- `GET /api/tenants/:id/members/:userId/accounts` returns
+  `permission` per row.
+- `PATCH /api/transactions/:id` calls `assertAccountWriteAccess`
+  after looking up the transaction's account. Returns 403 with a
+  clear message when a scoped user hits an account they can only
+  read.
+
+### Web
+
+- `MembersSection` account-access modal: each account row now has a
+  checkbox **and** a permission dropdown (read+write / read only).
+  Unchecking removes the row entirely; checked rows default to
+  `read_write`. Save sends the structured `accounts[]` payload.
+
+### Tests (+10 server)
+
+- `tests/integration/permissions.test.ts`:
+  - Admin baseline PATCH works.
+  - Spouse without rows = unrestricted PATCH works.
+  - Spouse with read-only on the account is 403.
+  - Spouse with read_write can PATCH.
+  - Spouse with rows but EXCLUDING the target account is 403.
+  - Child read = 403; child read_write = OK.
+  - Structured `accounts[]` payload round-trips with the per-row
+    permission.
+  - Legacy `accountIds[]` payload still works (defaults to
+    read_write).
+  - Unknown permission values return 400.
+- Total: **560 tests** (554 server + 6 web), all green.
+
+### Files
+
+```
+server/src/db/migrations/028_account_access_permission.sql   (new)
+server/src/auth/rbac.ts                                      (generalized
+                                                              scopedAccountIds
+                                                              + new helpers)
+server/src/routes/tenants.ts                                 (structured
+                                                              accounts payload)
+server/src/routes/transactions.ts                            (per-account
+                                                              write gate on PATCH)
+server/tests/integration/permissions.test.ts                 (new)
+web/src/api.ts                                               (accounts[] +
+                                                              permission types)
+web/src/pages/WorkspacePage.tsx                              (permission editor)
+```
+
+### What's next
+
+The original "Beyond — Backlog" list is now complete except for
+native mobile apps (still deferred — the PWA covers mobile) and the
+"non-AI rules engine for auto-categorization" item, which was already
+partially covered by the Phase 6.2 rules table. From here, future
+work is whatever the user picks next.
 
 ---
 
