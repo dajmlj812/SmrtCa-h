@@ -1049,3 +1049,56 @@ select:focus {
 .upcoming-bill-date {
   font-size: 13px;
 }
+
+/* ── Phase 6.1: recurring suggestions + period pills ─────── */
+
+.pill.period-pill {
+  background: #eef2ff;
+  color: #4338ca;
+  margin-left: 8px;
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.budget-row-period {
+  font-size: 12px;
+}
+
+.suggestion-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.suggestion-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+.suggestion-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.suggestion-name {
+  font-weight: 500;
+  margin-left: 8px;
+}
+.pill.income-pill,
+.pill.pos-pill {
+  background: #ecfdf5;
+  color: #065f46;
+}
+.pill.neg-pill {
+  background: #fef3c7;
+  color: #92400e;
+}
+.suggestion-meta {
+  font-size: 12px;
+}
+.suggestion-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

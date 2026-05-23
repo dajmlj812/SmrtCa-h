@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   api,
+  type BudgetPeriodType,
   type BudgetVsActualRow,
   type Category,
 } from '../api';
-import { formatCents } from '../format';
+import { formatCents, formatDate } from '../format';
+
+const PERIOD_LABELS: Record<BudgetPeriodType, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Bi-weekly',
+  semimonthly: 'Semi-monthly',
+  monthly: 'Monthly',
+  custom: 'Custom',
+};
 
 function firstOfMonth(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
@@ -40,8 +49,10 @@ export function BudgetsPage() {
     setLoading(true);
     setError(null);
     try {
+      // Pass the 15th of the month so the monthly period covers it cleanly.
+      const asOf = m.replace(/-01$/, '-15');
       const [actuals, cats] = await Promise.all([
-        api.budgetActuals(m),
+        api.budgetActuals(asOf),
         api.listCategories(),
       ]);
       setRows(actuals.rows);
@@ -70,10 +81,15 @@ export function BudgetsPage() {
   async function onUpsert(input: {
     categoryId: string | null;
     amountCents: number;
+    periodType: BudgetPeriodType;
+    periodStart: string;
+    periodEnd?: string;
   }) {
     try {
       await api.upsertBudget({
-        periodMonth: month,
+        periodStart: input.periodStart,
+        periodType: input.periodType,
+        ...(input.periodEnd ? { periodEnd: input.periodEnd } : {}),
         categoryId: input.categoryId,
         amountCents: input.amountCents,
       });
@@ -170,6 +186,7 @@ export function BudgetsPage() {
       )}
 
       <BudgetAddForm
+        month={month}
         categories={categories}
         hasFlex={hasFlex}
         budgetedIds={budgetedIds}
@@ -196,7 +213,10 @@ function BudgetRow({
   return (
     <div className="budget-row">
       <div className="budget-row-head">
-        <span className="budget-row-name">{label}</span>
+        <span className="budget-row-name">
+          {label}
+          <span className="pill period-pill">{PERIOD_LABELS[row.period_type]}</span>
+        </span>
         <span className="budget-row-num">
           <span className={over ? 'neg' : ''}>
             {formatCents(row.actual_cents)}
@@ -206,6 +226,9 @@ function BudgetRow({
         <button className="btn-link danger" type="button" onClick={onDelete}>
           Remove
         </button>
+      </div>
+      <div className="muted budget-row-period">
+        {formatDate(row.period_start)} → {formatDate(row.period_end)}
       </div>
       <div className="progress-track">
         <div
@@ -218,36 +241,63 @@ function BudgetRow({
 }
 
 function BudgetAddForm({
+  month,
   categories,
   hasFlex,
   budgetedIds,
   onAdd,
 }: {
+  month: string;
   categories: Category[];
   hasFlex: boolean;
   budgetedIds: Set<string>;
-  onAdd: (input: { categoryId: string | null; amountCents: number }) => Promise<void>;
+  onAdd: (input: {
+    categoryId: string | null;
+    amountCents: number;
+    periodType: BudgetPeriodType;
+    periodStart: string;
+    periodEnd?: string;
+  }) => Promise<void>;
 }) {
   const [categoryId, setCategoryId] = useState<string>('');
   const [dollars, setDollars] = useState('');
+  const [periodType, setPeriodType] = useState<BudgetPeriodType>('monthly');
+  const [periodStart, setPeriodStart] = useState(month);
+  const [periodEnd, setPeriodEnd] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const available = categories.filter(
     (c) => c.parent_id !== null && !budgetedIds.has(c.id),
   );
 
+  // Keep periodStart roughly in sync with the selected month, except when
+  // the user is on weekly/biweekly (those typically want a specific day).
+  function handlePeriodTypeChange(value: BudgetPeriodType) {
+    setPeriodType(value);
+    if (value === 'monthly') setPeriodStart(month);
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     const cents = Math.round(Number(dollars) * 100);
     if (!Number.isFinite(cents) || cents <= 0) return;
+    if (periodType === 'custom' && (!periodEnd || periodEnd <= periodStart)) {
+      return;
+    }
     setSubmitting(true);
     try {
       await onAdd({
         categoryId: categoryId === '__flex' ? null : categoryId || null,
         amountCents: cents,
+        periodType,
+        periodStart,
+        ...(periodType === 'custom' ? { periodEnd } : {}),
       });
       setCategoryId('');
       setDollars('');
+      setPeriodType('monthly');
+      setPeriodStart(month);
+      setPeriodEnd('');
     } finally {
       setSubmitting(false);
     }
@@ -288,6 +338,43 @@ function BudgetAddForm({
             onChange={(e) => setDollars(e.target.value)}
           />
         </div>
+        <div className="field">
+          <label htmlFor="budget-period">Period</label>
+          <select
+            id="budget-period"
+            value={periodType}
+            onChange={(e) => handlePeriodTypeChange(e.target.value as BudgetPeriodType)}
+          >
+            <option value="monthly">Monthly</option>
+            <option value="semimonthly">Semi-monthly (every 15 days)</option>
+            <option value="biweekly">Bi-weekly (every 14 days)</option>
+            <option value="weekly">Weekly</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="budget-start">
+            {periodType === 'monthly' ? 'Period (month)' : 'Start date'}
+          </label>
+          <input
+            id="budget-start"
+            type="date"
+            value={periodStart}
+            onChange={(e) => setPeriodStart(e.target.value)}
+          />
+        </div>
+        {periodType === 'custom' && (
+          <div className="field">
+            <label htmlFor="budget-end">End date</label>
+            <input
+              id="budget-end"
+              type="date"
+              value={periodEnd}
+              onChange={(e) => setPeriodEnd(e.target.value)}
+              required
+            />
+          </div>
+        )}
       </div>
       <div style={{ marginTop: 12 }}>
         <button

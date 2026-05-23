@@ -28,7 +28,7 @@ RUN mkdir -p dist/db/migrations && cp src/db/migrations/*.sql dist/db/migrations
 
 # ── Stage 3: runtime ─────────────────────────────────────────
 FROM node:22-alpine AS runtime
-RUN apk add --no-cache tini postgresql17-client
+RUN apk add --no-cache tini postgresql17-client wget
 WORKDIR /app
 
 # Production-only deps for the server, fetched without dev tooling.

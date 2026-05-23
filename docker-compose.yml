@@ -22,6 +22,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    # Exposed so host-side tools (vitest, psql, npm run backup) can reach
+    # the DB. The app container talks to it internally over the Docker
+    # network at `db:5432`. Remove this mapping for a more locked-down
+    # deployment (Postgres won't be reachable off-host).
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - smrtcash-db-data:/var/lib/postgresql/data
     healthcheck:

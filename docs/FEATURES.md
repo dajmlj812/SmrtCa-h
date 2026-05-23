@@ -46,7 +46,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | AI-cleaned merchant names & categorization | ✅ |
 | Manual edit / re-categorize | ✅ |
 | Transfer linking between your own accounts | ✅ |
-| Recurring & subscription detection | 📋 Backlog |
+| Recurring & subscription detection (AI-suggested, human-verified) | ✅ |
 | Receipt & file attachments | ✅ |
 
 ## AI
@@ -68,6 +68,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Feature | Status |
 |---------|--------|
 | Flex budgeting — fixed categories plus a variable-spending pool | ✅ |
+| Budget periods — weekly / bi-weekly / semi-monthly / monthly / custom | ✅ |
 | Monthly budget-vs-actual tracking | ✅ |
 | Savings goals with progress tracking | ✅ |
 | Bill reminders & upcoming-bills view | ✅ |
@@ -106,7 +107,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 263-test automated suite (unit → e2e) | ✅ |
+| 279-test automated suite (unit → e2e) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | ✅ |
 | Encryption at rest (attachments AES-256-GCM; DB via host volume) | ✅ |

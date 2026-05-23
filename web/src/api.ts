@@ -77,9 +77,18 @@ export interface NetWorthRow {
 }
 
 // ── Phase 6 types ─────────────────────────────────────────
+export type BudgetPeriodType =
+  | 'weekly'
+  | 'biweekly'
+  | 'semimonthly'
+  | 'monthly'
+  | 'custom';
+
 export interface Budget {
   id: string;
   period_month: string;
+  period_type: BudgetPeriodType;
+  period_end: string | null;
   category_id: string | null;
   category_name: string | null;
   parent_id: string | null;
@@ -91,8 +100,34 @@ export interface BudgetVsActualRow {
   id: string;
   category_id: string | null;
   category_name: string | null;
+  period_type: BudgetPeriodType;
+  period_start: string;
+  period_end: string;
   budgeted_cents: number;
   actual_cents: number;
+}
+
+export interface RecurringSuggestion {
+  id: string;
+  kind: 'bill' | 'income';
+  name: string;
+  normalized_key: string;
+  amount_cents: number;
+  detected_frequency:
+    | 'weekly'
+    | 'biweekly'
+    | 'semimonthly'
+    | 'monthly'
+    | 'yearly'
+    | 'one-time'
+    | 'unknown';
+  sample_txn_ids: string[];
+  confidence: number;
+  status: 'pending' | 'confirmed' | 'rejected' | 'snoozed';
+  resolved_to_id: string | null;
+  ai_refined: boolean;
+  created_at: string;
+  resolved_at: string | null;
 }
 
 export interface SavingsGoal {
@@ -555,8 +590,13 @@ export const api = {
       `/api/budgets?month=${encodeURIComponent(month)}`,
     ).then((r) => r.budgets),
 
+  listAllBudgets: () =>
+    http<{ budgets: Budget[] }>(`/api/budgets?all=1`).then((r) => r.budgets),
+
   upsertBudget: (input: {
-    periodMonth: string;
+    periodStart: string;
+    periodType?: BudgetPeriodType;
+    periodEnd?: string;
     categoryId: string | null;
     amountCents: number;
   }) =>
@@ -564,6 +604,13 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+    }).then((r) => r.budget),
+
+  updateBudgetAmount: (id: string, amountCents: number) =>
+    http<{ budget: Budget }>(`/api/budgets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountCents }),
     }).then((r) => r.budget),
 
   deleteBudget: (id: string) =>
@@ -576,12 +623,12 @@ export const api = {
       body: JSON.stringify({ fromMonth, toMonth }),
     }),
 
-  budgetActuals: (month: string) =>
+  budgetActuals: (asOf: string) =>
     http<{
-      month: string;
+      asOf: string;
       rows: BudgetVsActualRow[];
       totals: { budgeted_cents: number; actual_cents: number };
-    }>(`/api/budgets/actual?month=${encodeURIComponent(month)}`),
+    }>(`/api/budgets/actual?asOf=${encodeURIComponent(asOf)}`),
 
   // ── Goals ────────────────────────────────────────────────
   listGoals: () =>
@@ -676,4 +723,41 @@ export const api = {
       ending_cents: number;
       series: Array<{ date: string; projected_cents: number }>;
     }>(`/api/cash-flow?days=${days}`),
+
+  // ── Recurring (Phase 6.1) ────────────────────────────────
+  detectRecurring: () =>
+    http<{ scanned: number; candidates: number; inserted: number; skipped: number }>(
+      '/api/recurring/detect',
+      { method: 'POST' },
+    ),
+
+  listRecurringSuggestions: (status: string = 'pending') =>
+    http<{ status: string; suggestions: RecurringSuggestion[] }>(
+      `/api/recurring/suggestions?status=${encodeURIComponent(status)}`,
+    ).then((r) => r.suggestions),
+
+  confirmRecurringSuggestion: (
+    id: string,
+    input: { name?: string; frequency?: string; nextDate?: string } = {},
+  ) =>
+    http<{ suggestion: RecurringSuggestion; resolvedId: string }>(
+      `/api/recurring/suggestions/${id}/confirm`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ),
+
+  rejectRecurringSuggestion: (id: string) =>
+    http<{ suggestion: RecurringSuggestion }>(
+      `/api/recurring/suggestions/${id}/reject`,
+      { method: 'POST' },
+    ),
+
+  snoozeRecurringSuggestion: (id: string) =>
+    http<{ suggestion: RecurringSuggestion }>(
+      `/api/recurring/suggestions/${id}/snooze`,
+      { method: 'POST' },
+    ),
 };

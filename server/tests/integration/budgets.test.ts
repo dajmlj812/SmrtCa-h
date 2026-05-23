@@ -78,7 +78,7 @@ describe('Budgets API', () => {
     expect(list.json().budgets).toHaveLength(1);
   });
 
-  it('upserts the same (month, category) — second POST updates', async () => {
+  it('upserts a monthly budget on the same (month, category) — second POST is a 200 update', async () => {
     await app.inject({
       method: 'POST',
       url: '/api/budgets',
@@ -99,7 +99,8 @@ describe('Budgets API', () => {
       },
       headers: { 'content-type': 'application/json' },
     });
-    expect(second.statusCode).toBe(201);
+    // The monthly path keeps upsert semantics — 200 on update, not 201.
+    expect(second.statusCode).toBe(200);
     expect(second.json().budget.amount_cents).toBe(60000);
 
     const list = await app.inject({
@@ -109,18 +110,20 @@ describe('Budgets API', () => {
     expect(list.json().budgets).toHaveLength(1);
   });
 
-  it('rejects a non-first-of-month period', async () => {
+  it('accepts a non-first-of-month anchor (used for weekly/biweekly cadences)', async () => {
     const r = await app.inject({
       method: 'POST',
       url: '/api/budgets',
       payload: {
-        periodMonth: '2026-05-15',
+        periodStart: '2026-05-15',
+        periodType: 'weekly',
         categoryId: groceries,
         amountCents: 10000,
       },
       headers: { 'content-type': 'application/json' },
     });
-    expect(r.statusCode).toBe(400);
+    expect(r.statusCode).toBe(201);
+    expect(r.json().budget.period_type).toBe('weekly');
   });
 
   it('treats categoryId: null as the flex pool — unique per month', async () => {

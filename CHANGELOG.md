@@ -13,6 +13,90 @@ _Phase 7 work will land here._
 
 ---
 
+## [0.6.1] — 2026-05-22 — Phase 6.1: Recurring detection + flexible budget periods
+
+Completes the deferral noted in the 0.6.0 changelog. **Auto-detect
+recurring bills and income, then verify each with a single click**, plus
+budgets now support weekly / biweekly / semi-monthly / monthly /
+custom-range cadences.
+
+### Added
+
+- **Recurring detection (`POST /api/recurring/detect`).** Rules-based
+  pass that buckets transactions by (normalized merchant, sign), finds
+  groups of ≥ 3 occurrences, measures the mean interval and variance,
+  and classifies the cadence (`weekly` / `biweekly` / `semimonthly` /
+  `monthly` / `yearly` / `unknown`). Confidence is a 0..1 score
+  combining cadence-fit, variance-tightness, and sample count. Amount
+  is the median of the group, so a single outlier doesn't skew the
+  suggestion. Transfers between own accounts are excluded.
+- **`recurring_suggestions` table** (migration 007) — pending /
+  confirmed / rejected / snoozed. A unique partial index on
+  `(kind, lower(normalized_key))` for non-rejected rows means re-running
+  the detector doesn't spam duplicates; rejected entries stay rejected
+  so already-dismissed patterns never come back.
+- **Verification flow** — new "Suggested recurring items" panel on
+  `/bills` lists every pending suggestion with name, amount,
+  detected cadence, and confidence. Three actions:
+  - **Confirm** opens a modal pre-filled with the detector's guess; you
+    can override the name and the frequency, then click **Confirm** to
+    create the matching `bill` or `recurring_income` row.
+  - **Snooze** — keeps the suggestion eligible for confirmation later
+    but hides it from the pending list.
+  - **Not recurring** — rejects it; the key is remembered so the
+    detector won't surface it again.
+- **Flexible budget periods.** `budgets.period_type` and
+  `budgets.period_end` (migration 007) — five cadences:
+  `weekly` / `biweekly` / `semimonthly` / `monthly` / `custom`. The
+  add-budget form lets you pick one; the `/budgets` page renders a
+  pill on each row showing its cadence and the active
+  start → end range.
+- **`/api/budgets/actual?asOf=YYYY-MM-DD`** — for any given date,
+  returns every budget with its current rolling [start, end) window and
+  the actual spending against it. The legacy `?month=` form still
+  works and now only matches monthly budgets.
+- **`PATCH /api/budgets/:id`** — edit the amount without deleting and
+  recreating.
+
+### Changed
+
+- The monthly upsert path on `POST /api/budgets` now returns **200** on
+  update (was 201). Insertion still returns 201.
+- `budgets.period_month` no longer requires day=1 — migration 008
+  drops the original CHECK so any anchor date is accepted, which the
+  non-monthly cadences need.
+
+### Fixed
+
+- **Dockerfile healthcheck.** `wget` wasn't in `node:22-alpine`, so the
+  `app` container always showed `unhealthy`. Added `wget` to the apk
+  install line.
+
+### Tests
+
+- **+16 server tests** (250 → 266):
+  - 9 unit tests for the detector (monthly / biweekly / weekly cadences,
+    erratic spacing classified as `unknown`, median amount, sign
+    separation, < 3 occurrences ignored, raw-description fallback,
+    confidence ordering).
+  - 7 integration tests for the API (detect + list, dedup on re-run,
+    confirm-creates-bill, confirm-creates-income, reject prevents
+    re-detection, snooze keeps confirmable, transfers excluded).
+  - Existing budgets tests updated for the new upsert status code +
+    relaxed anchor-date validation.
+- Total automated coverage: **279 tests** (server 266 + web 6 +
+  Playwright 7).
+
+### Migration notes
+
+- **Upgrading from 0.6.0:** `npm run migrate --prefix server` applies
+  migrations 007 (`recurring_suggestions` + budget period columns) and
+  008 (drops the day-of-month CHECK on `budgets.period_month`).
+- The detector is **on-demand only** — there's a "Detect recurring"
+  button on `/bills`. It does not run automatically on imports.
+
+---
+
 ## [0.6.0] — 2026-05-22 — Phase 6: Budgeting & Cash Flow
 
 Five tightly-related features in one release: flex budgets, monthly

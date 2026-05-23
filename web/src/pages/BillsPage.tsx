@@ -5,6 +5,7 @@ import {
   type BillFrequency,
   type IncomeFrequency,
   type RecurringIncome,
+  type RecurringSuggestion,
 } from '../api';
 import { formatCents, formatDate } from '../format';
 
@@ -25,25 +26,64 @@ const INCOME_FREQUENCIES: IncomeFrequency[] = [
 export function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [income, setIncome] = useState<RecurringIncome[]>([]);
+  const [suggestions, setSuggestions] = useState<RecurringSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showBillForm, setShowBillForm] = useState(false);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [confirming, setConfirming] = useState<RecurringSuggestion | null>(null);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [b, i] = await Promise.all([
+      const [b, i, s] = await Promise.all([
         api.listBills(),
         api.listRecurringIncome(),
+        api.listRecurringSuggestions('pending'),
       ]);
       setBills(b);
       setIncome(i);
+      setSuggestions(s);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runDetect() {
+    setDetecting(true);
+    setError(null);
+    try {
+      const r = await api.detectRecurring();
+      if (r.inserted === 0 && r.candidates === 0) {
+        setError('No recurring patterns detected — need at least 3 occurrences on the same merchant.');
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Detection failed');
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  async function rejectSuggestion(id: string) {
+    try {
+      await api.rejectRecurringSuggestion(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reject failed');
+    }
+  }
+
+  async function snoozeSuggestion(id: string) {
+    try {
+      await api.snoozeRecurringSuggestion(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Snooze failed');
     }
   }
 
@@ -92,6 +132,38 @@ export function BillsPage() {
       </div>
 
       {error && <div className="banner error">{error}</div>}
+
+      <div className="page-section">
+        <div className="page-section-head">
+          <h2>Suggested recurring items</h2>
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={detecting}
+            onClick={() => void runDetect()}
+          >
+            {detecting ? 'Scanning…' : 'Detect recurring'}
+          </button>
+        </div>
+        {suggestions.length === 0 ? (
+          <p className="empty">
+            No pending suggestions. Click <strong>Detect recurring</strong> to scan
+            your transactions for repeating patterns.
+          </p>
+        ) : (
+          <div className="suggestion-list">
+            {suggestions.map((s) => (
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                onConfirm={() => setConfirming(s)}
+                onReject={() => void rejectSuggestion(s.id)}
+                onSnooze={() => void snoozeSuggestion(s.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="page-section">
         <div className="page-section-head">
@@ -214,6 +286,194 @@ export function BillsPage() {
           }}
         />
       )}
+      {confirming && (
+        <ConfirmSuggestionModal
+          suggestion={confirming}
+          onClose={() => setConfirming(null)}
+          onConfirmed={() => {
+            setConfirming(null);
+            void load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SuggestionCard({
+  suggestion,
+  onConfirm,
+  onReject,
+  onSnooze,
+}: {
+  suggestion: RecurringSuggestion;
+  onConfirm: () => void;
+  onReject: () => void;
+  onSnooze: () => void;
+}) {
+  const pct = Math.round(Number(suggestion.confidence) * 100);
+  return (
+    <div className="card suggestion-card">
+      <div className="suggestion-head">
+        <div>
+          <span className={`pill ${suggestion.kind === 'income' ? 'pos' : 'neg'}-pill`}>
+            {suggestion.kind === 'income' ? 'Income' : 'Bill'}
+          </span>
+          <span className="suggestion-name">{suggestion.name}</span>
+        </div>
+        <span className={`num ${suggestion.kind === 'income' ? 'pos' : 'neg'}`}>
+          {formatCents(
+            suggestion.kind === 'income'
+              ? suggestion.amount_cents
+              : -suggestion.amount_cents,
+          )}
+        </span>
+      </div>
+      <div className="muted suggestion-meta">
+        Looks <strong>{suggestion.detected_frequency}</strong> · {pct}% confidence ·
+        {' '}
+        {suggestion.sample_txn_ids.length} sample
+        {suggestion.sample_txn_ids.length === 1 ? '' : 's'}
+      </div>
+      <div className="suggestion-actions">
+        <button className="btn" type="button" onClick={onConfirm}>
+          Confirm
+        </button>
+        <button className="btn secondary" type="button" onClick={onSnooze}>
+          Snooze
+        </button>
+        <button className="btn-link danger" type="button" onClick={onReject}>
+          Not recurring
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmSuggestionModal({
+  suggestion,
+  onClose,
+  onConfirmed,
+}: {
+  suggestion: RecurringSuggestion;
+  onClose: () => void;
+  onConfirmed: () => void;
+}) {
+  const validFreqs: Array<{ value: string; label: string }> =
+    suggestion.kind === 'bill'
+      ? [
+          { value: 'monthly', label: 'Monthly' },
+          { value: 'biweekly', label: 'Bi-weekly' },
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'yearly', label: 'Yearly' },
+          { value: 'one-time', label: 'One-time' },
+        ]
+      : [
+          { value: 'monthly', label: 'Monthly' },
+          { value: 'biweekly', label: 'Bi-weekly' },
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'yearly', label: 'Yearly' },
+        ];
+
+  const initialFreq = validFreqs.some(
+    (f) => f.value === suggestion.detected_frequency,
+  )
+    ? suggestion.detected_frequency
+    : 'monthly';
+
+  const [name, setName] = useState(suggestion.name);
+  const [frequency, setFrequency] = useState<string>(initialFreq);
+  const [nextDate, setNextDate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.confirmRecurringSuggestion(suggestion.id, {
+        name,
+        frequency,
+        ...(nextDate ? { nextDate } : {}),
+      });
+      onConfirmed();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Confirm failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-header">
+          <h2>
+            Confirm {suggestion.kind === 'income' ? 'recurring income' : 'bill'}
+          </h2>
+          <button className="modal-close" type="button" onClick={onClose}>
+            ✕
+          </button>
+        </header>
+        <form onSubmit={submit}>
+          {error && <div className="banner error">{error}</div>}
+          <div className="muted" style={{ marginBottom: 12 }}>
+            Detector saw {suggestion.sample_txn_ids.length} matching transactions
+            at amount {formatCents(suggestion.amount_cents)} on a{' '}
+            <strong>{suggestion.detected_frequency}</strong> cadence
+            ({Math.round(Number(suggestion.confidence) * 100)}% confidence).
+            Adjust below and confirm — that creates the matching{' '}
+            {suggestion.kind === 'income' ? 'recurring income' : 'bill'} row.
+          </div>
+          <div className="field">
+            <label htmlFor="cs-name">Name</label>
+            <input
+              id="cs-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="cs-freq">Frequency</label>
+              <select
+                id="cs-freq"
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value)}
+              >
+                {validFreqs.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="cs-next">
+                Next {suggestion.kind === 'income' ? 'expected' : 'due'} date
+                <span className="muted"> (optional)</span>
+              </label>
+              <input
+                id="cs-next"
+                type="date"
+                value={nextDate}
+                onChange={(e) => setNextDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+            <button className="btn" type="submit" disabled={submitting}>
+              {submitting ? 'Confirming…' : 'Confirm'}
+            </button>
+            <button className="btn secondary" type="button" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
