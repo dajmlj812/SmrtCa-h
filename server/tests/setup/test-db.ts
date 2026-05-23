@@ -52,7 +52,8 @@ export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> 
               holdings, vehicles, commute_routes, route_vehicle_assignments,
               fuel_prices, app_settings, backups, tenants, memberships,
               invitations, user_identities, auth_provider_configs,
-              account_user_access, audit_log, exchange_rates
+              account_user_access, audit_log, exchange_rates,
+              retirement_projections
        RESTART IDENTITY CASCADE`,
   );
   await seedDefaultCategories(pool);

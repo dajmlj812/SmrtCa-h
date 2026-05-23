@@ -28,6 +28,28 @@ export interface ExchangeRate {
   fetched_at: string;
 }
 
+export interface RetirementProjection {
+  id: string;
+  tenant_id: string | null;
+  name: string;
+  starting_balance_cents: number;
+  monthly_contribution_cents: number;
+  annual_return_pct: number;
+  annual_inflation_pct: number;
+  target_year: number | null;
+  target_amount_cents: number | null;
+  horizon_years: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectionSeries {
+  name: string;
+  target_year: number | null;
+  target_amount_cents: number | null;
+  series: Array<{ year: number; nominal_cents: number; real_cents: number }>;
+}
+
 export type VehicleFuelType =
   | 'regular'
   | 'midgrade'
@@ -1679,6 +1701,52 @@ export const api = {
       `/api/exchange-rates/${encodeURIComponent(fromCurrency)}/${encodeURIComponent(toCurrency)}`,
       { method: 'DELETE' },
     ),
+
+  // ── Retirement projections (Phase 7.2 / 0.10.1) ──────────
+  listProjections: () =>
+    http<{ projections: RetirementProjection[] }>('/api/projections').then(
+      (r) => r.projections,
+    ),
+
+  createProjection: (input: {
+    name: string;
+    startingBalanceCents: number;
+    monthlyContributionCents: number;
+    annualReturnPct: number;
+    annualInflationPct?: number;
+    horizonYears?: number;
+    targetYear?: number | null;
+    targetAmountCents?: number | null;
+  }) =>
+    http<{ projection: RetirementProjection }>('/api/projections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.projection),
+
+  updateProjection: (
+    id: string,
+    input: Partial<{
+      name: string;
+      monthlyContributionCents: number;
+      annualReturnPct: number;
+      annualInflationPct: number;
+      horizonYears: number;
+      targetYear: number | null;
+      targetAmountCents: number | null;
+    }>,
+  ) =>
+    http<{ projection: RetirementProjection }>(`/api/projections/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.projection),
+
+  deleteProjection: (id: string) =>
+    http<void>(`/api/projections/${id}`, { method: 'DELETE' }),
+
+  projectionSeries: (id: string) =>
+    http<ProjectionSeries>(`/api/projections/${id}/series`),
 
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),

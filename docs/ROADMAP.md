@@ -17,7 +17,7 @@ nothing is "all or nothing."
 | 4 | Insights & Reconciliation | ✅ Complete — 2026-05-22 |
 | 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
-| 7 | Wealth & Net Worth | 🔄 In progress — 7.0 done; 7.1 next |
+| 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
 | 8 | Connectivity & Automation | 📋 Planned |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
 
@@ -191,7 +191,7 @@ detection wants its own phase to handle the false-positive UX properly.
 
 ---
 
-## Phase 7 — Wealth & Net Worth 🔄
+## Phase 7 — Wealth & Net Worth ✅
 
 **Goal:** Add the wealth-tracking depth of Empower and Banktivity.
 
@@ -200,8 +200,21 @@ Sliced into three releases:
 - **7.0** ✅ — investment holdings (cost basis + mark-to-market) and
   manual asset/liability accounts (house, mortgage, etc.); net-worth
   chart on the dashboard now includes them
-- **7.1** 🔜 — multi-currency with exchange rates (Moneydance-style)
-- **7.2** 📋 — basic retirement / long-term goal projections
+- **7.1** ✅ (released as 0.10.0) — multi-currency with exchange
+  rates. `exchange_rates` table, `open.er-api.com` auto-refresh,
+  per-account currency picker, dashboard sums into a global display
+  currency.
+- **7.2** ✅ (released as 0.10.1) — retirement / long-term goal
+  projections. `retirement_projections` table, monthly-compound
+  math, /retirement page with nominal+real curves and optional
+  target line.
+
+Phase 7 deliberately took a long detour through operator features
+(multi-tenant + RBAC + SMTP + backups + monitoring + design refresh,
+versions 0.7.4 → 0.9.5) before closing out 7.1 and 7.2. The operator
+features were originally backlog items; bringing them forward turned
+the app into a real household-shared deployment before the wealth-
+projection extras landed.
 
 ---
 

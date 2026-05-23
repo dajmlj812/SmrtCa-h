@@ -24,6 +24,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { InviteAcceptPage } from './pages/InviteAcceptPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { SystemPage } from './pages/SystemPage';
+import { RetirementPage } from './pages/RetirementPage';
 import { ThemeToggle } from './components/ThemeToggle';
 
 type AuthState =
@@ -171,6 +172,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/transfers">Transfers</NavLink>
           <NavLink to="/budgets">Budgets</NavLink>
           <NavLink to="/goals">Goals</NavLink>
+          <NavLink to="/retirement">Retirement</NavLink>
           <NavLink to="/bills">Bills</NavLink>
           <NavLink to="/subscriptions">Subscriptions</NavLink>
           <NavLink to="/vehicles">Vehicles</NavLink>
@@ -202,6 +204,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/transfers" element={<TransfersPage />} />
           <Route path="/budgets" element={<BudgetsPage />} />
           <Route path="/goals" element={<GoalsPage />} />
+          <Route path="/retirement" element={<RetirementPage />} />
           <Route path="/bills" element={<BillsPage />} />
           <Route path="/subscriptions" element={<SubscriptionsPage />} />
           <Route path="/vehicles" element={<VehiclesPage />} />

@@ -9,8 +9,65 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Retirement / long-term goal projections (the last queued Phase 7
-item) land next as 0.10.1._
+_Phase 7 closed out. Next up: Phase 8 (OFX/QFX/QIF imports + bank
+connectivity) and Phase 9 (PWA + AI assistant + bill-splitting +
+calendar view)._
+
+---
+
+## [0.10.1] — 2026-05-23 — Retirement projections (Phase 7.2)
+
+Closes Phase 7. The last queued item from the original roadmap lands:
+forward-looking projections of long-term goals.
+
+### Schema (migration 021)
+
+- **`retirement_projections`** — one row per "what-if" model:
+  name, starting balance, monthly contribution, annual return %,
+  optional inflation deflator, horizon years (1–100), optional
+  target year + target amount. Tenant-scoped via the standard
+  `tenant_id`.
+
+### Domain
+
+- **`domain/projections.ts#computeProjection()`** — pure math.
+  Monthly-compound on the annual return rate
+  (`(1 + annual_return/100)^(1/12) - 1`), with end-of-month
+  contributions then end-of-month growth. Emits one point per year
+  (year 0 = starting state) with both nominal and real (inflation-
+  deflated) projected balance.
+
+### Routes
+
+- `GET /api/projections` — list (tenant-scoped).
+- `POST /api/projections` — create.
+- `PATCH /api/projections/:id` — update.
+- `DELETE /api/projections/:id` — remove.
+- `GET /api/projections/:id/series` — compute the year-by-year curve.
+
+### Web
+
+- **`/retirement` page** with a sidebar of projections + detail pane.
+  Detail shows a Recharts line chart with the nominal curve (and a
+  real-dollar curve when inflation > 0), a target reference line
+  when configured, a summary line, and an inline tune form for
+  adjusting contributions / return / inflation / horizon.
+
+### Tests
+
+- `+8` integration tests (`projections.test.ts`): math (0%-flat,
+  10% growth band, inflation deflation, negative return compounds),
+  CRUD (create + list + series, validation, PATCH + DELETE).
+- **Total: 405** (server 399 + web 6).
+
+### Notes
+
+- Real-terms math uses straight `nominal / (1 + infl)^year`. Monte
+  Carlo with return variance is on the backlog but overkill for a
+  household app.
+- Starting balance is captured at creation time and editable via
+  PATCH — a projection is a comparison artifact, not a live
+  forecast against changing accounts.
 
 ---
 
