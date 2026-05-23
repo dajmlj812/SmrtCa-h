@@ -25,13 +25,12 @@ describe('Settings API', () => {
     superCookie = await makeSuperAdminCookie(app);
   });
 
-  it('tenant-admin GET excludes super-only keys; super-admin GET sees them', async () => {
+  it('tenant-admin GET returns an empty list; super-admin GET sees every key', async () => {
+    // 0.9.3: ALL settings are now super-only (AI + EIA joined SMTP +
+    // BACKUP_* + security keys). Tenant admin gets an empty page.
     const tenantR = await app.inject({ method: 'GET', url: '/api/settings' });
-    const tenantKeys = tenantR.json().settings.map((s: { key: string }) => s.key);
-    expect(tenantKeys).toContain('AI_PROVIDER');
-    expect(tenantKeys).toContain('EIA_API_KEY');
-    expect(tenantKeys).not.toContain('SMTP_HOST');
-    expect(tenantKeys).not.toContain('SESSION_SECRET');
+    expect(tenantR.statusCode).toBe(200);
+    expect(tenantR.json().settings).toEqual([]);
 
     const superR = await app.inject({
       method: 'GET',
@@ -49,14 +48,21 @@ describe('Settings API', () => {
     expect(superKeys).toContain('BACKUP_ENABLED');
   });
 
-  it('masks secret values on GET', async () => {
+  it('masks secret values on GET (super-admin view)', async () => {
     await app.inject({
       method: 'PUT',
       url: '/api/settings/ANTHROPIC_API_KEY',
       payload: { value: 'sk-ant-supersecret-1234' },
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
     });
-    const r = await app.inject({ method: 'GET', url: '/api/settings' });
     const row = r.json().settings.find((s: { key: string }) => s.key === 'ANTHROPIC_API_KEY');
     expect(row.is_secret).toBe(true);
     expect(row.display_value).toBe('••••1234');
@@ -68,9 +74,16 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/ANTHROPIC_MODEL',
       payload: { value: 'claude-opus-4-7' },
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
     });
-    const r = await app.inject({ method: 'GET', url: '/api/settings' });
     const row = r.json().settings.find((s: { key: string }) => s.key === 'ANTHROPIC_MODEL');
     expect(row.display_value).toBe('claude-opus-4-7');
   });
@@ -81,13 +94,20 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/AI_PROVIDER',
       payload: { value: 'ollama' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(200);
     expect(r.json().restart_required).toBe(false);
     expect(config.ai.provider).toBe('ollama');
-    // Clean up so we don't leak between tests.
-    await app.inject({ method: 'DELETE', url: '/api/settings/AI_PROVIDER' });
+    await app.inject({
+      method: 'DELETE',
+      url: '/api/settings/AI_PROVIDER',
+      headers: { cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
   });
 
   it('PUT to a restart-required key sets restart_required: true', async () => {
@@ -118,8 +138,10 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/AI_PROVIDER',
       payload: { value: '   ' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(400);
   });
 
@@ -128,8 +150,10 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/AI_PROVIDER',
       payload: { value: 'gemini' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(400);
   });
 
@@ -172,12 +196,17 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/AI_PROVIDER',
       payload: { value: 'ollama' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     const del = await app.inject({
       method: 'DELETE',
       url: '/api/settings/AI_PROVIDER',
-    });
+      headers: { cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(del.statusCode).toBe(204);
     expect(config.ai.provider).toBe(process.env.AI_PROVIDER ?? '');
   });

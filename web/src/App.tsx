@@ -177,7 +177,6 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/import">Import</NavLink>
           <NavLink to="/reports">Reports</NavLink>
           <NavLink to="/workspace">Workspace</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="sidebar-footer">
           Phase 7 · Wealth + AutoMagic + Cleanup
@@ -208,7 +207,6 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/import" element={<ImportPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </div>

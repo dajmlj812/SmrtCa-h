@@ -29,17 +29,21 @@ import { pool, query } from '../db/pool.js';
  * and the email base URL (all platform-level concerns).
  */
 export const KNOWN_SETTINGS = [
-  // AI provider — live, tenant-admin visible
-  { key: 'AI_PROVIDER', isSecret: false, restartRequired: false, superOnly: false, label: 'AI provider' },
-  { key: 'ANTHROPIC_API_KEY', isSecret: true, restartRequired: false, superOnly: false, label: 'Anthropic API key' },
-  { key: 'ANTHROPIC_MODEL', isSecret: false, restartRequired: false, superOnly: false, label: 'Anthropic model' },
-  { key: 'OLLAMA_BASE_URL', isSecret: false, restartRequired: false, superOnly: false, label: 'Ollama base URL' },
-  { key: 'OLLAMA_MODEL', isSecret: false, restartRequired: false, superOnly: false, label: 'Ollama model' },
-  // Fuel-price source — live, tenant-admin visible
-  { key: 'EIA_API_KEY', isSecret: true, restartRequired: false, superOnly: false, label: 'EIA API key' },
-  // Savings suggestion tuning — live, tenant-admin visible
-  { key: 'SAVINGS_INCOME_PCT', isSecret: false, restartRequired: false, superOnly: false, label: 'Savings — % of income' },
-  { key: 'SAVINGS_LEFTOVER_PCT', isSecret: false, restartRequired: false, superOnly: false, label: 'Savings — % of leftover' },
+  // AI provider — live, super-admin only (0.9.3). One Anthropic / Ollama
+  // configuration is shared across all tenants; per-tenant overrides are
+  // queued for a later release.
+  { key: 'AI_PROVIDER', isSecret: false, restartRequired: false, superOnly: true, label: 'AI provider' },
+  { key: 'ANTHROPIC_API_KEY', isSecret: true, restartRequired: false, superOnly: true, label: 'Anthropic API key' },
+  { key: 'ANTHROPIC_MODEL', isSecret: false, restartRequired: false, superOnly: true, label: 'Anthropic model' },
+  { key: 'OLLAMA_BASE_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'Ollama base URL' },
+  { key: 'OLLAMA_MODEL', isSecret: false, restartRequired: false, superOnly: true, label: 'Ollama model' },
+  // Fuel-price source — live, super-admin only (0.9.3).
+  { key: 'EIA_API_KEY', isSecret: true, restartRequired: false, superOnly: true, label: 'EIA API key' },
+  // Savings suggestion tuning — live, super-admin only (0.9.3).
+  // Used by the budget wizard as global defaults; per-tenant overrides
+  // are queued for a later release.
+  { key: 'SAVINGS_INCOME_PCT', isSecret: false, restartRequired: false, superOnly: true, label: 'Savings — % of income' },
+  { key: 'SAVINGS_LEFTOVER_PCT', isSecret: false, restartRequired: false, superOnly: true, label: 'Savings — % of leftover' },
   // Backup config — super-admin only
   { key: 'BACKUP_ENABLED', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — enabled' },
   { key: 'BACKUP_FREQUENCY', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — frequency' },

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { makeTestApp, pool, resetDb } from '../setup/test-db.js';
+import { makeSuperAdminCookie, makeTestApp, pool, resetDb } from '../setup/test-db.js';
 
 async function seedVehicle(name: string): Promise<string> {
   const r = await pool.query<{ id: string }>(
@@ -252,17 +252,24 @@ describe('Budget wizard with route-driven fuel + misc + savings', () => {
   });
 });
 
-describe('AI models endpoint', () => {
+describe('AI models endpoint (super-admin only as of 0.9.3)', () => {
   let app: FastifyInstance;
+  let superCookie: string;
   beforeAll(async () => { app = await makeTestApp(); });
   afterAll(async () => { await app.close(); });
-  beforeEach(async () => { await resetDb(); });
+  beforeEach(async () => {
+    await resetDb();
+    superCookie = await makeSuperAdminCookie(app);
+  });
 
   it('claude returns the hardcoded list with one recommended entry', async () => {
     const r = await app.inject({
       method: 'GET',
       url: '/api/settings/ai-models?provider=claude',
-    });
+      headers: { cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(200);
     const ids = r.json().models.map((m: { id: string }) => m.id);
     expect(ids).toContain('claude-haiku-4-5');
@@ -277,9 +284,11 @@ describe('AI models endpoint', () => {
     const r = await app.inject({
       method: 'GET',
       url: '/api/settings/ai-models?provider=ollama',
-    });
+      headers: { cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(200);
-    // Fallback array is non-empty so the UI always has something to show.
     expect(r.json().models.length).toBeGreaterThan(0);
   });
 
@@ -287,7 +296,10 @@ describe('AI models endpoint', () => {
     const r = await app.inject({
       method: 'GET',
       url: '/api/settings/ai-models?provider=none',
-    });
+      headers: { cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.json().models).toEqual([]);
   });
 });

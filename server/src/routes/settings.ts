@@ -150,7 +150,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   // configured base URL's /api/tags and falls back to a curated list.
   app.get<{ Querystring: { provider?: string } }>(
     '/api/settings/ai-models',
-    async (req) => {
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
       const provider = (req.query.provider ?? '').toLowerCase();
       if (provider === 'claude') {
         return {

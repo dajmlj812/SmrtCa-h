@@ -273,18 +273,30 @@ describe('RBAC — super_admin / spouse / child (Phase 9)', () => {
     expect(r.statusCode).toBe(403);
   });
 
-  it('GET /api/settings hides super-only keys from tenant admins', async () => {
+  it('GET /api/settings returns an empty list for tenant admins (0.9.3)', async () => {
+    // Every setting now carries superOnly:true — tenant admins have
+    // no settings to look at at all.
     const r = await app.inject({ method: 'GET', url: '/api/settings' });
     expect(r.statusCode).toBe(200);
-    const keys = r.json().settings.map((s: { key: string }) => s.key);
-    // Tenant admin sees AI/EIA/Savings, never SMTP/BACKUP/security.
-    expect(keys).toContain('AI_PROVIDER');
-    expect(keys).toContain('EIA_API_KEY');
-    expect(keys).not.toContain('SMTP_HOST');
-    expect(keys).not.toContain('BACKUP_ENABLED');
-    expect(keys).not.toContain('SESSION_SECRET');
-    expect(keys).not.toContain('ATTACHMENT_ENCRYPTION_KEY');
-    expect(keys).not.toContain('APP_BASE_URL');
+    expect(r.json().settings).toEqual([]);
+  });
+
+  it('tenant admin cannot PUT AI_PROVIDER (now super-only)', async () => {
+    const r = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/AI_PROVIDER',
+      payload: { value: 'ollama' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('tenant admin gets 403 on GET /api/settings/ai-models', async () => {
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/settings/ai-models?provider=claude',
+    });
+    expect(r.statusCode).toBe(403);
   });
 
   it('admin can assign accounts to a child via PUT', async () => {

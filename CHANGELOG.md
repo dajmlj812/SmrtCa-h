@@ -13,6 +13,59 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.9.3] — 2026-05-23 — AI + EIA settings move to super-admin; tenant Settings page removed
+
+All app settings are now platform-level. Tenant admins have nothing
+left to configure on `/settings`, so the page (and its sidebar entry)
+disappear from their view entirely. Super admin keeps full access.
+
+### Changed
+
+- **`KNOWN_SETTINGS`** — `AI_PROVIDER`, `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_MODEL`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `EIA_API_KEY`,
+  `SAVINGS_INCOME_PCT`, `SAVINGS_LEFTOVER_PCT` all flip to
+  `superOnly: true`. Combined with the 0.9.1 + 0.9.2 changes, EVERY
+  known setting is now super-admin only.
+- **`/api/settings/ai-models`** gated to super admin (was open before
+  for the tenant Settings page's model picker — but tenants don't see
+  the page anymore).
+- **`/settings` nav link removed from tenant sidebar.** The route is
+  also gone from the tenant `<Routes>` block. Hitting `/settings`
+  manually as a tenant user lands on the dashboard (no router match).
+- Super admin keeps `/settings` in their sidebar and routes; they see
+  every setting.
+
+### Rationale
+
+- One Anthropic API key for the box is consistent with how the AI
+  pipelines were already written.
+- EIA fuel prices are a fetcher used by every tenant; per-tenant
+  configuration would split the rate-limited free quota and add
+  configuration burden.
+- Savings tuning is read by the budget wizard as a global default.
+  Per-tenant overrides land in a future slice when the demand is
+  clearer.
+
+### Tests
+
+- `+2` integration tests in `rbac.test.ts`: tenant gets 403 on
+  PUT `/api/settings/AI_PROVIDER` and GET `/api/settings/ai-models`.
+- `settings.test.ts`, `commute-routes.test.ts`, and the existing
+  rbac tests updated to assert the empty-tenant view and to thread a
+  super-admin cookie through every AI/EIA-touching call.
+- The "tenant admin GET" assertion now expects an empty array, not a
+  filtered list.
+- **Total: 383** (server 377 + web 6).
+
+### Notes
+
+- Per-tenant AI + EIA overrides remain on the table for a future
+  slice — the foundation is the same (`tenant_settings` table + a
+  helper that prefers tenant-scoped values), just deferred until
+  there's demand.
+
+---
+
 ## [0.9.2] — 2026-05-23 — Auth providers move to super-admin
 
 Auth provider configuration is a platform-operator concern — deciding
