@@ -10,17 +10,20 @@ export function CategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [taxVocab, setTaxVocab] = useState<string[]>([]);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [cats, sugs] = await Promise.all([
+      const [cats, sugs, vocab] = await Promise.all([
         api.listCategories(),
         api.listSuggestions('pending'),
+        api.taxVocabulary().catch(() => [] as string[]),
       ]);
       setCategories(cats);
       setSuggestions(sugs);
+      setTaxVocab(vocab);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load categories');
     } finally {
@@ -55,11 +58,21 @@ export function CategoriesPage() {
     }
     setError(null);
     try {
-      await api.updateCategory(id, editValue.trim());
+      await api.updateCategory(id, { name: editValue.trim() });
       setEditing(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to rename category');
+    }
+  }
+
+  async function saveTaxCategory(id: string, value: string) {
+    setError(null);
+    try {
+      await api.updateCategory(id, { tax_category: value === '' ? null : value });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to set tax category');
     }
   }
 
@@ -196,6 +209,7 @@ export function CategoriesPage() {
                 isParent
                 editing={editing === parent.id}
                 editValue={editValue}
+                taxVocab={taxVocab}
                 onEditStart={() => {
                   setEditing(parent.id);
                   setEditValue(parent.name);
@@ -204,6 +218,7 @@ export function CategoriesPage() {
                 onSave={() => void saveRename(parent.id)}
                 onCancel={() => setEditing(null)}
                 onDelete={() => void remove(parent)}
+                onTaxCategoryChange={(v) => void saveTaxCategory(parent.id, v)}
               />
               {children.map((c) => (
                 <CategoryRow
@@ -212,6 +227,7 @@ export function CategoriesPage() {
                   isParent={false}
                   editing={editing === c.id}
                   editValue={editValue}
+                  taxVocab={taxVocab}
                   onEditStart={() => {
                     setEditing(c.id);
                     setEditValue(c.name);
@@ -220,6 +236,7 @@ export function CategoriesPage() {
                   onSave={() => void saveRename(c.id)}
                   onCancel={() => setEditing(null)}
                   onDelete={() => void remove(c)}
+                  onTaxCategoryChange={(v) => void saveTaxCategory(c.id, v)}
                 />
               ))}
             </div>
@@ -235,22 +252,31 @@ function CategoryRow({
   isParent,
   editing,
   editValue,
+  taxVocab,
   onEditStart,
   onEditChange,
   onSave,
   onCancel,
   onDelete,
+  onTaxCategoryChange,
 }: {
   category: Category;
   isParent: boolean;
   editing: boolean;
   editValue: string;
+  taxVocab: string[];
   onEditStart: () => void;
   onEditChange: (v: string) => void;
   onSave: () => void;
   onCancel: () => void;
   onDelete: () => void;
+  onTaxCategoryChange: (value: string) => void;
 }) {
+  const [taxDraft, setTaxDraft] = useState(category.tax_category ?? '');
+  useEffect(() => {
+    setTaxDraft(category.tax_category ?? '');
+  }, [category.tax_category]);
+
   return (
     <div className={`cat-row ${isParent ? 'cat-parent' : 'cat-child'}`}>
       <div className="cat-name">
@@ -273,6 +299,26 @@ function CategoryRow({
             </span>
           </>
         )}
+      </div>
+      <div className="cat-tax">
+        <input
+          list="tax-category-suggestions"
+          value={taxDraft}
+          onChange={(e) => setTaxDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = taxDraft.trim();
+            if (trimmed !== (category.tax_category ?? '')) {
+              onTaxCategoryChange(trimmed);
+            }
+          }}
+          placeholder="(no tax tag)"
+          style={{ width: '100%', fontSize: 13 }}
+        />
+        <datalist id="tax-category-suggestions">
+          {taxVocab.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
       </div>
       <div className="cat-count muted">{category.transaction_count} txns</div>
       <div className="cat-actions">

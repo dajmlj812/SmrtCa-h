@@ -9,12 +9,97 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_All nine roadmap phases shipped (through 0.12.3). User asked to work
-through the original "Beyond — Backlog" list. Active plan: five small
-releases (`0.13.0` → `0.13.4`), defer native mobile.
-0.13.0 (data portability) shipped. Next: 0.13.1 tax categories +
-year-end reports, 0.13.2 anomaly alerts, 0.13.3 crypto, 0.13.4
-permission tuning._
+_Backlog in progress. 0.13.0 + 0.13.1 shipped. Next: 0.13.2 anomaly
+alerts, 0.13.3 crypto, 0.13.4 permission tuning. Native mobile
+deferred._
+
+---
+
+## [0.13.1] — 2026-05-23 — Tax-category tagging + year-end reports
+
+Second backlog release. Tags categories with an optional
+`tax_category` and adds a year-end report that aggregates only the
+tagged ones — Schedule A / Schedule C style summaries without forcing
+users to maintain a parallel taxonomy.
+
+### Schema (migration 025)
+
+- `categories.tax_category text` (nullable). NULL = not tax-relevant.
+  Free-text — the controlled vocabulary lives in the UI's datalist,
+  not the DB CHECK. US Schedule A/C labels are too varied to enum.
+- Partial index `WHERE tax_category IS NOT NULL` so the report's
+  GROUP BY stays cheap as the categories table grows.
+
+### Server
+
+- `GET /api/categories/tax-vocabulary` — returns the suggested list
+  the UI uses as datalist options (Charitable Donations, Mortgage
+  Interest, Wages (W-2), 1099 Income, Business Expense — Office,
+  etc.). 16 entries covering common Schedule A + Schedule C lines.
+- `POST /api/categories` accepts optional `tax_category`.
+- `PATCH /api/categories/:id` accepts `name` or `tax_category` in
+  isolation. Empty-string `tax_category` clears the tag. Existing
+  callers that only sent `name` still work.
+- `GET /api/reports/tax-year/:year` — tenant-scoped. Aggregates
+  every transaction whose category has `tax_category IS NOT NULL`
+  over Jan 1 – Dec 31. Splits per-tax-category totals by sign
+  (`income` vs `deductible`) so a refund-heavy tag and a normal
+  income tag don't get smushed into one number. **Transfers
+  excluded** (`transfer_group_id IS NULL`).
+- `GET /api/reports/tax-year/:year.csv` — same data as CSV with the
+  standard download headers. Properly escapes commas / quotes.
+- Assistant gets `tax_year_summary` (read tool). 16 tools total
+  now.
+
+### Web
+
+- `CategoriesPage` row layout grows a third column: a free-text
+  input bound to the `<datalist>` of suggestions. Blur saves; empty
+  clears. The existing rename + delete buttons are untouched.
+- New `/tax` page (`TaxYearPage.tsx`) with year picker (current
+  year + 5 prior), three summary cards (income / deductible /
+  tagged-txn-count), and a per-tax-category table split into
+  income vs deductible sections. Download-CSV button hits the
+  CSV endpoint directly so the browser handles the save.
+- Nav link in the tenant sidebar between Calendar and Reports.
+
+### Tests (+7 server)
+
+- `tests/integration/tax-year.test.ts`:
+  - `PATCH /api/categories/:id` sets and clears `tax_category`
+    independently of `name`.
+  - Tax-vocabulary endpoint returns the suggestion list.
+  - Year-format validation (`/tax-year/abc` → 400).
+  - End-to-end aggregation: per-tax-category totals + contributing-
+    category lists, with year-boundary guards (Dec 31 of prior year
+    and Jan 1 of next year MUST NOT count) and untagged-category
+    invisibility.
+  - Transfers excluded from the report (`transfer_group_id` set).
+  - CSV download has `text/csv` content-type + proper filename
+    header + the expected row format.
+  - Tenant isolation — a transaction owned by another tenant's
+    account does not leak into the calling tenant's report.
+- Total: **526 tests** (520 server + 6 web), all green.
+
+### Files
+
+```
+server/src/db/migrations/025_tax_categories.sql       (new)
+server/src/routes/categories.ts                       (+tax_category in
+                                                       create/patch/list +
+                                                       vocabulary endpoint)
+server/src/routes/tax-year.ts                         (new)
+server/src/app.ts                                     (register route)
+server/src/domain/assistant/tools.ts                  (+tax_year_summary)
+server/tests/integration/tax-year.test.ts             (new)
+web/src/api.ts                                        (taxVocabulary +
+                                                       taxYearReport + types,
+                                                       updateCategory signature)
+web/src/pages/CategoriesPage.tsx                      (+tax cell + datalist)
+web/src/pages/TaxYearPage.tsx                         (new)
+web/src/App.tsx                                       (nav + route)
+web/src/styles.css                                    (cat-row 4-col grid)
+```
 
 ---
 

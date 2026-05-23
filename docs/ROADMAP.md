@@ -304,7 +304,7 @@ backlog plan: ship five small releases (`0.13.0` → `0.13.4`), defer
 native mobile.
 
 - Multi-user / household mode with per-user permissions — _planned 0.13.4_
-- Tax-category tagging and year-end reports — _planned 0.13.1_
+- Tax-category tagging and year-end reports — ✅ **0.13.1** (2026-05-23)
 - Cryptocurrency tracking (Simplifi-style) — _planned 0.13.3_
 - Non-AI rules engine for auto-categorization
 - Advanced cash-flow forecasting & spending-anomaly alerts — _planned 0.13.2_

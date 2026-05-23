@@ -554,7 +554,7 @@ select:focus {
 }
 .cat-row {
   display: grid;
-  grid-template-columns: 1fr 100px 220px;
+  grid-template-columns: 1.4fr 1fr 100px 220px;
   gap: 12px;
   align-items: center;
   padding: 6px 0;

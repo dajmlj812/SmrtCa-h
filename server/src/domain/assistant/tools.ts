@@ -531,6 +531,41 @@ const updateSavingsGoal: AssistantTool = {
   },
 };
 
+const taxYearSummary: AssistantTool = {
+  name: 'tax_year_summary',
+  description:
+    'Year-end tax aggregation. Rolls up every transaction whose category has a tax_category set, over Jan 1 – Dec 31 of the given year. Returns per-tax-category totals split by income vs deductible, plus the underlying contributing categories. Transfers excluded.',
+  kind: 'read',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      year: { type: 'integer', minimum: 1900, maximum: 2200 },
+    },
+    required: ['year'],
+  },
+  async execute(ctx, input) {
+    const i = input as { year: number };
+    const startDate = `${i.year}-01-01`;
+    const endDate = `${i.year}-12-31`;
+    const r = await pool.query(
+      `SELECT c.tax_category, c.name AS category_name,
+              SUM(t.amount_cents)::bigint AS total_cents,
+              COUNT(*)::int AS txn_count
+         FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
+         JOIN categories c ON c.id = t.category_id
+        WHERE a.tenant_id = $1
+          AND c.tax_category IS NOT NULL
+          AND t.txn_date BETWEEN $2::date AND $3::date
+          AND t.transfer_group_id IS NULL
+        GROUP BY c.tax_category, c.name
+        ORDER BY c.tax_category, c.name`,
+      [ctx.tenantId, startDate, endDate],
+    );
+    return { year: i.year, rows: r.rows };
+  },
+};
+
 const calendarMonth: AssistantTool = {
   name: 'calendar_month_summary',
   description:
@@ -705,6 +740,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   listBills,
   listGoals,
   calendarMonth,
+  taxYearSummary,
   shareSummary,
   updateTransactionCategory,
   bulkRecategorize,

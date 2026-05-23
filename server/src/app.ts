@@ -47,6 +47,7 @@ import { assistantRoutes } from './routes/assistant.js';
 import { shareRoutes } from './routes/shares.js';
 import { calendarRoutes } from './routes/calendar.js';
 import { portabilityRoutes } from './routes/portability.js';
+import { taxYearRoutes } from './routes/tax-year.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { startAutoSyncScheduler } from './domain/auto-sync.js';
@@ -213,6 +214,7 @@ export async function buildApp(
   await app.register(shareRoutes);
   await app.register(calendarRoutes);
   await app.register(portabilityRoutes);
+  await app.register(taxYearRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.

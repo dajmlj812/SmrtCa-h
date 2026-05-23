@@ -94,6 +94,24 @@ export interface OfxDcConnectionInput {
   enabled?: boolean;
 }
 
+export interface TaxYearRow {
+  tax_category: string;
+  sign: 'income' | 'deductible';
+  total_cents: number;
+  txn_count: number;
+  contributing_categories: string[];
+}
+
+export interface TaxYearReport {
+  year: number;
+  start_date: string;
+  end_date: string;
+  total_income_cents: number;
+  total_deductible_cents: number;
+  total_txn_count: number;
+  by_tax_category: TaxYearRow[];
+}
+
 export interface CalendarDay {
   date: string;
   spend_cents: number;
@@ -575,6 +593,7 @@ export interface Category {
   id: string;
   name: string;
   parent_id: string | null;
+  tax_category: string | null;
   created_at: string;
   transaction_count: number;
 }
@@ -962,11 +981,19 @@ export const api = {
       body: JSON.stringify({ name }),
     }).then((r) => r.category),
 
-  updateCategory: (id: string, name: string) =>
+  updateCategory: (
+    id: string,
+    input: { name?: string; tax_category?: string | null },
+  ) =>
     http<{ category: Category }>(`/api/categories/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.tax_category !== undefined && {
+          tax_category: input.tax_category ?? '',
+        }),
+      }),
     }).then((r) => r.category),
 
   deleteCategory: (id: string) =>
@@ -2070,6 +2097,17 @@ export const api = {
   // ── Calendar (Phase 9.3 / 0.12.3) ────────────────────────
   calendarMonth: (month: string) =>
     http<CalendarMonthResponse>(`/api/calendar/${month}`),
+
+  // ── Tax year (backlog 0.13.1) ────────────────────────────
+  taxVocabulary: () =>
+    http<{ suggestions: string[] }>('/api/categories/tax-vocabulary').then(
+      (r) => r.suggestions,
+    ),
+
+  taxYearReport: (year: number) =>
+    http<TaxYearReport>(`/api/reports/tax-year/${year}`),
+
+  taxYearCsvUrl: (year: number) => `/api/reports/tax-year/${year}.csv`,
 
   // ── Bill-splitting (Phase 9.2 / 0.12.2) ──────────────────
   listSplitParticipants: (includeArchived = false) =>
