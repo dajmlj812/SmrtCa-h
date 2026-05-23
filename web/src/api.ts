@@ -515,6 +515,7 @@ export interface BackupConfig {
   retention_days: number;
   directory: string;
   resolved_directory: string;
+  secondary_directory: string;
 }
 
 export interface ReportParamDef {
@@ -1577,6 +1578,8 @@ export const api = {
     miscOverrideCents?: Record<number, number>;
     miscNoteOverride?: Record<number, string>;
     savingsOverrideCents?: Record<number, number>;
+    savingsIncomePctOverride?: number;
+    savingsLeftoverPctOverride?: number;
   }) =>
     http<{ preview: WizardPreview }>('/api/budgets/wizard/preview', {
       method: 'POST',
@@ -1594,6 +1597,8 @@ export const api = {
     miscOverrideCents?: Record<number, number>;
     miscNoteOverride?: Record<number, string>;
     savingsOverrideCents?: Record<number, number>;
+    savingsIncomePctOverride?: number;
+    savingsLeftoverPctOverride?: number;
   }) =>
     http<{
       result: {
@@ -1665,6 +1670,13 @@ export const api = {
 
   deleteBackupRecord: (id: string) =>
     http<void>(`/api/backups/${id}`, { method: 'DELETE' }),
+
+  restoreBackup: (id: string) =>
+    http<{ ok: true; warnings: string[] }>(`/api/backups/${id}/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'RESTORE' }),
+    }),
 
   // ── Reports (Phase 7.6) ──────────────────────────────────
   listReports: () =>

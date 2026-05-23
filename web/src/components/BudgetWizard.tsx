@@ -47,6 +47,22 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     savings: Record<number, number>;
   }>({ groceries: {}, fuel: {}, tolls: {}, misc: {}, miscNote: {}, savings: {} });
 
+  /**
+   * Per-run % overrides for the savings suggestion chips. Empty string
+   * means "use the platform default" — the server reads
+   * SAVINGS_INCOME_PCT / SAVINGS_LEFTOVER_PCT from app settings.
+   */
+  const [incomePctOverride, setIncomePctOverride] = useState<string>('');
+  const [leftoverPctOverride, setLeftoverPctOverride] = useState<string>('');
+
+  /** Parse a percent-input string. '' or out-of-range -> undefined. */
+  function parsePct(s: string): number | undefined {
+    if (s.trim() === '') return undefined;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 0 || n > 100) return undefined;
+    return n;
+  }
+
   const loadPreview = useCallback(async () => {
     setPreviewing(true);
     setError(null);
@@ -61,6 +77,8 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         miscOverrideCents: overrides.misc,
         miscNoteOverride: overrides.miscNote,
         savingsOverrideCents: overrides.savings,
+        savingsIncomePctOverride: parsePct(incomePctOverride),
+        savingsLeftoverPctOverride: parsePct(leftoverPctOverride),
       });
       setPreview(p);
     } catch (e) {
@@ -68,7 +86,7 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     } finally {
       setPreviewing(false);
     }
-  }, [periodType, anchor, count, overrides]);
+  }, [periodType, anchor, count, overrides, incomePctOverride, leftoverPctOverride]);
 
   useEffect(() => {
     void loadPreview();
@@ -119,6 +137,8 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         miscOverrideCents: overrides.misc,
         miscNoteOverride: overrides.miscNote,
         savingsOverrideCents: overrides.savings,
+        savingsIncomePctOverride: parsePct(incomePctOverride),
+        savingsLeftoverPctOverride: parsePct(leftoverPctOverride),
       });
       onCommitted({ created: r.created, skipped: r.skipped });
     } catch (e) {
@@ -187,6 +207,44 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
               max="24"
               value={count}
               onChange={(e) => setCount(Math.max(1, Math.min(24, Number(e.target.value) || 5)))}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="wiz-inc-pct">
+              Savings % of income
+              <span className="muted">
+                {' '}
+                {preview ? `(default ${preview.savingsIncomePct}%)` : ''}
+              </span>
+            </label>
+            <input
+              id="wiz-inc-pct"
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              placeholder={preview ? String(preview.savingsIncomePct) : ''}
+              value={incomePctOverride}
+              onChange={(e) => setIncomePctOverride(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="wiz-left-pct">
+              Savings % of leftover
+              <span className="muted">
+                {' '}
+                {preview ? `(default ${preview.savingsLeftoverPct}%)` : ''}
+              </span>
+            </label>
+            <input
+              id="wiz-left-pct"
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              placeholder={preview ? String(preview.savingsLeftoverPct) : ''}
+              value={leftoverPctOverride}
+              onChange={(e) => setLeftoverPctOverride(e.target.value)}
             />
           </div>
           <button className="btn secondary" type="submit" disabled={previewing}>

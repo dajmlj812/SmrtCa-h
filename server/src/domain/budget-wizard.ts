@@ -333,16 +333,39 @@ export interface WizardInput {
   miscOverrideCents?: Record<number, number>;
   miscNoteOverride?: Record<number, string>;
   savingsOverrideCents?: Record<number, number>;
+  /**
+   * Per-wizard-run overrides for the suggestion percentages. When set,
+   * these win over the global SAVINGS_INCOME_PCT / SAVINGS_LEFTOVER_PCT
+   * settings. Useful so a tenant admin can tune the chips without the
+   * super-admin having to update the global. Whole-number percentages
+   * (e.g. 25 means 25%).
+   */
+  savingsIncomePctOverride?: number;
+  savingsLeftoverPctOverride?: number;
 }
 
 export async function buildWizardPreview(input: WizardInput): Promise<WizardPreview> {
   const groceriesWeekly = await weeklyGroceriesMedian();
   const { fuelCents: fuelWeekly, tollsCents: tollsWeekly } = await routeDrivenWeekly();
 
+  // Per-wizard-run overrides win over the global setting. Whole-number
+  // percentages; outside-range values fall back to the global / default.
   const savingsIncomePctStr = await getEffectiveValue('SAVINGS_INCOME_PCT');
   const savingsLeftoverPctStr = await getEffectiveValue('SAVINGS_LEFTOVER_PCT');
-  const savingsIncomePct = Number(savingsIncomePctStr) || 20;
-  const savingsLeftoverPct = Number(savingsLeftoverPctStr) || 50;
+  const savingsIncomePctGlobal = Number(savingsIncomePctStr) || 20;
+  const savingsLeftoverPctGlobal = Number(savingsLeftoverPctStr) || 50;
+  const savingsIncomePct =
+    typeof input.savingsIncomePctOverride === 'number' &&
+    input.savingsIncomePctOverride >= 0 &&
+    input.savingsIncomePctOverride <= 100
+      ? input.savingsIncomePctOverride
+      : savingsIncomePctGlobal;
+  const savingsLeftoverPct =
+    typeof input.savingsLeftoverPctOverride === 'number' &&
+    input.savingsLeftoverPctOverride >= 0 &&
+    input.savingsLeftoverPctOverride <= 100
+      ? input.savingsLeftoverPctOverride
+      : savingsLeftoverPctGlobal;
 
   const bills = (
     await pool.query<BillRow>(

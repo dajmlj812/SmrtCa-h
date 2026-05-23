@@ -13,6 +13,71 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.9.4] — 2026-05-23 — Scheduler fix, GUI restore, secondary backup destination, env snapshot, savings % overrides
+
+Five related items, all backup-or-budget. Headline: the scheduler bug
+that prevented scheduled backups from firing is fixed.
+
+### Fixed
+
+- **Scheduler not firing** (regression from 0.7.6 onward). The tick
+  required an EXACT hour-and-minute match against `BACKUP_TIME`;
+  `setInterval` drift meant the daily window was reliably missed. The
+  new logic uses a "scheduled instant has passed today" predicate
+  combined with the cadence gate (`shouldRun`), which is robust to
+  60s jitter. Timezone note: `BACKUP_TIME` is interpreted in the
+  container's local time (UTC by default in Docker — set the `TZ` env
+  var in compose to schedule against a different zone).
+
+### Added
+
+- **Restore from the GUI**. New `POST /api/backups/:id/restore`
+  endpoint (super-admin only). Requires `confirm: 'RESTORE'` in the
+  body. Runs `pg_restore --clean --if-exists` against the live
+  database, then extracts attachments. The `/backups` page gets a
+  **Restore** action on each success row that prompts for the
+  confirmation token via `window.prompt`.
+- **Secondary off-server backup destination**. New setting
+  `BACKUP_SECONDARY_DIR` (super-only). After every successful primary
+  backup, the timestamped folder is copied (via `fs.cp`) to this
+  path. Works with any mountable filesystem (NFS, CIFS, USB, S3
+  via s3fs/rclone-mount, etc.) — no new dependency on the box.
+  Failure of the secondary copy is recorded as a warning on the
+  backup row without failing the primary.
+- **env.snapshot.json in every backup**. `app_settings` rows are
+  inside `db.dump` (everything in the DB is captured). The new
+  `env.snapshot.json` captures process.env values for every key in
+  `KNOWN_SETTINGS` at the moment of backup — covers the env-var
+  fallback path so a full host wipe + restore can put `.env` back.
+- **Savings percentage overrides in the Budget Wizard**. Two new
+  inputs on the wizard form — "Savings % of income" and "Savings %
+  of leftover" — let the tenant admin override the global defaults
+  per wizard run. Empty fields fall back to the platform-wide
+  `SAVINGS_INCOME_PCT` / `SAVINGS_LEFTOVER_PCT`. Backend accepts
+  `savingsIncomePctOverride` and `savingsLeftoverPctOverride` on
+  `POST /api/budgets/wizard/preview` and `/commit`.
+
+### Tests
+
+- `+7` integration tests (`backup-restore-env.test.ts`): restore
+  requires the literal confirm token; missing dump returns a clear
+  error; tenant admin gets 403; non-success rows can't be restored;
+  `secondary_directory` surfaces on `/api/backups/config`; wizard
+  honors per-run % overrides; out-of-range overrides fall back.
+- **Total: 390** (server 384 + web 6).
+
+### Notes
+
+- The restore endpoint runs `pg_restore` while the server is live.
+  Open sessions stay alive but every tenant sees the snapshot's data
+  on their next read. Restart-after-restore is recommended for a
+  clean state — the success message says so.
+- Off-server backends beyond "secondary path" (native S3, SFTP) are
+  a follow-up — `cp` to a mounted share covers the bulk of self-host
+  setups.
+
+---
+
 ## [0.9.3] — 2026-05-23 — AI + EIA settings move to super-admin; tenant Settings page removed
 
 All app settings are now platform-level. Tenant admins have nothing

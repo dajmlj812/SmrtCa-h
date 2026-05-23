@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { writeFile, cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { config } from '../config.js';
 import { pool, query } from '../db/pool.js';
-import { getEffectiveValue } from './settings.js';
+import { getEffectiveValue, KNOWN_SETTINGS } from './settings.js';
 
 /**
  * In-process backup runner. Produces the same layout as
@@ -128,6 +129,51 @@ export async function runBackup(input: RunBackupInput): Promise<BackupRecord> {
       }
     }
 
+    // 4) Env snapshot. app_settings rows live INSIDE the pg_dump
+    //    (everything in the DB is captured), but env-var fallbacks
+    //    (process.env values for KNOWN_SETTINGS keys) are outside the
+    //    DB — they live in the .env file on the host. Persist a
+    //    sanitized snapshot here so a restore can put them back even
+    //    after a full host wipe.
+    const envSnapshotPath = join(backupPath, 'env.snapshot.json');
+    const envSnapshot: Record<string, string> = {};
+    for (const m of KNOWN_SETTINGS) {
+      const v = process.env[m.key];
+      if (v !== undefined && v !== '') envSnapshot[m.key] = v;
+    }
+    await writeFile(
+      envSnapshotPath,
+      JSON.stringify(
+        {
+          captured_at: new Date().toISOString(),
+          note: 'Env values for KNOWN_SETTINGS at the moment of backup. app_settings rows are inside db.dump.',
+          env: envSnapshot,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    // 5) Optional secondary destination (off-server). When
+    //    BACKUP_SECONDARY_DIR is set, mirror the timestamped folder
+    //    there. Failure is non-fatal — the primary copy is recorded
+    //    successful and the failure shows up in error.
+    let secondaryWarning: string | undefined;
+    const secondary = (await getEffectiveValue('BACKUP_SECONDARY_DIR')).trim();
+    if (secondary !== '') {
+      try {
+        const secondaryRoot = resolve(secondary);
+        await mkdir(secondaryRoot, { recursive: true });
+        const dest = join(secondaryRoot, ts);
+        await cp(backupPath, dest, { recursive: true });
+      } catch (err) {
+        secondaryWarning =
+          'Primary backup succeeded; secondary copy failed: ' +
+          (err instanceof Error ? err.message : String(err));
+      }
+    }
+
     const total = dbBytes + attachmentsBytes;
     const r = await query<BackupRecord>(
       `UPDATE backups
@@ -135,10 +181,11 @@ export async function runBackup(input: RunBackupInput): Promise<BackupRecord> {
               finished_at = now(),
               db_bytes = $1,
               attachments_bytes = $2,
-              total_bytes = $3
-        WHERE id = $4
+              total_bytes = $3,
+              error = $4
+        WHERE id = $5
         RETURNING ${COLUMNS}`,
-      [dbBytes, attachmentsBytes, total, id],
+      [dbBytes, attachmentsBytes, total, secondaryWarning ?? null, id],
     );
     return r.rows[0]!;
   } catch (err) {
@@ -197,6 +244,72 @@ export async function pruneOldBackups(retentionDays: number): Promise<number> {
     removed++;
   }
   return removed;
+}
+
+/**
+ * Restore from an existing backup row. Runs `pg_restore --clean
+ * --if-exists` against the current DATABASE_URL, then extracts the
+ * attachments tar over the configured attachments directory.
+ *
+ * Destructive. The caller is expected to enforce a strong confirmation
+ * flow (the route layer requires a query-param token).
+ *
+ * Behavior notes:
+ *  - Open connections from THIS server stay alive — pg_restore acquires
+ *    its own connection to drop+recreate objects. We rely on the new
+ *    schema being a strict superset of what's running.
+ *  - Env snapshot (env.snapshot.json) is ignored at restore time; the
+ *    operator should manually restore .env if they need it. We don't
+ *    write to the host filesystem outside the data volume.
+ *  - The backup ROW itself is dumped INSIDE db.dump from before the
+ *    restore — so after restore, the in-memory id may no longer match
+ *    anything in the database. That's by design.
+ */
+export async function restoreFromBackup(
+  id: string,
+): Promise<{ ok: true; warnings: string[] }> {
+  const found = await getBackup(id);
+  if (!found) throw new Error('Backup not found');
+  if (found.status !== 'success') {
+    throw new Error(`Backup is in status '${found.status}' — only 'success' rows can be restored`);
+  }
+  const dumpPath = join(found.path, 'db.dump');
+  if (!existsSync(dumpPath)) {
+    throw new Error(`db.dump is missing at ${dumpPath} — backup files may have been moved`);
+  }
+
+  const warnings: string[] = [];
+
+  // 1) pg_restore — destructive, drops every object first.
+  await exec('pg_restore', [
+    '--clean',
+    '--if-exists',
+    '--no-owner',
+    '--no-privileges',
+    `--dbname=${config.databaseUrl}`,
+    dumpPath,
+  ]);
+
+  // 2) Attachments — replace the directory with the contents of the tar.
+  const archive = join(found.path, 'attachments.tgz');
+  if (existsSync(archive)) {
+    try {
+      const attachmentsDir = config.attachmentsDir;
+      await rm(attachmentsDir, { recursive: true, force: true });
+      const parent = dirname(attachmentsDir);
+      await mkdir(parent, { recursive: true });
+      await exec('tar', ['-xzf', archive, '-C', parent]);
+    } catch (err) {
+      warnings.push(
+        'attachments restore failed: ' +
+          (err instanceof Error ? err.message : String(err)),
+      );
+    }
+  } else {
+    warnings.push('no attachments.tgz in this backup — attachments dir left untouched');
+  }
+
+  return { ok: true, warnings };
 }
 
 // Small re-export so health.ts doesn't have to know the resolution rule.

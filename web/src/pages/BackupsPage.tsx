@@ -43,6 +43,7 @@ export function BackupsPage() {
   const [time, setTime] = useState('03:00');
   const [retention, setRetention] = useState(30);
   const [directory, setDirectory] = useState('');
+  const [secondaryDir, setSecondaryDir] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
 
   async function load() {
@@ -60,6 +61,7 @@ export function BackupsPage() {
       setTime(config.time || '03:00');
       setRetention(config.retention_days || 30);
       setDirectory(config.directory && config.directory !== config.resolved_directory ? config.directory : '');
+      setSecondaryDir(config.secondary_directory ?? '');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -85,6 +87,9 @@ export function BackupsPage() {
         directory.trim() !== ''
           ? api.putSetting('BACKUP_DIR', directory.trim())
           : api.clearSetting('BACKUP_DIR').catch(() => undefined),
+        secondaryDir.trim() !== ''
+          ? api.putSetting('BACKUP_SECONDARY_DIR', secondaryDir.trim())
+          : api.clearSetting('BACKUP_SECONDARY_DIR').catch(() => undefined),
       ]);
       setSuccess('Schedule saved. The scheduler picks up changes on the next tick.');
       await load();
@@ -134,6 +139,30 @@ export function BackupsPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
+
+  async function restoreOne(id: string) {
+    const proceed = window.prompt(
+      'RESTORE OVERWRITES THE CURRENT DATABASE AND ATTACHMENTS.\n\n' +
+        'This will drop every table and reload from the backup. Open ' +
+        'sessions stay alive, but every tenant will see the data as it ' +
+        'existed at backup time.\n\n' +
+        'Type "RESTORE" (all caps) to continue:',
+    );
+    if (proceed !== 'RESTORE') return;
+    setRunning(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const r = await api.restoreBackup(id);
+      const warnings = r.warnings.length > 0 ? ` Warnings: ${r.warnings.join('; ')}` : '';
+      setSuccess(`Restore complete. Restart the server to ensure a clean state.${warnings}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Restore failed');
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -238,6 +267,23 @@ export function BackupsPage() {
                 onChange={(e) => setDirectory(e.target.value)}
               />
             </div>
+            <div className="field" style={{ gridColumn: 'span 2' }}>
+              <label htmlFor="bk-sec-dir">
+                Secondary (off-server) directory{' '}
+                <span className="muted">
+                  (optional; after every successful backup, the
+                  timestamped folder is copied here too — mount an NFS /
+                  SMB / S3-fuse share to get off-box redundancy)
+                </span>
+              </label>
+              <input
+                id="bk-sec-dir"
+                type="text"
+                placeholder="/mnt/nas/smrtcash-backups"
+                value={secondaryDir}
+                onChange={(e) => setSecondaryDir(e.target.value)}
+              />
+            </div>
           </div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
             <button className="btn" type="submit" disabled={savingCfg}>
@@ -273,24 +319,35 @@ export function BackupsPage() {
             storageKey="backups:history"
             rowActions={(row) => {
               const b = row as unknown as BackupRecord;
-              return b.status === 'success' ? (
-                <button
-                  className="btn-link danger"
-                  type="button"
-                  onClick={() => void deleteOne(b.id)}
-                >
-                  Delete
-                </button>
-              ) : null;
+              if (b.status !== 'success') return null;
+              return (
+                <>
+                  <button
+                    className="btn-link"
+                    type="button"
+                    onClick={() => void restoreOne(b.id)}
+                  >
+                    Restore
+                  </button>
+                  <button
+                    className="btn-link danger"
+                    type="button"
+                    onClick={() => void deleteOne(b.id)}
+                  >
+                    Delete
+                  </button>
+                </>
+              );
             }}
           />
         )}
       </div>
 
       <div className="banner info">
-        Restore is a manual step right now — use{' '}
-        <code>node scripts/restore.mjs /path/to/backup</code> from the repo
-        root, or <code>pg_restore</code> directly against{' '}
+        Restore overwrites the current database and attachments with the
+        snapshot. The CLI fallback (<code>node scripts/restore.mjs
+        /path/to/backup</code>) is still available for cases where the GUI
+        can't reach the server. <code>pg_restore</code> against{' '}
         <code>db.dump</code>.
       </div>
     </div>

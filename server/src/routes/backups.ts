@@ -4,6 +4,7 @@ import {
   listBackups,
   pruneOldBackups,
   resolveBackupDir,
+  restoreFromBackup,
   runBackup,
 } from '../domain/backup-runner.js';
 import { getEffectiveValue } from '../domain/settings.js';
@@ -33,12 +34,13 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/backups/config', async (req, reply) => {
     if (!requireSuperAdmin(req, reply)) return;
-    const [enabled, frequency, time, retention, dir] = await Promise.all([
+    const [enabled, frequency, time, retention, dir, secondary] = await Promise.all([
       getEffectiveValue('BACKUP_ENABLED'),
       getEffectiveValue('BACKUP_FREQUENCY'),
       getEffectiveValue('BACKUP_TIME'),
       getEffectiveValue('BACKUP_RETENTION_DAYS'),
       getEffectiveValue('BACKUP_DIR'),
+      getEffectiveValue('BACKUP_SECONDARY_DIR'),
     ]);
     const resolvedDir = await resolveBackupDir();
     return {
@@ -48,6 +50,7 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
       retention_days: Number(retention || '30') || 30,
       directory: dir || resolvedDir,
       resolved_directory: resolvedDir,
+      secondary_directory: secondary,
     };
   });
 
@@ -64,6 +67,33 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     const removed = await pruneOldBackups(retention);
     return { removed };
   });
+
+  app.post<{ Params: { id: string }; Body: { confirm?: string } }>(
+    '/api/backups/:id/restore',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid backup id' });
+      // Strong confirmation: the client must echo the literal string
+      // 'RESTORE' so a stray double-click on a row doesn't wipe the
+      // database. The UI prompts for it.
+      const body = (req.body ?? {}) as { confirm?: string };
+      if (body.confirm !== 'RESTORE') {
+        return reply.code(400).send({
+          error:
+            "Restore requires { confirm: 'RESTORE' } in the body — this operation destructively overwrites the current database",
+        });
+      }
+      try {
+        const result = await restoreFromBackup(req.params.id);
+        return result;
+      } catch (err) {
+        return reply.code(500).send({
+          error: err instanceof Error ? err.message : 'Restore failed',
+        });
+      }
+    },
+  );
 
   app.delete<{ Params: { id: string } }>(
     '/api/backups/:id',

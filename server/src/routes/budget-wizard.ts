@@ -54,6 +54,12 @@ function parseInput(body: unknown): WizardInput | { error: string } {
     }
     return out;
   }
+  function readPctOverride(field: string): number | undefined {
+    const v = b[field];
+    if (typeof v !== 'number') return undefined;
+    if (!Number.isFinite(v) || v < 0 || v > 100) return undefined;
+    return v;
+  }
   return {
     periodType,
     anchor: b.anchor,
@@ -64,6 +70,8 @@ function parseInput(body: unknown): WizardInput | { error: string } {
     miscOverrideCents: readOverrides('miscOverrideCents'),
     miscNoteOverride: readStringOverrides('miscNoteOverride'),
     savingsOverrideCents: readOverrides('savingsOverrideCents'),
+    savingsIncomePctOverride: readPctOverride('savingsIncomePctOverride'),
+    savingsLeftoverPctOverride: readPctOverride('savingsLeftoverPctOverride'),
   };
 }
 

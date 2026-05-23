@@ -50,6 +50,7 @@ export const KNOWN_SETTINGS = [
   { key: 'BACKUP_TIME', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — time (HH:MM, 24h)' },
   { key: 'BACKUP_RETENTION_DAYS', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — retention (days)' },
   { key: 'BACKUP_DIR', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — directory' },
+  { key: 'BACKUP_SECONDARY_DIR', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — secondary off-server directory' },
   // SMTP — super-admin only
   { key: 'SMTP_HOST', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP host' },
   { key: 'SMTP_PORT', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP port' },
