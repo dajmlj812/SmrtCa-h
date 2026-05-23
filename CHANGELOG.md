@@ -9,8 +9,83 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_All nine phases of the roadmap are complete. The product reached
-feature parity with the original plan in 0.12.3._
+_All nine roadmap phases shipped (through 0.12.3). User asked to work
+through the original "Beyond — Backlog" list. Active plan: five small
+releases (`0.13.0` → `0.13.4`), defer native mobile.
+0.13.0 (data portability) shipped. Next: 0.13.1 tax categories +
+year-end reports, 0.13.2 anomaly alerts, 0.13.3 crypto, 0.13.4
+permission tuning._
+
+---
+
+## [0.13.0] — 2026-05-23 — Data portability tooling
+
+First post-roadmap backlog release. Per-tenant export of every row +
+every attachment into a single portable `.tar.gz` bundle. Distinct
+from the server-wide `npm run backup` (which is a Postgres custom
+dump): this format is **portable** — JSON tables a human can read
+and an external script can re-import.
+
+### Server
+
+- New `server/src/domain/portability.ts` exposing
+  `exportTenantData(tenantId)`. Walks 19 tenant-scoped tables in a
+  deterministic order, copies every attachment from disk into an
+  `attachments/` subdirectory, writes a `tenant.json` manifest +
+  bundle, then tar+gzips the whole thing into a temp file. Returns
+  a cleanup callback the route runs after the stream completes.
+- **Secrets are stripped.** `ofx_dc_connections.username_encrypted`
+  / `password_encrypted` and `plaid_items.access_token_encrypted`
+  are excluded from the SELECT lists. Connection metadata is kept
+  so the user has a record of which banks they were linked to.
+- Attachment files are bundled **verbatim** — still encrypted at
+  rest if `encryption_version = 1`. A re-import needs the same
+  `ATTACHMENT_ENCRYPTION_KEY` to read them. The manifest's `notes`
+  field calls this out explicitly.
+- New `server/src/routes/portability.ts` — `GET /api/portability/export`.
+  Admin-only (same gate as auth-provider config + member management).
+  Streams the file with `Content-Type: application/gzip` +
+  `Content-Disposition: attachment` + `Content-Length` + a custom
+  `X-Smrtcash-Counts` header so the UI can show row counts after
+  the download without re-parsing the tarball.
+- Every export writes an `audit_log` row with action
+  `portability.export` so the super-admin can see when a tenant
+  bulk-pulled their data.
+
+### Web
+
+- New "Data portability" section on `/workspace` (admin-only). One
+  "Export all my data" button triggers a same-origin fetch, reads
+  the counts header, then synthesizes a `<a download>` click on a
+  Blob to save the file. After completion the page shows the
+  archive size + per-table counts.
+
+### Tests (+7 server)
+
+- `tests/integration/portability.test.ts`:
+  - Produces a tar.gz with manifest + every expected table key.
+  - Strips encrypted credential blobs from `ofx_dc_connections`
+    and `plaid_items` even when the rows exist.
+  - Cross-tenant isolation: a transaction belonging to another
+    tenant's account is never bundled.
+  - Audit log entry written on every route hit.
+  - 403 for non-admin role (spouse can read everything but can't
+    bulk-export).
+  - Headers: `Content-Type`, `Content-Disposition` filename,
+    `X-Smrtcash-Counts` is valid JSON containing `accounts`.
+  - Attachment files actually arrive inside the bundle and round-
+    trip their contents.
+- Total: **519 tests** (513 server + 6 web), all green.
+
+### Files
+
+```
+server/src/domain/portability.ts                (new)
+server/src/routes/portability.ts                (new)
+server/src/app.ts                               (register route)
+server/tests/integration/portability.test.ts   (new)
+web/src/pages/WorkspacePage.tsx                 (+PortabilitySection)
+```
 
 ---
 

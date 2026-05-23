@@ -74,6 +74,7 @@ export function WorkspacePage() {
             tenantId={activeTenant.tenant_id}
             canManage={isAdmin}
           />
+          {isAdmin && <PortabilitySection />}
         </>
       )}
     </div>
@@ -488,5 +489,89 @@ function InviteForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * 0.13.0 — data-portability section. Admin-only.
+ *
+ * One button. Triggers /api/portability/export, the browser handles
+ * the download. After a successful run, shows the response's row
+ * counts so the user knows what they got.
+ */
+function PortabilitySection() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastCounts, setLastCounts] = useState<Record<string, number> | null>(
+    null,
+  );
+  const [lastBytes, setLastBytes] = useState<number | null>(null);
+
+  async function runExport() {
+    setBusy(true);
+    setError(null);
+    setLastCounts(null);
+    setLastBytes(null);
+    try {
+      const res = await fetch('/api/portability/export', {
+        method: 'GET',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `Export failed (${res.status})`);
+      }
+      const countsHeader = res.headers.get('X-Smrtcash-Counts');
+      const counts = countsHeader
+        ? (JSON.parse(countsHeader) as Record<string, number>)
+        : null;
+      const dispo = res.headers.get('Content-Disposition') ?? '';
+      const filename =
+        dispo.match(/filename="([^"]+)"/)?.[1] ?? 'smrtcash-export.tar.gz';
+      const blob = await res.blob();
+      setLastBytes(blob.size);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setLastCounts(counts);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card row-gap" style={{ marginTop: 24 }}>
+      <div className="section-title">Data portability</div>
+      <p className="muted">
+        Download a portable archive of <strong>everything</strong> in this
+        tenant — accounts, transactions, categories, budgets, goals, bills,
+        holdings, attachments. Structured JSON inside a <code>.tar.gz</code>{' '}
+        you can re-import or open in any tool. Encrypted credentials
+        (OFX-DC, Plaid tokens) are stripped — secrets don't travel.
+      </p>
+      {error && <div className="banner error">{error}</div>}
+      {lastCounts && (
+        <div className="banner info">
+          Exported{' '}
+          {lastBytes ? `${(lastBytes / 1024).toFixed(1)} KB` : 'archive'} —{' '}
+          {lastCounts.accounts ?? 0} accounts,{' '}
+          {lastCounts.transactions ?? 0} transactions,{' '}
+          {lastCounts.categories ?? 0} categories,{' '}
+          {lastCounts.attachments ?? 0} attachments.
+        </div>
+      )}
+      <div>
+        <button className="btn" onClick={() => void runExport()} disabled={busy}>
+          {busy ? 'Exporting…' : 'Export all my data'}
+        </button>
+      </div>
+    </div>
   );
 }

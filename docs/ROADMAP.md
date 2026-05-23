@@ -299,13 +299,17 @@ Sliced into four releases:
 
 ## Beyond — Backlog 💡
 
-- Multi-user / household mode with per-user permissions
-- Tax-category tagging and year-end reports
-- Cryptocurrency tracking (Simplifi-style)
+User asked to work through the backlog after Phase 9 closed. Active
+backlog plan: ship five small releases (`0.13.0` → `0.13.4`), defer
+native mobile.
+
+- Multi-user / household mode with per-user permissions — _planned 0.13.4_
+- Tax-category tagging and year-end reports — _planned 0.13.1_
+- Cryptocurrency tracking (Simplifi-style) — _planned 0.13.3_
 - Non-AI rules engine for auto-categorization
-- Advanced cash-flow forecasting & spending-anomaly alerts
-- Native mobile apps — only if the PWA proves insufficient
-- Data export / portability tooling
+- Advanced cash-flow forecasting & spending-anomaly alerts — _planned 0.13.2_
+- Native mobile apps — only if the PWA proves insufficient (**deferred**)
+- Data export / portability tooling — ✅ **0.13.0** (2026-05-23)
 
 ---
 
