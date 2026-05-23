@@ -183,6 +183,11 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       const offset = Math.max(Number(req.query.offset) || 0, 0);
       // Uncategorized = no direct category AND no splits. A split-only row
       // is considered categorized via its slices.
+      // "Uncategorized" means: no direct category OR the row points at
+      // the literal 'Uncategorized' category (the AI normalizer parks
+      // anything it can't classify there rather than leaving it NULL).
+      // Either way, no splits — a split-only row is categorized via its
+      // slices.
       const uncategorized = req.query.uncategorized === 'true';
 
       // running_balance_cents is computed in an inner query (against the
@@ -222,7 +227,8 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
          WHERE ($1::uuid IS NULL OR t.account_id = $1)
            AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')
            AND ($5::boolean = FALSE OR (
-             t.category_id IS NULL
+             (t.category_id IS NULL
+              OR t.category_id = (SELECT id FROM categories WHERE name = 'Uncategorized' AND parent_id IS NULL LIMIT 1))
              AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
            ))
          ORDER BY t.txn_date DESC, t.created_at DESC
@@ -236,7 +242,8 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
          WHERE ($1::uuid IS NULL OR t.account_id = $1)
            AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')
            AND ($3::boolean = FALSE OR (
-             t.category_id IS NULL
+             (t.category_id IS NULL
+              OR t.category_id = (SELECT id FROM categories WHERE name = 'Uncategorized' AND parent_id IS NULL LIMIT 1))
              AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
            ))`,
         [accountId, search, uncategorized],

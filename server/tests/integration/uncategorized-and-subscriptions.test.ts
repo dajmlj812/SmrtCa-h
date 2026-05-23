@@ -61,6 +61,24 @@ describe('Uncategorized filter + bulk delete (Phase 7.4)', () => {
       .toEqual(['NEEDS CAT 1', 'NEEDS CAT 2']);
   });
 
+  it('rows tagged with the literal "Uncategorized" category still surface as uncategorized', async () => {
+    // The AI normalizer parks anything it can't classify into the
+    // literal 'Uncategorized' category rather than leaving category_id
+    // NULL. The triage page should still pick those up.
+    const uncat = await pool.query<{ id: string }>(
+      `SELECT id FROM categories WHERE name = 'Uncategorized' AND parent_id IS NULL`,
+    );
+    const uncatId = uncat.rows[0]!.id;
+    await seedTxn({ accountId, raw: 'AI PARKED ME', categoryId: uncatId });
+
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/transactions?uncategorized=true',
+    });
+    expect(r.json().total).toBe(1);
+    expect(r.json().transactions[0].raw_description).toBe('AI PARKED ME');
+  });
+
   it('transactions with splits count as categorized', async () => {
     const cat = await pool.query<{ id: string }>(
       `SELECT id FROM categories WHERE name = 'Groceries' LIMIT 1`,
