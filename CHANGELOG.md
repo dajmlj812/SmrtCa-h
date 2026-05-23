@@ -9,9 +9,94 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Backlog in progress. 0.13.0 + 0.13.1 shipped. Next: 0.13.2 anomaly
-alerts, 0.13.3 crypto, 0.13.4 permission tuning. Native mobile
-deferred._
+_Backlog progressing. 0.13.0 / 0.13.1 / 0.13.2 shipped. Next: 0.13.3
+crypto tracking, 0.13.4 permission tuning. Native mobile deferred._
+
+---
+
+## [0.13.2] — 2026-05-23 — Anomaly alerts
+
+Third backlog release. Detects three classes of unusual transactions
+and surfaces them on a new `/anomalies` page, with optional SMTP
+digest emails on every scan. Disabled by default — flip
+`ANOMALY_ENABLED=true` in super-admin settings to turn it on.
+
+### Detection rules
+
+- **`large_amount`** — any single transaction whose absolute spend
+  ≥ `ANOMALY_LARGE_TXN_THRESHOLD_CENTS` (default $500). Severity
+  bumps to `high` at 2× threshold.
+- **`unusual_at_merchant`** — transaction whose absolute amount is
+  ≥ `ANOMALY_MULTIPLIER` × the median spend at the same merchant
+  (default 3×). Only fires when the merchant has been seen at
+  least **5 prior times** (GROUP BY HAVING `>= 6` accounts for the
+  candidate row itself being in the stats).
+- **`duplicate_suspect`** — same account + same amount + same
+  merchant within 24h. Self-join surfaces only the second row of
+  each pair (later `created_at`).
+
+### Schema (migration 026)
+
+- `anomaly_alerts` with `UNIQUE (transaction_id, kind)` so re-scans
+  are idempotent (ON CONFLICT DO NOTHING everywhere). Partial
+  index `(tenant_id) WHERE dismissed = false` keeps the nav-badge
+  count fast.
+
+### Settings (super-only, all default off)
+
+- `ANOMALY_ENABLED`, `ANOMALY_LARGE_TXN_THRESHOLD_CENTS` (default
+  50000), `ANOMALY_MULTIPLIER` (default 3, min 1.5),
+  `ANOMALY_EMAIL_TO` (optional digest recipient).
+
+### Server
+
+- `domain/anomaly-detector.ts` — `scanTransactionsForAnomalies(tenantId, txnIds?)`.
+  Three SQL passes per scan, each with ON CONFLICT DO NOTHING. On
+  new alerts + `ANOMALY_EMAIL_TO` set + SMTP configured, sends a
+  single digest email via the existing `tryMail()` (one mail per
+  scan, not per alert — avoids mail-bombing on a big import).
+- Routes: `GET /api/anomalies` (open by default,
+  `?includeDismissed=1` to widen), `GET /api/anomalies/count` for
+  the nav badge, `POST /api/anomalies/scan` (admin+spouse,
+  audit-logged), `POST /api/anomalies/:id/dismiss`.
+- `persistBatch()` runs an awaited scan over freshly-imported
+  ids after the transaction commits, wrapped in try/catch so a
+  detector failure never breaks the import. Awaited (not
+  fire-and-forget) so concurrent vitest workers can't race each
+  other's `resetDb()`s.
+
+### Web
+
+- New `/anomalies` page grouped by kind (Large amount /
+  Unusual at merchant / Possible duplicate), severity pill per
+  row (high / warn / info), Dismiss + Re-open toggle, "Include
+  dismissed" filter, "Run scan now" button.
+- Nav link between Tax and Reports.
+
+### Tests (+9 server)
+
+- `tests/integration/anomalies.test.ts`: disabled gate, large_amount
+  detection + idempotent re-scan, unusual_at_merchant 5+1 fires /
+  4+1 doesn't, duplicate_suspect within 24h, tenant isolation,
+  route CRUD round-trip, `/count` for the nav badge.
+- Total: **535 tests** (529 server + 6 web), all green.
+
+### Files
+
+```
+server/src/db/migrations/026_anomaly_alerts.sql      (new)
+server/src/domain/anomaly-detector.ts                (new)
+server/src/domain/settings.ts                        (+ANOMALY_* keys)
+server/src/routes/anomalies.ts                       (new)
+server/src/app.ts                                    (register route)
+server/src/import/importer.ts                        (persistBatch
+                                                      now scans inserted ids)
+server/tests/setup/test-db.ts                        (TRUNCATE anomaly_alerts)
+server/tests/integration/anomalies.test.ts           (new)
+web/src/api.ts                                       (anomaly types + methods)
+web/src/pages/AnomaliesPage.tsx                      (new)
+web/src/App.tsx                                      (nav + route)
+```
 
 ---
 

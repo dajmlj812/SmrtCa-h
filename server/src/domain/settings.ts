@@ -68,6 +68,13 @@ export const KNOWN_SETTINGS = [
   // Security — super-admin only, restart required
   { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, superOnly: true, label: 'Session secret' },
   { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, superOnly: true, label: 'Attachment encryption key' },
+  // Anomaly alerts (backlog 0.13.2). Scanner runs after every import
+  // + manually via /api/anomalies/scan. SMTP digest is optional —
+  // empty ANOMALY_EMAIL_TO keeps alerts in-app only.
+  { key: 'ANOMALY_ENABLED', isSecret: false, restartRequired: false, superOnly: true, label: 'Anomaly alerts — enabled' },
+  { key: 'ANOMALY_LARGE_TXN_THRESHOLD_CENTS', isSecret: false, restartRequired: false, superOnly: true, label: 'Anomaly — single-transaction threshold (cents)' },
+  { key: 'ANOMALY_MULTIPLIER', isSecret: false, restartRequired: false, superOnly: true, label: 'Anomaly — outlier multiplier (×median at merchant)' },
+  { key: 'ANOMALY_EMAIL_TO', isSecret: false, restartRequired: false, superOnly: true, label: 'Anomaly — digest email recipient (optional)' },
   // Auto-sync (Phase 8.3 / 0.11.3) — periodic background fetch of
   // every enabled OFX-DC connection + Plaid item. Disabled by default;
   // tenant admins still trigger /sync manually until the super-admin

@@ -307,7 +307,7 @@ native mobile.
 - Tax-category tagging and year-end reports — ✅ **0.13.1** (2026-05-23)
 - Cryptocurrency tracking (Simplifi-style) — _planned 0.13.3_
 - Non-AI rules engine for auto-categorization
-- Advanced cash-flow forecasting & spending-anomaly alerts — _planned 0.13.2_
+- Advanced cash-flow forecasting & spending-anomaly alerts — ✅ **0.13.2** (anomaly alerts; 2026-05-23)
 - Native mobile apps — only if the PWA proves insufficient (**deferred**)
 - Data export / portability tooling — ✅ **0.13.0** (2026-05-23)
 

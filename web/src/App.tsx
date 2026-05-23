@@ -30,6 +30,7 @@ import { AssistantPage } from './pages/AssistantPage';
 import { SharingPage } from './pages/SharingPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TaxYearPage } from './pages/TaxYearPage';
+import { AnomaliesPage } from './pages/AnomaliesPage';
 import { ThemeToggle } from './components/ThemeToggle';
 import { MobileBar, SidebarBackdrop, useMobileDrawer } from './components/MobileBar';
 import { InstallPrompt, OfflineIndicator } from './components/InstallPrompt';
@@ -198,6 +199,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/sharing">Sharing</NavLink>
           <NavLink to="/calendar">Calendar</NavLink>
           <NavLink to="/tax">Tax</NavLink>
+          <NavLink to="/anomalies">Anomalies</NavLink>
           <NavLink to="/reports">Reports</NavLink>
           <NavLink to="/workspace">Workspace</NavLink>
         </nav>
@@ -235,6 +237,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/sharing" element={<SharingPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/tax" element={<TaxYearPage />} />
+          <Route path="/anomalies" element={<AnomaliesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
         </Routes>

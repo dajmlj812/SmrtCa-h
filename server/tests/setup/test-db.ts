@@ -55,7 +55,8 @@ export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> 
               account_user_access, audit_log, exchange_rates,
               retirement_projections, ofx_dc_connections,
               plaid_items, plaid_account_links,
-              split_participants, transaction_shares
+              split_participants, transaction_shares,
+              anomaly_alerts
        RESTART IDENTITY CASCADE`,
   );
   await seedDefaultCategories(pool);

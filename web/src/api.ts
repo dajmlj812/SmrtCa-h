@@ -94,6 +94,28 @@ export interface OfxDcConnectionInput {
   enabled?: boolean;
 }
 
+export type AnomalyKind =
+  | 'large_amount'
+  | 'unusual_at_merchant'
+  | 'duplicate_suspect';
+
+export interface AnomalyRow {
+  id: string;
+  transaction_id: string;
+  kind: AnomalyKind;
+  severity: 'info' | 'warn' | 'high';
+  message: string;
+  details: Record<string, unknown>;
+  dismissed: boolean;
+  dismissed_at: string | null;
+  detected_at: string;
+  txn_date: string;
+  txn_amount_cents: number;
+  raw_description: string;
+  normalized_merchant: string | null;
+  account_name: string;
+}
+
 export interface TaxYearRow {
   tax_category: string;
   sign: 'income' | 'deductible';
@@ -2108,6 +2130,32 @@ export const api = {
     http<TaxYearReport>(`/api/reports/tax-year/${year}`),
 
   taxYearCsvUrl: (year: number) => `/api/reports/tax-year/${year}.csv`,
+
+  // ── Anomaly alerts (backlog 0.13.2) ──────────────────────
+  listAnomalies: (includeDismissed = false) =>
+    http<{ anomalies: AnomalyRow[] }>(
+      `/api/anomalies${includeDismissed ? '?includeDismissed=1' : ''}`,
+    ).then((r) => r.anomalies),
+
+  anomalyCount: () => http<{ open: number }>('/api/anomalies/count'),
+
+  scanAnomalies: () =>
+    http<{
+      enabled: boolean;
+      scanned: number;
+      newAlerts: number;
+      byKind: Record<string, number>;
+    }>('/api/anomalies/scan', { method: 'POST' }),
+
+  dismissAnomaly: (id: string, dismissed = true) =>
+    http<{ anomaly: { id: string; dismissed: boolean; dismissed_at: string | null } }>(
+      `/api/anomalies/${id}/dismiss`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dismissed }),
+      },
+    ),
 
   // ── Bill-splitting (Phase 9.2 / 0.12.2) ──────────────────
   listSplitParticipants: (includeArchived = false) =>

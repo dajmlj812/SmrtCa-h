@@ -171,13 +171,15 @@ export async function persistBatch(
   const hashes = assignDedupHashes(transactions);
   const rowCount = totalRows ?? transactions.length + errors.length;
 
-  return withTransaction(async (client) => {
-    const account = await client.query('SELECT id FROM accounts WHERE id = $1', [
-      accountId,
-    ]);
+  const result = await withTransaction(async (client) => {
+    const account = await client.query<{ tenant_id: string | null }>(
+      'SELECT tenant_id FROM accounts WHERE id = $1',
+      [accountId],
+    );
     if (account.rowCount === 0) {
       throw new ImportError(`Account ${accountId} not found`);
     }
+    const tenantId = account.rows[0]!.tenant_id;
 
     const batch = await client.query<{ id: string }>(
       `INSERT INTO import_batches (account_id, filename, format_id, row_count)
@@ -186,16 +188,17 @@ export async function persistBatch(
     );
     const batchId = batch.rows[0]!.id;
 
-    let importedCount = 0;
+    const insertedIds: string[] = [];
     for (let i = 0; i < transactions.length; i++) {
       const t = transactions[i]!;
-      const inserted = await client.query(
+      const inserted = await client.query<{ id: string }>(
         `INSERT INTO transactions (
            account_id, import_batch_id, txn_date, post_date, amount_cents,
            raw_description, source_category, source_type, memo, balance_cents,
            dedup_hash
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         ON CONFLICT (account_id, dedup_hash) DO NOTHING`,
+         ON CONFLICT (account_id, dedup_hash) DO NOTHING
+         RETURNING id`,
         [
           accountId,
           batchId,
@@ -210,8 +213,11 @@ export async function persistBatch(
           hashes[i],
         ],
       );
-      importedCount += inserted.rowCount ?? 0;
+      if (inserted.rowCount && inserted.rowCount > 0) {
+        insertedIds.push(inserted.rows[0]!.id);
+      }
     }
+    const importedCount = insertedIds.length;
     const skippedCount = transactions.length - importedCount;
 
     await client.query(
@@ -222,13 +228,37 @@ export async function persistBatch(
     );
 
     return {
-      batchId,
-      formatId,
-      totalRows: rowCount,
-      importedCount,
-      skippedCount,
-      errorCount: errors.length,
-      errors: errors.slice(0, 25),
+      tenantId,
+      insertedIds,
+      payload: {
+        batchId,
+        formatId,
+        totalRows: rowCount,
+        importedCount,
+        skippedCount,
+        errorCount: errors.length,
+        errors: errors.slice(0, 25),
+      },
     };
   });
+
+  // Run an anomaly scan over the freshly-imported rows. Awaited
+  // (not fire-and-forget) so concurrent vitest workers can't race
+  // each other's resetDb()'s — and so a real DB failure surfaces
+  // immediately instead of leaking. ANOMALY_ENABLED gates the work
+  // server-side; a real failure here is swallowed so the import
+  // still succeeds (the user wanted the rows persisted; an anomaly
+  // detection miss is recoverable via a manual scan).
+  if (result.tenantId && result.insertedIds.length > 0) {
+    try {
+      const { scanTransactionsForAnomalies } = await import(
+        '../domain/anomaly-detector.js'
+      );
+      await scanTransactionsForAnomalies(result.tenantId, result.insertedIds);
+    } catch {
+      /* swallow — import wins; user can /api/anomalies/scan manually */
+    }
+  }
+
+  return result.payload;
 }
