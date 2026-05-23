@@ -2,8 +2,20 @@ import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 
-const COLUMNS = `id, account_id, symbol, name, quantity::float8 AS quantity,
+const COLUMNS = `id, account_id, symbol, name, asset_type,
+  quantity::float8 AS quantity,
   cost_basis_cents, last_price_cents, last_price_date, created_at`;
+
+const VALID_ASSET_TYPES = new Set([
+  'stock', 'etf', 'mutual_fund', 'bond',
+  'crypto', 'commodity', 'other',
+]);
+
+function asAssetType(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  return VALID_ASSET_TYPES.has(s) ? s : null;
+}
 
 function asString(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -114,16 +126,25 @@ export async function holdingRoutes(app: FastifyInstance): Promise<void> {
     if (body.lastPriceDate !== undefined && !isYmdOrNull(body.lastPriceDate)) {
       return reply.code(400).send({ error: 'lastPriceDate must be YYYY-MM-DD or null' });
     }
+    const assetType = body.assetType === undefined
+      ? 'stock'
+      : asAssetType(body.assetType);
+    if (assetType === null) {
+      return reply
+        .code(400)
+        .send({ error: `assetType must be one of: ${[...VALID_ASSET_TYPES].join(', ')}` });
+    }
     const r = await query(
       `INSERT INTO holdings
-         (account_id, symbol, name, quantity, cost_basis_cents,
+         (account_id, symbol, name, asset_type, quantity, cost_basis_cents,
           last_price_cents, last_price_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING ${COLUMNS}`,
       [
         body.accountId,
         symbol,
         name,
+        assetType,
         quantity,
         costBasis,
         lastPrice,
@@ -177,6 +198,16 @@ export async function holdingRoutes(app: FastifyInstance): Promise<void> {
         params.push(body.lastPriceDate);
         sets.push(`last_price_date = $${params.length}`);
       }
+      if (body.assetType !== undefined) {
+        const t = asAssetType(body.assetType);
+        if (t === null) {
+          return reply
+            .code(400)
+            .send({ error: `assetType must be one of: ${[...VALID_ASSET_TYPES].join(', ')}` });
+        }
+        params.push(t);
+        sets.push(`asset_type = $${params.length}`);
+      }
       if (sets.length === 0) {
         return reply.code(400).send({ error: 'No updates' });
       }
@@ -207,4 +238,84 @@ export async function holdingRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(204).send();
     },
   );
+
+  // 0.13.3 — Refresh all crypto holdings' last_price_cents from the
+  // configured price provider. Tenant-scoped. Admin + spouse only.
+  app.post('/api/holdings/refresh-prices/crypto', async (req, reply) => {
+    if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
+    if (!req.user.tenantId)
+      return reply.code(403).send({ error: 'No active tenant' });
+    const { loadUserContext, requireFinancialMutation } = await import(
+      '../auth/rbac.js'
+    );
+    const ctx = await loadUserContext(req.user.id, req.user.tenantId);
+    const denied = requireFinancialMutation(ctx);
+    if (denied) return reply.code(denied.status).send({ error: denied.error });
+
+    const { getEffectiveValue } = await import('../domain/settings.js');
+    const provider = ((await getEffectiveValue('CRYPTO_PRICE_PROVIDER')) || 'coingecko')
+      .trim()
+      .toLowerCase();
+    if (provider === 'manual') {
+      return reply.code(400).send({
+        error: 'CRYPTO_PRICE_PROVIDER is set to manual; auto-refresh is disabled',
+      });
+    }
+
+    const rows = await query<{ id: string; symbol: string | null }>(
+      `SELECT h.id, h.symbol
+         FROM holdings h
+         JOIN accounts a ON a.id = h.account_id
+        WHERE a.tenant_id = $1 AND h.asset_type = 'crypto' AND h.symbol IS NOT NULL`,
+      [req.user.tenantId],
+    );
+    if (rows.rowCount === 0) {
+      return { updated: 0, unknown: [], symbols: [] };
+    }
+
+    const { fetchCryptoPrices, CryptoPriceError } = await import(
+      '../domain/crypto-prices.js'
+    );
+    const symbols = rows.rows
+      .map((r) => r.symbol!)
+      .filter((s, i, arr) => arr.indexOf(s) === i);
+
+    // Test injection: `app.cryptoFetchOverride` overrides the global fetch.
+    const fetchImpl = (app as unknown as { cryptoFetchOverride?: typeof fetch })
+      .cryptoFetchOverride;
+
+    let priceResult;
+    try {
+      priceResult = await fetchCryptoPrices({
+        symbols,
+        ...(fetchImpl ? { fetchImpl } : {}),
+      });
+    } catch (err) {
+      if (err instanceof CryptoPriceError) {
+        return reply.code(400).send({ error: err.message, kind: err.kind });
+      }
+      throw err;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    let updated = 0;
+    for (const row of rows.rows) {
+      if (!row.symbol) continue;
+      const cents = priceResult.prices[row.symbol.toUpperCase()];
+      if (typeof cents !== 'number') continue;
+      const u = await query(
+        `UPDATE holdings
+            SET last_price_cents = $2, last_price_date = $3
+          WHERE id = $1`,
+        [row.id, cents, today],
+      );
+      updated += u.rowCount ?? 0;
+    }
+    return {
+      updated,
+      symbols,
+      unknown: priceResult.unknown,
+      fetched_at: priceResult.fetchedAt,
+    };
+  });
 }

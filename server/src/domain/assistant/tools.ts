@@ -566,6 +566,31 @@ const taxYearSummary: AssistantTool = {
   },
 };
 
+const cryptoHoldings: AssistantTool = {
+  name: 'crypto_holdings_summary',
+  description:
+    'List the tenant\'s crypto holdings with quantity, last price (cents), market value, and unrealized gain. Use this to answer "what crypto do I hold?" or "what is my crypto P&L?".',
+  kind: 'read',
+  inputSchema: { type: 'object', properties: {} },
+  async execute(ctx) {
+    const r = await pool.query(
+      `SELECT h.id, h.symbol, h.name, h.quantity::float8 AS quantity,
+              h.cost_basis_cents, h.last_price_cents,
+              h.last_price_date::text AS last_price_date,
+              (h.quantity * h.last_price_cents)::bigint AS market_value_cents,
+              (h.quantity * h.last_price_cents)::bigint - h.cost_basis_cents
+                AS unrealized_gain_cents,
+              a.name AS account_name
+         FROM holdings h
+         JOIN accounts a ON a.id = h.account_id
+        WHERE a.tenant_id = $1 AND h.asset_type = 'crypto'
+        ORDER BY h.symbol`,
+      [ctx.tenantId],
+    );
+    return { holdings: r.rows };
+  },
+};
+
 const calendarMonth: AssistantTool = {
   name: 'calendar_month_summary',
   description:
@@ -739,6 +764,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   listBudgets,
   listBills,
   listGoals,
+  cryptoHoldings,
   calendarMonth,
   taxYearSummary,
   shareSummary,

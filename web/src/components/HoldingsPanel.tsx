@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, type Holding } from '../api';
+import { api, type AssetType, type Holding, ASSET_TYPES } from '../api';
 import { formatCents, formatDate } from '../format';
 
 interface Props {
@@ -58,6 +58,31 @@ export function HoldingsPanel({ accountId, onChanged }: Props) {
     }
   }
 
+  async function changeAssetType(h: Holding, assetType: AssetType) {
+    try {
+      await api.updateHolding(h.id, { assetType });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed');
+    }
+  }
+
+  async function refreshCrypto() {
+    try {
+      setError(null);
+      const r = await api.refreshCryptoPrices();
+      await load();
+      onChanged?.();
+      if (r.unknown.length > 0) {
+        setError(
+          `Refreshed ${r.updated}; unknown symbol(s): ${r.unknown.join(', ')}`,
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Refresh failed');
+    }
+  }
+
   async function remove(h: Holding) {
     if (!window.confirm(`Remove ${h.symbol ?? h.name}?`)) return;
     try {
@@ -80,9 +105,20 @@ export function HoldingsPanel({ accountId, onChanged }: Props) {
     <div className="card holdings-panel">
       <div className="page-section-head">
         <h2>Holdings</h2>
-        <button className="btn" type="button" onClick={() => setShowAdd(true)}>
-          Add holding
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {holdings.some((h) => h.asset_type === 'crypto') && (
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={() => void refreshCrypto()}
+            >
+              Refresh crypto prices
+            </button>
+          )}
+          <button className="btn" type="button" onClick={() => setShowAdd(true)}>
+            Add holding
+          </button>
+        </div>
       </div>
 
       {error && <div className="banner error">{error}</div>}
@@ -115,6 +151,7 @@ export function HoldingsPanel({ accountId, onChanged }: Props) {
                 <tr>
                   <th>Symbol</th>
                   <th>Name</th>
+                  <th>Type</th>
                   <th className="num">Quantity</th>
                   <th className="num">Last price</th>
                   <th className="num">Market value</th>
@@ -127,6 +164,21 @@ export function HoldingsPanel({ accountId, onChanged }: Props) {
                   <tr key={h.id}>
                     <td>{h.symbol ?? '—'}</td>
                     <td>{h.name}</td>
+                    <td>
+                      <select
+                        value={h.asset_type}
+                        onChange={(e) =>
+                          void changeAssetType(h, e.target.value as AssetType)
+                        }
+                        style={{ fontSize: 13 }}
+                      >
+                        {ASSET_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="num">{fmtQty(h.quantity)}</td>
                     <td className="num nowrap">
                       {formatCents(h.last_price_cents)}
@@ -190,6 +242,7 @@ function NewHoldingForm({
 }) {
   const [symbol, setSymbol] = useState('');
   const [name, setName] = useState('');
+  const [assetType, setAssetType] = useState<AssetType>('stock');
   const [quantity, setQuantity] = useState('');
   const [costBasis, setCostBasis] = useState('');
   const [lastPrice, setLastPrice] = useState('');
@@ -207,6 +260,7 @@ function NewHoldingForm({
         accountId,
         symbol: symbol.trim() === '' ? undefined : symbol.trim(),
         name: name.trim(),
+        assetType,
         quantity: q,
         costBasisCents: Math.round(Number(costBasis || '0') * 100),
         lastPriceCents: Math.round(Number(lastPrice || '0') * 100),
@@ -251,6 +305,20 @@ function NewHoldingForm({
                 required
                 autoFocus
               />
+            </div>
+            <div className="field">
+              <label htmlFor="h-type">Asset type</label>
+              <select
+                id="h-type"
+                value={assetType}
+                onChange={(e) => setAssetType(e.target.value as AssetType)}
+              >
+                {ASSET_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label htmlFor="h-qty">Quantity</label>

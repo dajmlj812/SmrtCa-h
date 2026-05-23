@@ -385,11 +385,31 @@ export interface WizardPreview {
   periods: WizardPeriodPreview[];
 }
 
+export type AssetType =
+  | 'stock'
+  | 'etf'
+  | 'mutual_fund'
+  | 'bond'
+  | 'crypto'
+  | 'commodity'
+  | 'other';
+
+export const ASSET_TYPES: AssetType[] = [
+  'stock',
+  'etf',
+  'mutual_fund',
+  'bond',
+  'crypto',
+  'commodity',
+  'other',
+];
+
 export interface Holding {
   id: string;
   account_id: string;
   symbol: string | null;
   name: string;
+  asset_type: AssetType;
   quantity: number;
   cost_basis_cents: number;
   last_price_cents: number;
@@ -397,6 +417,13 @@ export interface Holding {
   market_value_cents: number;
   unrealized_gain_cents: number;
   created_at: string;
+}
+
+export interface CryptoRefreshResult {
+  updated: number;
+  symbols: string[];
+  unknown: string[];
+  fetched_at: string;
 }
 
 export interface Transaction {
@@ -1716,6 +1743,7 @@ export const api = {
     accountId: string;
     symbol?: string;
     name: string;
+    assetType?: AssetType;
     quantity: number;
     costBasisCents?: number;
     lastPriceCents?: number;
@@ -1732,6 +1760,7 @@ export const api = {
     input: Partial<{
       symbol: string;
       name: string;
+      assetType: AssetType;
       quantity: number;
       costBasisCents: number;
       lastPriceCents: number;
@@ -1746,6 +1775,11 @@ export const api = {
 
   deleteHolding: (id: string) =>
     http<void>(`/api/holdings/${id}`, { method: 'DELETE' }),
+
+  refreshCryptoPrices: () =>
+    http<CryptoRefreshResult>('/api/holdings/refresh-prices/crypto', {
+      method: 'POST',
+    }),
 
   // ── Vehicles + tolls + fuel prices (Phase 7.1) ────────────
   listVehicles: () =>

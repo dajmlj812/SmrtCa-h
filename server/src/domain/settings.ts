@@ -75,6 +75,9 @@ export const KNOWN_SETTINGS = [
   { key: 'ANOMALY_LARGE_TXN_THRESHOLD_CENTS', isSecret: false, restartRequired: false, superOnly: true, label: 'Anomaly — single-transaction threshold (cents)' },
   { key: 'ANOMALY_MULTIPLIER', isSecret: false, restartRequired: false, superOnly: true, label: 'Anomaly — outlier multiplier (×median at merchant)' },
   { key: 'ANOMALY_EMAIL_TO', isSecret: false, restartRequired: false, superOnly: true, label: 'Anomaly — digest email recipient (optional)' },
+  // Crypto price feed (backlog 0.13.3). 'coingecko' = free public API;
+  // 'manual' disables auto-fetch so the user enters prices by hand.
+  { key: 'CRYPTO_PRICE_PROVIDER', isSecret: false, restartRequired: false, superOnly: true, label: 'Crypto price provider (coingecko / manual)' },
   // Auto-sync (Phase 8.3 / 0.11.3) — periodic background fetch of
   // every enabled OFX-DC connection + Plaid item. Disabled by default;
   // tenant admins still trigger /sync manually until the super-admin

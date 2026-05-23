@@ -9,8 +9,82 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Backlog progressing. 0.13.0 / 0.13.1 / 0.13.2 shipped. Next: 0.13.3
-crypto tracking, 0.13.4 permission tuning. Native mobile deferred._
+_Backlog progressing. 0.13.0–0.13.3 shipped. Next: 0.13.4 permission
+tuning. Native mobile deferred._
+
+---
+
+## [0.13.3] — 2026-05-23 — Crypto tracking
+
+Fourth backlog release. Extends the existing `holdings` table with an
+`asset_type` column + a CoinGecko price fetcher so a brokerage account
+can hold mixed assets (stocks + crypto) and the user can refresh
+crypto prices with one click. No new account type — the existing
+`investment` (or any account) can host crypto holdings.
+
+### Schema (migration 027)
+
+- `holdings.asset_type text NOT NULL DEFAULT 'stock'` with CHECK on
+  `{stock, etf, mutual_fund, bond, crypto, commodity, other}`.
+  Existing rows default to `'stock'`; user re-tags crypto after
+  migrate.
+- Partial index on `(asset_type) WHERE asset_type = 'crypto'`.
+
+### Price fetcher (`server/src/domain/crypto-prices.ts`)
+
+- Hand-rolled fetch wrapper to CoinGecko's free public API (no key).
+  37 built-in symbol → coin-id mappings (BTC, ETH, USDT, USDC, BNB,
+  SOL, ADA, DOGE, AVAX, DOT, LINK, MATIC, LTC, etc.).
+- Unknown symbols bucketed separately and reported in the result so
+  one obscure token doesn't fail the whole refresh.
+- Categorized failures: rate_limited (HTTP 429), http_error,
+  transport_error (fetch reject / timeout), unknown_symbol.
+- Injectable fetch so unit tests don't hit the live API.
+
+### Settings + routes
+
+- `CRYPTO_PRICE_PROVIDER` (super-only, default `'coingecko'`;
+  `'manual'` disables auto-fetch).
+- `POST /api/holdings/refresh-prices/crypto` (admin + spouse) —
+  scans the tenant's crypto holdings, fetches prices, updates
+  `last_price_cents` + `last_price_date`. Returns counts + updated
+  symbols + unknown symbols.
+- Holdings POST + PATCH accept `assetType` with allow-list
+  validation.
+
+### Assistant
+
+- `crypto_holdings_summary` (read) — 17 tools total.
+
+### Web
+
+- HoldingsPanel: Type column with inline asset-type `<select>`,
+  "Refresh crypto prices" button when any holding is crypto,
+  Asset type dropdown on the new-holding form.
+
+### Tests (+15 server)
+
+- 8 unit tests on the CoinGecko fetcher (mapping, unknown bucketing,
+  HTTP 429/500, transport rejection, no-price-returned per symbol).
+- 7 integration tests on holdings + refresh route (default
+  asset_type, allow-list rejection, refresh touches ONLY crypto
+  rows, unknown symbols, manual-provider 400, zero-crypto,
+  tenant isolation).
+- Total: **550 tests** (544 server + 6 web), all green.
+
+### Files
+
+```
+server/src/db/migrations/027_holdings_asset_type.sql   (new)
+server/src/domain/crypto-prices.ts                     (new)
+server/src/domain/settings.ts                          (+CRYPTO_PRICE_PROVIDER)
+server/src/domain/assistant/tools.ts                   (+crypto_holdings_summary)
+server/src/routes/holdings.ts                          (+asset_type + refresh route)
+server/tests/unit/crypto-prices.test.ts                (new)
+server/tests/integration/holdings-crypto.test.ts       (new)
+web/src/api.ts                                         (AssetType + refresh method)
+web/src/components/HoldingsPanel.tsx                   (type column + refresh button)
+```
 
 ---
 
