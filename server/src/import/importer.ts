@@ -160,7 +160,7 @@ export async function commitImport(
  * the CSV path report the original row count; the structured path
  * just uses transactions + errors.
  */
-async function persistBatch(
+export async function persistBatch(
   accountId: string,
   filename: string,
   formatId: string,

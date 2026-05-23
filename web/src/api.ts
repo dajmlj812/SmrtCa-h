@@ -43,6 +43,67 @@ export interface RetirementProjection {
   updated_at: string;
 }
 
+export type OfxDcAccountType =
+  | 'CHECKING'
+  | 'SAVINGS'
+  | 'MONEYMRKT'
+  | 'CREDITLINE'
+  | 'CREDITCARD';
+
+export interface OfxDcConnection {
+  id: string;
+  account_id: string;
+  name: string;
+  ofx_url: string;
+  ofx_org: string;
+  ofx_fid: string;
+  ofx_app_id: string;
+  ofx_app_version: string;
+  intu_bid: string | null;
+  bank_acct_id: string;
+  bank_acct_type: OfxDcAccountType;
+  bank_id: string | null;
+  enabled: boolean;
+  last_sync_at: string | null;
+  last_sync_status:
+    | 'never'
+    | 'ok'
+    | 'auth_failed'
+    | 'http_error'
+    | 'parse_error'
+    | 'transport_error';
+  last_sync_error: string | null;
+  last_sync_imported: number | null;
+  last_sync_skipped: number | null;
+}
+
+export interface OfxDcConnectionInput {
+  accountId: string;
+  name: string;
+  ofxUrl: string;
+  ofxOrg: string;
+  ofxFid: string;
+  ofxAppId?: string;
+  ofxAppVersion?: string;
+  intuBid?: string | null;
+  username?: string;
+  password?: string;
+  bankAcctId: string;
+  bankAcctType: OfxDcAccountType;
+  bankId?: string | null;
+  enabled?: boolean;
+}
+
+export interface OfxDcActionResult {
+  ok: boolean;
+  kind?: string;
+  error?: string;
+  parsedCount?: number;
+  errorCount?: number;
+  importedCount?: number;
+  skippedCount?: number;
+}
+
 export interface ProjectionSeries {
   name: string;
   target_year: number | null;
@@ -1747,6 +1808,39 @@ export const api = {
 
   projectionSeries: (id: string) =>
     http<ProjectionSeries>(`/api/projections/${id}/series`),
+
+  // ── OFX Direct Connect (Phase 8.1 / 0.11.1) ──────────────
+  listOfxDcConnections: () =>
+    http<{ connections: OfxDcConnection[] }>('/api/ofx-dc/connections').then(
+      (r) => r.connections,
+    ),
+
+  createOfxDcConnection: (body: OfxDcConnectionInput) =>
+    http<{ connection: OfxDcConnection }>('/api/ofx-dc/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => r.connection),
+
+  updateOfxDcConnection: (id: string, body: Partial<OfxDcConnectionInput>) =>
+    http<{ connection: OfxDcConnection }>(`/api/ofx-dc/connections/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => r.connection),
+
+  deleteOfxDcConnection: (id: string) =>
+    http<void>(`/api/ofx-dc/connections/${id}`, { method: 'DELETE' }),
+
+  testOfxDcConnection: (id: string) =>
+    http<OfxDcActionResult>(`/api/ofx-dc/connections/${id}/test`, {
+      method: 'POST',
+    }),
+
+  syncOfxDcConnection: (id: string) =>
+    http<OfxDcActionResult>(`/api/ofx-dc/connections/${id}/sync`, {
+      method: 'POST',
+    }),
 
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),

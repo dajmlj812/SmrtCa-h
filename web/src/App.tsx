@@ -25,6 +25,7 @@ import { InviteAcceptPage } from './pages/InviteAcceptPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { SystemPage } from './pages/SystemPage';
 import { RetirementPage } from './pages/RetirementPage';
+import { ConnectionsPage } from './pages/ConnectionsPage';
 import { ThemeToggle } from './components/ThemeToggle';
 
 type AuthState =
@@ -179,6 +180,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/routes">Routes</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/import">Import</NavLink>
+          <NavLink to="/connections">Connections</NavLink>
           <NavLink to="/reports">Reports</NavLink>
           <NavLink to="/workspace">Workspace</NavLink>
         </nav>
@@ -211,6 +213,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/routes" element={<RoutesPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
         </Routes>

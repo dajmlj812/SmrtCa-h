@@ -18,7 +18,7 @@ nothing is "all or nothing."
 | 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
-| 8 | Connectivity & Automation | 🔜 In progress — 8.0 ✅ |
+| 8 | Connectivity & Automation | 🔜 In progress — 8.0 ✅ · 8.1 ✅ |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
@@ -228,9 +228,12 @@ Sliced into four releases:
   OFX 2.x XML, QFX, QIF) plus the pluggable `TransactionDataSource`
   layer that the rest of Phase 8 plugs into. Enables a clean
   migration off Quicken / Banktivity / Moneydance with no aggregator.
-- **8.1** 🔜 — **OFX Direct Connect**: pull transactions straight from
-  banks that support the protocol, with no aggregator. Implements
-  the first `TransactionDataSource` on top of the OFX parser.
+- **8.1** ✅ (released as 0.11.1) — **OFX Direct Connect**: pull
+  transactions straight from banks that support the protocol, with
+  no aggregator. New `ofx_dc_connections` table (credentials stored
+  AES-256-GCM encrypted under `ATTACHMENT_ENCRYPTION_KEY`), OFX 1.x
+  SGML request builder, `/api/ofx-dc/connections` CRUD + `/test` +
+  `/sync` routes, web Connections page with Test / Sync now.
 - **8.2** 📋 — **Plaid integration**, super-admin-gated and disabled
   by default. Clearly flagged as leaving the fully-local model.
   Same data-source interface, different backend.

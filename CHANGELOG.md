@@ -9,10 +9,136 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 8 opened. 0.11.0 lands the first slice — OFX/QFX/QIF file imports
-plus the pluggable data-source scaffold. Next: 0.11.1 OFX Direct
-Connect, 0.11.2 Plaid (super-admin gated, off by default), 0.11.3
-scheduled background sync._
+_Phase 8 in progress. 0.11.0 + 0.11.1 shipped. Next: 0.11.2 Plaid
+(super-admin gated, off by default), 0.11.3 scheduled background
+sync._
+
+---
+
+## [0.11.1] — 2026-05-23 — OFX Direct Connect (Phase 8.1)
+
+Second Phase 8 release. Wires the first concrete
+`TransactionDataSource` on top of the OFX parser from 0.11.0 —
+pulling statements straight from a bank's OFX endpoint with no
+aggregator and no per-bank data sharing.
+
+### Schema (migration 022)
+
+- **`ofx_dc_connections`** — tenant-scoped. Stores bank coordinates
+  (`ofx_url`, `ofx_org`, `ofx_fid`, `ofx_app_id`, `ofx_app_version`,
+  optional `intu_bid`), account routing (`bank_acct_id` +
+  `bank_acct_type` ∈ {CHECKING, SAVINGS, MONEYMRKT, CREDITLINE,
+  CREDITCARD} + nullable `bank_id`), and **encrypted credentials**
+  (`username_encrypted`, `password_encrypted`, both `bytea`). Sync
+  state lives on the row: `last_sync_at`, `last_sync_status`,
+  `last_sync_error`, `last_sync_imported`, `last_sync_skipped`.
+
+### Encryption
+
+- New `server/src/domain/crypto.ts` exports `encryptString` /
+  `decryptString` — same AES-256-GCM wire format as attachments
+  (`[12-byte IV][ciphertext][16-byte GCM tag]`) under the same
+  `ATTACHMENT_ENCRYPTION_KEY`. Refuses to operate if the key is
+  unset; bank passwords never sit in plaintext at rest.
+
+### Protocol
+
+- New `server/src/domain/ofx-dc.ts`:
+  - `formatOfxDateTime(d)` → `YYYYMMDDHHMMSS` in UTC.
+  - `buildOfxStmtRequest({connection, startDate, endDate})` →
+    OFX 1.x SGML request body. Speaks **VERSION:102** (broadest
+    bank support); the SGML parser from 0.11.0 happily reads
+    either 1.x or 2.x responses. Builds `BANKMSGSRQV1` or
+    `CREDITCARDMSGSRQV1` based on `bankAcctType`, escapes
+    SGML-significant chars in credentials, includes optional
+    `<INTU.BID>` when set.
+  - `postOfxRequest(url, body, {fetchImpl?, timeoutMs?})` — POSTs
+    with `Content-Type: application/x-ofx`, 60s default timeout,
+    injectable `fetch` for unit tests.
+  - `fetchOfxStatement(req, opts)` — one-shot: build + post +
+    parse. Inspects `SONRS` status code: non-zero 15500-range →
+    `OfxDcError('auth_failed')`, other non-zero → `'parse_error'`.
+    Other failure kinds: `'http_error'`, `'transport_error'`.
+
+### Data source
+
+- New `server/src/datasource/ofx-direct-connect.ts` —
+  `ofxDirectConnectSource` implements `TransactionDataSource`.
+  `fetch()` loads the row, decrypts credentials, computes the
+  incremental window (`last_sync_at - 7 days` for re-syncs, last
+  90 days on first sync), calls the protocol module, returns
+  `ParsedTransaction[]` + an updated cursor.
+
+### Routes
+
+- New `server/src/routes/ofx-dc.ts`:
+  - `GET    /api/ofx-dc/connections` — list (encrypted columns
+    stripped from the response).
+  - `POST   /api/ofx-dc/connections` — create (admin only).
+  - `PATCH  /api/ofx-dc/connections/:id` — update; blank password
+    keeps the current value.
+  - `DELETE /api/ofx-dc/connections/:id`.
+  - `POST   /api/ofx-dc/connections/:id/test` — 1-day window probe.
+    Available to admin + spouse.
+  - `POST   /api/ofx-dc/connections/:id/sync` — real fetch; on
+    success runs through the shared `persistBatch()` (same dedup
+    code path as file imports). Updates `last_sync_*` columns on
+    both success and failure.
+
+### Importer refactor
+
+- `import/importer.ts` now exports `persistBatch()` so the
+  data-source layer can reuse the CSV / structured / direct-connect
+  persistence path — single source of truth for dedup hashing +
+  `import_batches` rows + `ON CONFLICT DO NOTHING` semantics.
+
+### Web
+
+- New `web/src/pages/ConnectionsPage.tsx` and `/connections` route
+  in the tenant sidebar. Form for add/edit (with help text pointing
+  at ofxhome.com), table of existing connections, per-row
+  **Test** / **Sync now** / **Edit** / **Delete**. Status pills:
+  OK / Never / Auth failed / HTTP error / Parse error / Transport
+  error. `last_sync_error` text shown inline when present.
+- API types: `OfxDcConnection`, `OfxDcConnectionInput`,
+  `OfxDcActionResult`, `OfxDcAccountType`.
+
+### Tests (+25 server)
+
+- `tests/unit/crypto.test.ts` — 5 tests: round-trip, IV uniqueness,
+  truncation rejection, tag-tamper rejection, unicode + long
+  strings.
+- `tests/unit/ofx-dc.test.ts` — 9 tests: date formatter, request
+  building (bank + credit-card + SGML escaping + INTU.BID), happy
+  path with mocked fetch, `auth_failed` on SONRS 15500, HTTP 500
+  mapping, transport rejection.
+- `tests/integration/ofx-dc.test.ts` — 11 tests: CRUD shape,
+  credential encryption (DB doesn't contain plaintext), GET
+  excludes encrypted columns, `bankAcctType` allow-list, PATCH
+  re-encryption, `/test` happy + auth-failed paths, `/sync`
+  happy path (transaction lands on the account, status row
+  updates to 'ok'), `/sync` failure path (status row updates to
+  'auth_failed' with error text), `/sync` dedup on second pass.
+- Total: **450 tests** (444 server + 6 web), all green.
+
+### Files
+
+```
+server/src/db/migrations/022_phase8_1_ofx_direct_connect.sql   (new)
+server/src/domain/crypto.ts                                    (new)
+server/src/domain/ofx-dc.ts                                    (new)
+server/src/datasource/ofx-direct-connect.ts                    (new)
+server/src/routes/ofx-dc.ts                                    (new)
+server/src/app.ts                                              (register routes)
+server/src/import/importer.ts                                  (export persistBatch)
+server/tests/setup/test-db.ts                                  (TRUNCATE ofx_dc_connections)
+server/tests/unit/crypto.test.ts                               (new)
+server/tests/unit/ofx-dc.test.ts                               (new)
+server/tests/integration/ofx-dc.test.ts                        (new)
+web/src/api.ts                                                 (OFX-DC types + methods)
+web/src/pages/ConnectionsPage.tsx                              (new)
+web/src/App.tsx                                                (nav + route)
+```
 
 ---
 
