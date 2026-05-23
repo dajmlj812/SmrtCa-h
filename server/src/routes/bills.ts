@@ -45,19 +45,50 @@ export function advanceByFrequency(date: string, freq: Frequency): string | null
 }
 
 const BILL_COLUMNS = `id, name, amount_cents, frequency, next_due_date,
-  category_id, account_id, active, created_at`;
+  category_id, account_id, active, review_status, review_note,
+  last_reviewed_at, created_at`;
+const REVIEW_STATUSES = ['active', 'review', 'cancel', 'alter', 'keep'] as const;
+type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 const INCOME_COLUMNS = `id, name, amount_cents, frequency, next_expected_date,
   account_id, active, created_at`;
 
 export async function billRoutes(app: FastifyInstance): Promise<void> {
   // ── Bills ───────────────────────────────────────────────
-  app.get('/api/bills', async () => {
-    const r = await query(
-      `SELECT ${BILL_COLUMNS} FROM bills
-        ORDER BY active DESC, next_due_date`,
-    );
-    return { bills: r.rows };
-  });
+  app.get<{ Querystring: { reviewStatus?: string } }>(
+    '/api/bills',
+    async (req, reply) => {
+      const filter = (req.query.reviewStatus ?? '').trim();
+      if (filter === '') {
+        const r = await query(
+          `SELECT ${BILL_COLUMNS} FROM bills
+            ORDER BY active DESC, next_due_date`,
+        );
+        return { bills: r.rows };
+      }
+      // 'queue' is shorthand for "anything the user needs to act on" —
+      // i.e. flagged-but-not-yet-resolved entries.
+      if (filter === 'queue') {
+        const r = await query(
+          `SELECT ${BILL_COLUMNS} FROM bills
+            WHERE review_status IN ('review','cancel','alter')
+            ORDER BY last_reviewed_at DESC NULLS LAST, next_due_date`,
+        );
+        return { bills: r.rows };
+      }
+      if (!REVIEW_STATUSES.includes(filter as ReviewStatus)) {
+        return reply.code(400).send({
+          error: `reviewStatus must be one of: ${REVIEW_STATUSES.join(', ')}, queue`,
+        });
+      }
+      const r = await query(
+        `SELECT ${BILL_COLUMNS} FROM bills
+          WHERE review_status = $1
+          ORDER BY active DESC, next_due_date`,
+        [filter],
+      );
+      return { bills: r.rows };
+    },
+  );
 
   app.post('/api/bills', async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -141,6 +172,49 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
        RETURNING ${BILL_COLUMNS}`,
         params,
       );
+      if (r.rowCount === 0)
+        return reply.code(404).send({ error: 'Bill not found' });
+      return { bill: r.rows[0] };
+    },
+  );
+
+  // Review-status update. The status moves a bill into the user's action
+  // queue (review/cancel/alter) or closes it out (active/keep). Each
+  // change bumps last_reviewed_at so the queue can sort by recency.
+  app.patch<{ Params: { id: string } }>(
+    '/api/bills/:id/review',
+    async (req, reply) => {
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid bill id' });
+      const body = (req.body ?? {}) as { status?: unknown; note?: unknown };
+      if (
+        typeof body.status !== 'string' ||
+        !REVIEW_STATUSES.includes(body.status as ReviewStatus)
+      ) {
+        return reply.code(400).send({
+          error: `status must be one of: ${REVIEW_STATUSES.join(', ')}`,
+        });
+      }
+      // note is optional; pass null to clear, omit to leave alone.
+      const noteProvided = body.note !== undefined;
+      const noteValue =
+        body.note === null ? null : typeof body.note === 'string' ? body.note.trim() || null : null;
+      const sql = noteProvided
+        ? `UPDATE bills
+              SET review_status = $1,
+                  review_note = $2,
+                  last_reviewed_at = now()
+            WHERE id = $3
+        RETURNING ${BILL_COLUMNS}`
+        : `UPDATE bills
+              SET review_status = $1,
+                  last_reviewed_at = now()
+            WHERE id = $2
+        RETURNING ${BILL_COLUMNS}`;
+      const params = noteProvided
+        ? [body.status, noteValue, req.params.id]
+        : [body.status, req.params.id];
+      const r = await query(sql, params);
       if (r.rowCount === 0)
         return reply.code(404).send({ error: 'Bill not found' });
       return { bill: r.rows[0] };

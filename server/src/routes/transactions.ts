@@ -7,6 +7,7 @@ interface TransactionQuery {
   search?: string;
   limit?: string;
   offset?: string;
+  uncategorized?: string;
 }
 
 interface ExportQuery {
@@ -38,6 +39,28 @@ function centsToDecimal(cents: number | null): string {
 }
 
 export async function transactionRoutes(app: FastifyInstance): Promise<void> {
+  // Bulk-delete. Removes the listed transactions; splits and attachments
+  // cascade via FK. transfer_group_id partners become lone rows — that's
+  // a display quirk but not a correctness issue.
+  app.post('/api/transactions/bulk-delete', async (req, reply) => {
+    const body = (req.body ?? {}) as { ids?: unknown };
+    if (!Array.isArray(body.ids) || body.ids.length === 0) {
+      return reply.code(400).send({ error: 'ids must be a non-empty array' });
+    }
+    const ids: string[] = [];
+    for (const id of body.ids) {
+      if (typeof id !== 'string' || !isUuid(id)) {
+        return reply.code(400).send({ error: `Invalid transaction id: ${String(id)}` });
+      }
+      ids.push(id);
+    }
+    const r = await query(
+      `DELETE FROM transactions WHERE id = ANY($1::uuid[]) RETURNING id`,
+      [ids],
+    );
+    return { deleted: r.rowCount ?? 0 };
+  });
+
   // Bulk-edit. The body lists transaction ids and the fields to apply
   // uniformly. All matched rows flip to normalization_status='manual'
   // because the user is making an explicit assignment.
@@ -158,6 +181,9 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       const search = req.query.search?.trim() || null;
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
       const offset = Math.max(Number(req.query.offset) || 0, 0);
+      // Uncategorized = no direct category AND no splits. A split-only row
+      // is considered categorized via its slices.
+      const uncategorized = req.query.uncategorized === 'true';
 
       // running_balance_cents is computed in an inner query (against the
       // full account history, ignoring the search filter) so the value is
@@ -195,17 +221,25 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
            ) t
          WHERE ($1::uuid IS NULL OR t.account_id = $1)
            AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')
+           AND ($5::boolean = FALSE OR (
+             t.category_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
+           ))
          ORDER BY t.txn_date DESC, t.created_at DESC
          LIMIT $3 OFFSET $4`,
-        [accountId, search, limit, offset],
+        [accountId, search, limit, offset, uncategorized],
       );
 
       const count = await query<{ total: number }>(
         `SELECT COUNT(*)::bigint AS total
          FROM transactions t
          WHERE ($1::uuid IS NULL OR t.account_id = $1)
-           AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')`,
-        [accountId, search],
+           AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')
+           AND ($3::boolean = FALSE OR (
+             t.category_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
+           ))`,
+        [accountId, search, uncategorized],
       );
 
       return {

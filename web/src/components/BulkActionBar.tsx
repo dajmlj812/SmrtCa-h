@@ -17,6 +17,8 @@ interface Props {
     normalizedMerchant: string | null;
     categoryId: string | null;
   }) => Promise<void>;
+  /** When true, surface a destructive Delete button. */
+  allowDelete?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export function BulkActionBar({
   onClear,
   onApplied,
   onCaptureRule,
+  allowDelete = false,
 }: Props) {
   const [categoryId, setCategoryId] = useState<string>('');
   const [merchant, setMerchant] = useState('');
@@ -40,6 +43,30 @@ export function BulkActionBar({
 
   if (selectedIds.length === 0) return null;
   const hasChanges = categoryId !== '' || merchant.trim() !== '';
+
+  async function bulkDelete() {
+    if (
+      !window.confirm(
+        `Permanently delete ${selectedIds.length} transaction${
+          selectedIds.length === 1 ? '' : 's'
+        }? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const r = await api.bulkDeleteTransactions(selectedIds);
+      setSuccess(`Deleted ${r.deleted} transaction${r.deleted === 1 ? '' : 's'}.`);
+      onApplied();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk delete failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -121,6 +148,16 @@ export function BulkActionBar({
       <button className="btn" type="submit" disabled={submitting || !hasChanges}>
         {submitting ? 'Applying…' : 'Apply'}
       </button>
+      {allowDelete && (
+        <button
+          type="button"
+          className="btn danger"
+          onClick={bulkDelete}
+          disabled={submitting}
+        >
+          Delete
+        </button>
+      )}
       <button
         type="button"
         className="btn secondary"

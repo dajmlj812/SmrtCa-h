@@ -284,6 +284,13 @@ export type BillFrequency =
   | 'one-time';
 export type IncomeFrequency = 'monthly' | 'weekly' | 'biweekly' | 'yearly';
 
+export type BillReviewStatus =
+  | 'active'
+  | 'review'
+  | 'cancel'
+  | 'alter'
+  | 'keep';
+
 export interface Bill {
   id: string;
   name: string;
@@ -294,6 +301,9 @@ export interface Bill {
   category_name?: string | null;
   account_id: string | null;
   active: boolean;
+  review_status: BillReviewStatus;
+  review_note: string | null;
+  last_reviewed_at: string | null;
   created_at: string;
 }
 
@@ -511,12 +521,14 @@ export const api = {
     search?: string;
     limit?: number;
     offset?: number;
+    uncategorized?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (params.accountId) q.set('accountId', params.accountId);
     if (params.search) q.set('search', params.search);
     if (params.limit != null) q.set('limit', String(params.limit));
     if (params.offset != null) q.set('offset', String(params.offset));
+    if (params.uncategorized) q.set('uncategorized', 'true');
     return http<TransactionPage>(`/api/transactions?${q.toString()}`);
   },
 
@@ -800,8 +812,20 @@ export const api = {
     http<void>(`/api/goals/${id}`, { method: 'DELETE' }),
 
   // ── Bills + recurring income + cash-flow ─────────────────
-  listBills: () =>
-    http<{ bills: Bill[] }>('/api/bills').then((r) => r.bills),
+  listBills: (reviewStatus?: BillReviewStatus | 'queue') => {
+    const q = reviewStatus ? `?reviewStatus=${encodeURIComponent(reviewStatus)}` : '';
+    return http<{ bills: Bill[] }>(`/api/bills${q}`).then((r) => r.bills);
+  },
+
+  setBillReview: (
+    id: string,
+    input: { status: BillReviewStatus; note?: string | null },
+  ) =>
+    http<{ bill: Bill }>(`/api/bills/${id}/review`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.bill),
 
   createBill: (input: {
     name: string;
@@ -920,6 +944,14 @@ export const api = {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids, updates }),
+    }),
+
+  // ── Bulk transaction delete (Phase 7.4) ──────────────────
+  bulkDeleteTransactions: (ids: string[]) =>
+    http<{ deleted: number }>('/api/transactions/bulk-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
     }),
 
   // ── Normalization rules ──────────────────────────────────

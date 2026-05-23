@@ -9,8 +9,51 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 7.4 (multi-currency) and Phase 7.5 (retirement projections) work
-will land here._
+_Multi-currency support and retirement projections still queued._
+
+---
+
+## [0.7.4] — 2026-05-23 — Uncategorized hub + subscription action queue
+
+Two adjacent gaps closed: a dedicated landing pad for transactions that
+don't yet have a category (with bulk fix-ups), and a review queue for
+recurring bills so the user can flag the ones they're not actively
+using and pick an action — cancel, downgrade ("alter"), or keep with a
+note.
+
+### Added
+
+- **`/uncategorized` page** — lists every transaction where
+  `category_id IS NULL` AND no splits exist. The inline category
+  dropdown lives on each row; once a row is categorized (or
+  bulk-edited) it disappears from the list.
+- **`uncategorized=true` query param** on `GET /api/transactions`,
+  reused by the new page. Split-only transactions count as
+  categorized.
+- **Bulk-delete transactions** via `POST /api/transactions/bulk-delete`
+  + a destructive **Delete** button on the BulkActionBar (gated behind
+  a confirm). FK cascade handles splits and attachments cleanly.
+- **`bills.review_status` workflow** (migration 015). Statuses:
+  `active` (default), `review`, `cancel`, `alter`, `keep`. Bills also
+  gain `review_note` (free text) and `last_reviewed_at`.
+- **`PATCH /api/bills/:id/review`** — set the status, optionally
+  attach a note (pass `note: null` to clear). Every change bumps
+  `last_reviewed_at`.
+- **`GET /api/bills?reviewStatus=…`** filter. The special
+  `reviewStatus=queue` returns the user's action queue (status in
+  `review`/`cancel`/`alter`, ordered by most-recent review).
+- **`/subscriptions` page** — top section is the action queue, bottom
+  section is the active list with a per-cycle and approximate monthly
+  cost (cross-cadence comparison). Each queued card has Cancel /
+  Alter / Keep buttons, a free-text note ("Downgrade to ad-tier"), and
+  a Clear-flag link.
+
+### Tests
+
+- `+9` integration tests (`uncategorized-and-subscriptions.test.ts`):
+  uncategorized filter (3), bulk delete (2), review-status PATCH +
+  queue filter (4).
+- **Total: 332** (server 326 + web 6).
 
 ---
 

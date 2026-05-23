@@ -81,7 +81,7 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-330 automated tests spanning unit, integration, functional, security, smoke,
+332 automated tests spanning unit, integration, functional, security, smoke,
 performance, and end-to-end layers. With PostgreSQL running:
 
 ```sh

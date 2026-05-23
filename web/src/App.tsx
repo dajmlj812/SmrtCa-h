@@ -13,6 +13,8 @@ import { SetupPage } from './pages/SetupPage';
 import { BudgetsPage } from './pages/BudgetsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
+import { SubscriptionsPage } from './pages/SubscriptionsPage';
+import { UncategorizedPage } from './pages/UncategorizedPage';
 import { VehiclesPage } from './pages/VehiclesPage';
 import { RoutesPage } from './pages/RoutesPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -78,10 +80,12 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           </NavLink>
           <NavLink to="/accounts">Accounts</NavLink>
           <NavLink to="/transactions">Transactions</NavLink>
+          <NavLink to="/uncategorized">Uncategorized</NavLink>
           <NavLink to="/transfers">Transfers</NavLink>
           <NavLink to="/budgets">Budgets</NavLink>
           <NavLink to="/goals">Goals</NavLink>
           <NavLink to="/bills">Bills</NavLink>
+          <NavLink to="/subscriptions">Subscriptions</NavLink>
           <NavLink to="/vehicles">Vehicles</NavLink>
           <NavLink to="/routes">Routes</NavLink>
           <NavLink to="/categories">Categories</NavLink>
@@ -89,7 +93,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="sidebar-footer">
-          Phase 7 · Wealth + AutoMagic
+          Phase 7 · Wealth + AutoMagic + Cleanup
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -105,10 +109,12 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/accounts/:id" element={<AccountDetailPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/uncategorized" element={<UncategorizedPage />} />
           <Route path="/transfers" element={<TransfersPage />} />
           <Route path="/budgets" element={<BudgetsPage />} />
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/bills" element={<BillsPage />} />
+          <Route path="/subscriptions" element={<SubscriptionsPage />} />
           <Route path="/vehicles" element={<VehiclesPage />} />
           <Route path="/routes" element={<RoutesPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
