@@ -9,8 +9,102 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 8 in progress. 0.11.0–0.11.2 shipped. Next: 0.11.3 scheduled
-background sync runs OFX-DC + Plaid items on a configurable cadence._
+_Phase 8 closed out. Next up: Phase 9 — Mobile, Assistant & Experience
+(PWA, AI assistant, bill-splitting, calendar view)._
+
+---
+
+## [0.11.3] — 2026-05-23 — Scheduled background sync (Phase 8.3)
+
+Final Phase 8 release. **Closes Phase 8.** With this slice every
+connectivity option from the original roadmap is live and can run
+unattended: file imports (OFX/QFX/QIF), OFX Direct Connect, Plaid,
+and now scheduled background sync.
+
+### The scheduler
+
+- New `server/src/domain/auto-sync.ts` — same in-process pattern as
+  `backup-scheduler.ts`. 60s tick reads settings on every iteration
+  so config changes take effect without a restart. The tick reads
+  `AUTO_SYNC_ENABLED`; if false, immediate no-op.
+- `runAutoSyncTick({force, ofxFetchOverride, plaidFetchOverride})`
+  is the exported entry point. The interval calls it with no opts;
+  the `/api/auto-sync/run` route calls it with `force:true`; tests
+  drive it directly with mocked fetches.
+- Per-tick flow:
+  1. Read `AUTO_SYNC_ENABLED`. No-op when false.
+  2. For daily/weekly cadence: gate on `AUTO_SYNC_TIME` — like the
+     backup scheduler, wait until the scheduled instant has passed
+     today. Hourly bypasses this gate.
+  3. Walk every `ofx_dc_connections WHERE enabled = true`, filter
+     down to sources whose `last_sync_at` is older than the
+     per-cadence threshold (`shouldRunForSource()`), then call
+     `ofxDirectConnectSource.fetch()` + `persistBatch()` and
+     update `last_sync_*` on success or failure.
+  4. Same for `plaid_items WHERE status = 'active'` — using the
+     `fetchPlaidItemTransactions()` helper that already handles the
+     per-account fan-out + cursor advance.
+- **Per-source error isolation**: each connection / item gets its
+  own try/catch. A failing source records `last_sync_status` +
+  `last_sync_error` on its row; the tick moves on to the next
+  source without blocking. The result object reports per-source
+  attempt / success / fail counts so the operator can spot drift.
+- **Per-source cadence**: even when the tick runs, sources whose
+  `last_sync_at` is recent enough are skipped. Hourly cadence
+  tolerates jitter (59-minute floor for "just over 60 min").
+
+### Settings (super-only)
+
+- `AUTO_SYNC_ENABLED` (bool) — global on/off.
+- `AUTO_SYNC_FREQUENCY` (`hourly` | `daily` | `weekly`) — cadence
+  applied per source.
+- `AUTO_SYNC_TIME` (HH:MM, 24h) — scheduled instant for daily /
+  weekly cadence. Interpreted in the container's local timezone
+  (same caveat as `BACKUP_TIME`).
+
+### Routes
+
+- `GET /api/auto-sync/status` (super-admin) — returns enabled +
+  frequency + time + counts of registered OFX-DC + Plaid sources.
+- `POST /api/auto-sync/run` (super-admin) — `runAutoSyncTick({force:true})`
+  for an immediate fire, useful right after wiring up the first
+  bank connection.
+
+### Web (`/system` super-admin panel)
+
+- New `AutoSyncSection` component on the System Overview tab.
+  Enable toggle, frequency dropdown, time field, "Save" + "Run
+  all syncs now" buttons, plus a source-count summary. Save writes
+  through the existing `/api/settings/:key` plumbing — no new
+  settings code path.
+
+### Tests (+15 server)
+
+- `tests/unit/auto-sync-cadence.test.ts` — 7 tests for
+  `shouldRunForSource`: NULL last-sync, hourly within / past
+  window, hourly jitter tolerance, daily threshold, weekly
+  threshold, unknown-frequency fallback.
+- `tests/integration/auto-sync.test.ts` — 8 tests: no-op when
+  disabled, force bypasses the gate, OFX-DC sync persists +
+  updates status, per-source failures don't block siblings, the
+  cadence gate skips recently-synced sources, an OFX-DC + Plaid
+  tick fires both, `/api/auto-sync/status` is super-admin gated,
+  `/api/auto-sync/run` runs and returns the result shape.
+- Total: **482 tests** (476 server + 6 web), all green.
+
+### Files
+
+```
+server/src/domain/auto-sync.ts                  (new)
+server/src/routes/auto-sync.ts                  (new)
+server/src/domain/settings.ts                   (+AUTO_SYNC_* keys)
+server/src/app.ts                               (register routes + boot scheduler)
+server/tests/unit/auto-sync-cadence.test.ts     (new)
+server/tests/integration/auto-sync.test.ts      (new)
+web/src/api.ts                                  (autoSyncStatus / autoSyncRunNow)
+web/src/components/AutoSyncSection.tsx          (new)
+web/src/pages/SystemPage.tsx                    (mount AutoSyncSection)
+```
 
 ---
 

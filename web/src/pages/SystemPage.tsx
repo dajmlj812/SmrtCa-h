@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { AuthProvidersSection } from '../components/AuthProvidersSection';
 import { ExchangeRatesSection } from '../components/ExchangeRatesSection';
+import { AutoSyncSection } from '../components/AutoSyncSection';
 
 interface TenantRow {
   id: string;
@@ -250,6 +251,8 @@ function OverviewTab() {
       </div>
 
       <ExchangeRatesSection />
+
+      <AutoSyncSection />
 
       <AuthProvidersSection />
     </div>

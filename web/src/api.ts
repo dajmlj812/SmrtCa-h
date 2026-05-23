@@ -1935,6 +1935,24 @@ export const api = {
   plaidDeleteItem: (itemId: string) =>
     http<void>(`/api/plaid/items/${itemId}`, { method: 'DELETE' }),
 
+  // ── Auto-sync scheduler (Phase 8.3 / 0.11.3) ─────────────
+  autoSyncStatus: () =>
+    http<{
+      enabled: boolean;
+      frequency: string;
+      time: string;
+      sources: { ofx_dc: number; plaid: number };
+    }>('/api/auto-sync/status'),
+
+  autoSyncRunNow: () =>
+    http<{
+      enabled: boolean;
+      frequency: string;
+      ranAt: string;
+      ofxDc: { attempted: number; succeeded: number; failed: number };
+      plaid: { attempted: number; succeeded: number; failed: number };
+    }>('/api/auto-sync/run', { method: 'POST' }),
+
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),
 

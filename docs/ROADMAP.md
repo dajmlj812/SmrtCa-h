@@ -18,7 +18,7 @@ nothing is "all or nothing."
 | 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
-| 8 | Connectivity & Automation | 🔜 In progress — 8.0 ✅ · 8.1 ✅ · 8.2 ✅ |
+| 8 | Connectivity & Automation | ✅ Complete — 2026-05-23 |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
@@ -218,7 +218,7 @@ projection extras landed.
 
 ---
 
-## Phase 8 — Connectivity & Automation 🔜
+## Phase 8 — Connectivity & Automation ✅
 
 **Goal:** Offer all three ways to get data in — without forcing the cloud.
 
@@ -242,6 +242,14 @@ Sliced into four releases:
   `/item/remove` flow, web Connections page extension that only
   renders when `/api/plaid/status` reports enabled=true and only
   loads Plaid's external Link widget on-demand.
+- **8.3** ✅ (released as 0.11.3) — **scheduled background sync**.
+  In-process 60s scheduler walks every enabled OFX-DC connection
+  and active Plaid item; per-source cadence gate on `last_sync_at`
+  so a 60s tick never floods banks. Settings: `AUTO_SYNC_ENABLED`
+  + `AUTO_SYNC_FREQUENCY` (hourly/daily/weekly) + `AUTO_SYNC_TIME`,
+  all super-only. Super-admin "Auto-sync" panel on /system with
+  enable / cadence / "Run all syncs now" controls. Per-source
+  failures isolated (one bad bank can't block the rest).
 - **8.3** 📋 — **scheduled background sync** + auto-import. A
   per-tenant cadence calls `fetch()` on each enabled data source
   and runs the same dedup + persistence path.

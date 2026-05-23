@@ -68,6 +68,13 @@ export const KNOWN_SETTINGS = [
   // Security — super-admin only, restart required
   { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, superOnly: true, label: 'Session secret' },
   { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, superOnly: true, label: 'Attachment encryption key' },
+  // Auto-sync (Phase 8.3 / 0.11.3) — periodic background fetch of
+  // every enabled OFX-DC connection + Plaid item. Disabled by default;
+  // tenant admins still trigger /sync manually until the super-admin
+  // turns this on.
+  { key: 'AUTO_SYNC_ENABLED', isSecret: false, restartRequired: false, superOnly: true, label: 'Auto sync — enabled' },
+  { key: 'AUTO_SYNC_FREQUENCY', isSecret: false, restartRequired: false, superOnly: true, label: 'Auto sync — frequency' },
+  { key: 'AUTO_SYNC_TIME', isSecret: false, restartRequired: false, superOnly: true, label: 'Auto sync — time (HH:MM, 24h)' },
   // Plaid (Phase 8.2 / 0.11.2) — DISABLED BY DEFAULT. Plaid is the
   // only data source that leaves the fully-local model: enabling it
   // sends bank credentials through Plaid's servers. Super-admin-only;

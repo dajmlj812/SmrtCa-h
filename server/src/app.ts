@@ -42,8 +42,10 @@ import { exchangeRatesRoutes } from './routes/exchange-rates.js';
 import { projectionRoutes } from './routes/projections.js';
 import { ofxDcRoutes } from './routes/ofx-dc.js';
 import { plaidRoutes } from './routes/plaid.js';
+import { autoSyncRoutes } from './routes/auto-sync.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
+import { startAutoSyncScheduler } from './domain/auto-sync.js';
 import { metricsRecorder } from './domain/metrics-recorder.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 
@@ -202,10 +204,14 @@ export async function buildApp(
   await app.register(projectionRoutes);
   await app.register(ofxDcRoutes);
   await app.register(plaidRoutes);
+  await app.register(autoSyncRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.
   startBackupScheduler();
+  // Phase 8.3 — periodic OFX-DC + Plaid sync. Same pattern: settings
+  // read on every tick, no-op until AUTO_SYNC_ENABLED=true.
+  startAutoSyncScheduler();
 
   // Start the rolling-metrics recorder and instrument every HTTP
   // response. The /api/health/timeseries endpoint reads its buffer.
