@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   api,
   type ReportColumn,
@@ -6,6 +6,7 @@ import {
   type ReportResult,
 } from '../api';
 import { formatCents } from '../format';
+import { FilterableTable } from '../components/FilterableTable';
 
 function formatCell(col: ReportColumn, raw: unknown): string {
   if (raw === null || raw === undefined) return '—';
@@ -29,10 +30,16 @@ function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function downloadCsv(label: string, result: ReportResult): void {
-  const header = result.columns.map((c) => csvCell(c.label)).join(',');
-  const lines = result.rows.map((row) =>
-    result.columns
+function downloadCsv(
+  label: string,
+  projection: {
+    columns: ReportColumn[];
+    rows: Array<Record<string, unknown>>;
+  },
+): void {
+  const header = projection.columns.map((c) => csvCell(c.label)).join(',');
+  const lines = projection.rows.map((row) =>
+    projection.columns
       .map((c) => csvCell(formatCell(c, row[c.key])))
       .join(','),
   );
@@ -54,6 +61,10 @@ export function ReportsPage() {
   const [params, setParams] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ReportResult | null>(null);
   const [resultLabel, setResultLabel] = useState<string>('');
+  const [projection, setProjection] = useState<{
+    columns: ReportColumn[];
+    rows: Array<Record<string, unknown>>;
+  } | null>(null);
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +93,16 @@ export function ReportsPage() {
     setParams(defaults);
     setResult(null);
     setResultLabel('');
+    setProjection(null);
   }, [activeId]);
+
+  const onProjectionChange = useCallback(
+    (next: {
+      columns: ReportColumn[];
+      rows: Array<Record<string, unknown>>;
+    }) => setProjection(next),
+    [],
+  );
 
   async function runActive(e: FormEvent) {
     e.preventDefault();
@@ -170,7 +190,22 @@ export function ReportsPage() {
                       <button
                         className="btn secondary"
                         type="button"
-                        onClick={() => downloadCsv(resultLabel || active.label, result)}
+                        onClick={() =>
+                          downloadCsv(
+                            resultLabel || active.label,
+                            projection ?? {
+                              columns: result.columns,
+                              rows: result.rows,
+                            },
+                          )
+                        }
+                        title={
+                          projection &&
+                          (projection.rows.length !== result.rows.length ||
+                            projection.columns.length !== result.columns.length)
+                            ? 'Exports only the filtered + visible columns'
+                            : 'Exports the full result'
+                        }
                       >
                         Export CSV
                       </button>
@@ -191,40 +226,13 @@ export function ReportsPage() {
                         again.
                       </p>
                     ) : (
-                      <div className="table-wrap">
-                        <table className="txn-table">
-                          <thead>
-                            <tr>
-                              {result.columns.map((c) => (
-                                <th
-                                  key={c.key}
-                                  className={c.type === 'cents' || c.type === 'number' || c.type === 'pct' ? 'num' : ''}
-                                >
-                                  {c.label}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {result.rows.map((row, i) => (
-                              <tr key={i}>
-                                {result.columns.map((c) => (
-                                  <td
-                                    key={c.key}
-                                    className={
-                                      c.type === 'cents' || c.type === 'number' || c.type === 'pct'
-                                        ? 'num'
-                                        : ''
-                                    }
-                                  >
-                                    {formatCell(c, row[c.key])}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <FilterableTable
+                        columns={result.columns}
+                        rows={result.rows}
+                        formatCell={formatCell}
+                        storageKey={`report:${active.id}`}
+                        onProjectionChange={onProjectionChange}
+                      />
                     )}
                   </div>
                 )}

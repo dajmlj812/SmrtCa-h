@@ -13,6 +13,41 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.7.7] — 2026-05-23 — Column filters + show/hide on report tables
+
+Reports get two power-user knobs: hide columns you don't care about,
+and filter rows by per-column expressions (`>100`, `2026-01..2026-06`,
+substring). Column visibility persists per-report in localStorage so
+choices survive reloads.
+
+### Added
+
+- **`FilterableTable` component** — reusable. Wraps a `<table>` with:
+  - A **Columns** dropdown listing every column with a checkbox; the
+    minimum-one-visible rule prevents the table from disappearing.
+    Persisted to `localStorage['tableviz:<storageKey>']`.
+  - A **Filter** toggle that reveals a per-column text input below
+    the header. Syntax:
+    - **string**: case-insensitive substring (`groceries`).
+    - **cents**: dollars-typed operators (`>100`, `<50`, `100..500`).
+    - **number / pct**: same operators on raw numbers.
+    - **date**: `>2026-01-01`, `2026-01..2026-06`, or substring.
+  - An active-filter count badge + Clear-all-filters link.
+  - Emits the filtered + visible-projected dataset upward so CSV
+    export honors the current view.
+- **Reports page** swaps its inline table for `FilterableTable`. CSV
+  export now respects the visible/filtered projection — the button's
+  tooltip flips between "exports the full result" and "exports only
+  the filtered + visible columns" so the user knows what they'll get.
+
+### Notes
+
+- The component is decoupled from reports. Other table-heavy pages
+  (Transactions, Bills, Subscriptions) can adopt it later by passing
+  their own `{key,label,type}` column array and a `formatCell` fn.
+
+---
+
 ## [0.7.6] — 2026-05-23 — Health, backups, reports
 
 Three operator-facing tools land together: a live health dashboard, a
