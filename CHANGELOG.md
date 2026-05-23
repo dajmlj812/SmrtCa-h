@@ -13,6 +13,59 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.9.1] — 2026-05-23 — Health, backups, SMTP, security keys: super-admin only
+
+Tightens the 0.9.0 RBAC boundary. Anything platform-level moves out of
+tenant-admin reach.
+
+### Changed
+
+- **`/api/health/*`** (metrics, timeseries, live) — tenant-admin gets
+  403; super-admin gets the data.
+- **`/api/backups/*`** (list, config, run, prune, delete) — same.
+- **`/api/admin/smtp-test`** — same.
+- **`/api/admin/restart`** — same. Was loosely gated before; now
+  explicitly super-admin only.
+- **`/api/settings`** is filtered server-side by the requester's
+  context:
+  - Tenant admin sees AI provider keys, EIA, and Savings tuning.
+  - Super admin sees everything plus SMTP, BACKUP_*, APP_BASE_URL,
+    SESSION_SECRET, ATTACHMENT_ENCRYPTION_KEY.
+- PUT/DELETE on a super-only key returns 403 to a tenant admin even
+  if they construct the URL by hand.
+
+### Removed (from tenant sidebar)
+
+- Health, Backups (super-admin sidebar already has them).
+- Settings page now skips entire sections (SMTP, Security) when the
+  server doesn't return any of their keys, so tenant admins see a
+  trimmed Settings view focused on what they can actually change.
+
+### Notes
+
+- Capability-tagged settings via a new `superOnly: boolean` field on
+  `KNOWN_SETTINGS`. Adding a new super-only setting is now one
+  metadata field, not a route-by-route edit.
+- The `requireSuperAdmin(req, reply)` guard moved to
+  `auth/rbac.ts` so health, backups, settings, and system routes all
+  share one implementation.
+
+### Tests
+
+- `+3` integration tests in `rbac.test.ts`: tenant blocked from
+  PUTting SMTP_HOST and BACKUP_ENABLED; GET /api/settings hides
+  super-only keys.
+- `health-backups-reports.test.ts` rewritten to assert tenant 403 +
+  super-admin 200 paths via a new `makeSuperAdminCookie()` helper.
+- `smtp.test.ts` adds a 403 check and threads super-cookies through
+  the verify-stage tests.
+- `settings.test.ts` updated to split tenant-visible / super-visible
+  expectations and use the super cookie on SESSION_SECRET /
+  ATTACHMENT_ENCRYPTION_KEY writes.
+- **Total: 379** (server 373 + web 6).
+
+---
+
 ## [0.9.0] — 2026-05-23 — RBAC: super admins, tenant admin/spouse/child, audit log
 
 Role model overhaul. Three orthogonal concepts:

@@ -8,6 +8,7 @@ import {
 } from '../domain/backup-runner.js';
 import { getEffectiveValue } from '../domain/settings.js';
 import { isUuid } from '../util.js';
+import { requireSuperAdmin } from '../auth/rbac.js';
 
 /**
  * Backup management routes for the /backups page.
@@ -24,12 +25,14 @@ import { isUuid } from '../util.js';
  */
 
 export async function backupRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/backups', async () => {
+  app.get('/api/backups', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
     const backups = await listBackups(50);
     return { backups };
   });
 
-  app.get('/api/backups/config', async () => {
+  app.get('/api/backups/config', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
     const [enabled, frequency, time, retention, dir] = await Promise.all([
       getEffectiveValue('BACKUP_ENABLED'),
       getEffectiveValue('BACKUP_FREQUENCY'),
@@ -48,12 +51,14 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post('/api/backups/run', async () => {
+  app.post('/api/backups/run', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
     const backup = await runBackup({ kind: 'manual' });
     return { backup };
   });
 
-  app.post('/api/backups/prune', async () => {
+  app.post('/api/backups/prune', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
     const retention =
       Number(await getEffectiveValue('BACKUP_RETENTION_DAYS')) || 30;
     const removed = await pruneOldBackups(retention);
@@ -63,6 +68,7 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/backups/:id',
     async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid backup id' });
       const ok = await deleteBackup(req.params.id);

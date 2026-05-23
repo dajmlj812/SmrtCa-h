@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { pool, query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import { listAudit, recordAudit } from '../domain/audit.js';
 import { hashPassword, validatePassword, PasswordPolicyError } from '../auth/passwords.js';
+import { requireSuperAdmin } from '../auth/rbac.js';
 
 /**
  * Super-admin console endpoints. Gated by `req.user.isSuperAdmin`.
@@ -24,18 +25,6 @@ import { hashPassword, validatePassword, PasswordPolicyError } from '../auth/pas
  *   GET    /api/system/users                   — list super_admin users + a count of tenant users
  *   POST   /api/system/users/super             — create another super_admin
  */
-
-function requireSuperAdmin(req: FastifyRequest, reply: FastifyReply): boolean {
-  if (!req.user) {
-    reply.code(401).send({ error: 'Not authenticated' });
-    return false;
-  }
-  if (!req.user.isSuperAdmin) {
-    reply.code(403).send({ error: 'Super admin only' });
-    return false;
-  }
-  return true;
-}
 
 export async function systemRoutes(app: FastifyInstance): Promise<void> {
   // ── Tenants list (with safe stats only) ──────────────────

@@ -176,8 +176,6 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/import">Import</NavLink>
           <NavLink to="/reports">Reports</NavLink>
-          <NavLink to="/backups">Backups</NavLink>
-          <NavLink to="/health">Health</NavLink>
           <NavLink to="/workspace">Workspace</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
@@ -209,8 +207,6 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/backups" element={<BackupsPage />} />
-          <Route path="/health" element={<HealthPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

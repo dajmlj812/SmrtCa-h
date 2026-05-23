@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { makeTestApp, resetDb } from '../setup/test-db.js';
+import { makeSuperAdminCookie, makeTestApp, resetDb } from '../setup/test-db.js';
 
 /**
  * SMTP plumbing tests.
@@ -16,8 +16,9 @@ import { makeTestApp, resetDb } from '../setup/test-db.js';
  * module to assert payload shape.
  */
 
-describe('SMTP plumbing (Phase 8.1)', () => {
+describe('SMTP plumbing (Phase 8.1, super-admin gated 0.9.1)', () => {
   let app: FastifyInstance;
+  let superCookie: string;
 
   beforeAll(async () => {
     app = await makeTestApp();
@@ -27,6 +28,17 @@ describe('SMTP plumbing (Phase 8.1)', () => {
   });
   beforeEach(async () => {
     await resetDb();
+    superCookie = await makeSuperAdminCookie(app);
+  });
+
+  it('tenant admin gets 403 on /api/admin/smtp-test', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/admin/smtp-test',
+      payload: { to: 'a@b.com' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(403);
   });
 
   it('POST /api/admin/smtp-test rejects a missing recipient', async () => {
@@ -34,8 +46,10 @@ describe('SMTP plumbing (Phase 8.1)', () => {
       method: 'POST',
       url: '/api/admin/smtp-test',
       payload: {},
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(400);
     expect(r.json().error).toMatch(/valid email/);
   });
@@ -45,8 +59,10 @@ describe('SMTP plumbing (Phase 8.1)', () => {
       method: 'POST',
       url: '/api/admin/smtp-test',
       payload: { to: 'someone@example.com' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(400);
     const body = r.json();
     expect(body.ok).toBe(false);

@@ -1,10 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { makeTestApp, resetDb } from '../setup/test-db.js';
+import { makeSuperAdminCookie, makeTestApp, resetDb } from '../setup/test-db.js';
 import { config } from '../../src/config.js';
+
+// SMTP, BACKUP_*, SESSION_SECRET, ATTACHMENT_ENCRYPTION_KEY, APP_BASE_URL
+// are super-only as of 0.9.1. Tests that touch those keys build a
+// super-admin session and pass it explicitly.
+function asSuper(cookie: string) {
+  return { headers: { cookie }, skipAuth: true };
+}
 
 describe('Settings API', () => {
   let app: FastifyInstance;
+  let superCookie: string;
 
   beforeAll(async () => {
     app = await makeTestApp();
@@ -14,17 +22,31 @@ describe('Settings API', () => {
   });
   beforeEach(async () => {
     await resetDb();
+    superCookie = await makeSuperAdminCookie(app);
   });
 
-  it('lists every known setting with env-fallback flags', async () => {
-    const r = await app.inject({ method: 'GET', url: '/api/settings' });
-    expect(r.statusCode).toBe(200);
-    const keys = r.json().settings.map((s: { key: string }) => s.key);
-    expect(keys).toContain('AI_PROVIDER');
-    expect(keys).toContain('ANTHROPIC_API_KEY');
-    expect(keys).toContain('EIA_API_KEY');
-    expect(keys).toContain('SESSION_SECRET');
-    expect(keys).toContain('ATTACHMENT_ENCRYPTION_KEY');
+  it('tenant-admin GET excludes super-only keys; super-admin GET sees them', async () => {
+    const tenantR = await app.inject({ method: 'GET', url: '/api/settings' });
+    const tenantKeys = tenantR.json().settings.map((s: { key: string }) => s.key);
+    expect(tenantKeys).toContain('AI_PROVIDER');
+    expect(tenantKeys).toContain('EIA_API_KEY');
+    expect(tenantKeys).not.toContain('SMTP_HOST');
+    expect(tenantKeys).not.toContain('SESSION_SECRET');
+
+    const superR = await app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
+    const superKeys = superR.json().settings.map((s: { key: string }) => s.key);
+    expect(superKeys).toContain('AI_PROVIDER');
+    expect(superKeys).toContain('ANTHROPIC_API_KEY');
+    expect(superKeys).toContain('EIA_API_KEY');
+    expect(superKeys).toContain('SESSION_SECRET');
+    expect(superKeys).toContain('ATTACHMENT_ENCRYPTION_KEY');
+    expect(superKeys).toContain('SMTP_HOST');
+    expect(superKeys).toContain('BACKUP_ENABLED');
   });
 
   it('masks secret values on GET', async () => {
@@ -73,8 +95,10 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/SESSION_SECRET',
       payload: { value: 'a-new-session-secret-of-sufficient-length' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(200);
     expect(r.json().restart_required).toBe(true);
   });
@@ -114,8 +138,10 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/SESSION_SECRET',
       payload: { value: 'short' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(r.statusCode).toBe(400);
   });
 
@@ -124,16 +150,20 @@ describe('Settings API', () => {
       method: 'PUT',
       url: '/api/settings/ATTACHMENT_ENCRYPTION_KEY',
       payload: { value: 'too-short' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(bad.statusCode).toBe(400);
 
     const good = await app.inject({
       method: 'PUT',
       url: '/api/settings/ATTACHMENT_ENCRYPTION_KEY',
       payload: { value: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     expect(good.statusCode).toBe(200);
   });
 

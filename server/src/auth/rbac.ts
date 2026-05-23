@@ -1,3 +1,4 @@
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { pool } from '../db/pool.js';
 
 /**
@@ -108,4 +109,27 @@ export function requireFinancialMutation(
       : { status: 403, error: 'Not a member of this tenant' };
   }
   return null;
+}
+
+/**
+ * Reject anything not coming from a super-admin session. Used as the
+ * gate on /api/system/*, /api/health/*, /api/backups/*, and on
+ * super-only setting keys (SMTP_*, BACKUP_*, SESSION_SECRET,
+ * ATTACHMENT_ENCRYPTION_KEY, APP_BASE_URL). Returns true when the
+ * request should proceed; otherwise sends the response and returns
+ * false.
+ */
+export function requireSuperAdmin(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): boolean {
+  if (!req.user) {
+    reply.code(401).send({ error: 'Not authenticated' });
+    return false;
+  }
+  if (!req.user.isSuperAdmin) {
+    reply.code(403).send({ error: 'Super admin only' });
+    return false;
+  }
+  return true;
 }

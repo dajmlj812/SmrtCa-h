@@ -164,33 +164,42 @@ export function SettingsPage() {
         <p className="empty">Loading…</p>
       ) : (
         <>
-          {SECTIONS.map((section) => (
-            <div key={section.title} className="page-section">
-              <div className="page-section-head">
-                <div>
-                  <h2>{section.title}</h2>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    {section.subtitle}
+          {SECTIONS.map((section) => {
+            // Server filters out super-only keys for tenant admins. If
+            // none of this section's keys came back, skip the whole
+            // section so we don't render an empty card.
+            const visibleKeys = section.keys.filter((k) =>
+              settings.some((s) => s.key === k),
+            );
+            if (visibleKeys.length === 0) return null;
+            return (
+              <div key={section.title} className="page-section">
+                <div className="page-section-head">
+                  <div>
+                    <h2>{section.title}</h2>
+                    <div className="muted" style={{ fontSize: 13 }}>
+                      {section.subtitle}
+                    </div>
                   </div>
                 </div>
+                <div className="card settings-list">
+                  {visibleKeys.map((key) => {
+                    const setting = settings.find((s) => s.key === key);
+                    if (!setting) return null;
+                    return (
+                      <SettingRow
+                        key={setting.key}
+                        setting={setting}
+                        onSave={(v) => void save(setting, v)}
+                        onClear={() => void clearKey(setting)}
+                      />
+                    );
+                  })}
+                  {section.title.startsWith('SMTP') && <SmtpTestPanel />}
+                </div>
               </div>
-              <div className="card settings-list">
-                {section.keys.map((key) => {
-                  const setting = settings.find((s) => s.key === key);
-                  if (!setting) return null;
-                  return (
-                    <SettingRow
-                      key={setting.key}
-                      setting={setting}
-                      onSave={(v) => void save(setting, v)}
-                      onClear={() => void clearKey(setting)}
-                    />
-                  );
-                })}
-                {section.title.startsWith('SMTP') && <SmtpTestPanel />}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
     </div>

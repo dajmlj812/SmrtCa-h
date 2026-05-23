@@ -252,6 +252,41 @@ describe('RBAC — super_admin / spouse / child (Phase 9)', () => {
   });
 
   // ── Account assignment endpoint ──────────────────────────
+  // ── 0.9.1: SMTP / Backups / Security keys super-only ─────
+  it('tenant admin cannot PUT a super-only setting (SMTP_HOST)', async () => {
+    const r = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/SMTP_HOST',
+      payload: { value: 'smtp.example.com' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('tenant admin cannot PUT a super-only setting (BACKUP_ENABLED)', async () => {
+    const r = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/BACKUP_ENABLED',
+      payload: { value: 'true' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('GET /api/settings hides super-only keys from tenant admins', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/settings' });
+    expect(r.statusCode).toBe(200);
+    const keys = r.json().settings.map((s: { key: string }) => s.key);
+    // Tenant admin sees AI/EIA/Savings, never SMTP/BACKUP/security.
+    expect(keys).toContain('AI_PROVIDER');
+    expect(keys).toContain('EIA_API_KEY');
+    expect(keys).not.toContain('SMTP_HOST');
+    expect(keys).not.toContain('BACKUP_ENABLED');
+    expect(keys).not.toContain('SESSION_SECRET');
+    expect(keys).not.toContain('ATTACHMENT_ENCRYPTION_KEY');
+    expect(keys).not.toContain('APP_BASE_URL');
+  });
+
   it('admin can assign accounts to a child via PUT', async () => {
     const acct1 = await seedAccount({ name: 'A' });
     const acct2 = await seedAccount({ name: 'B' });

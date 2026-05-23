@@ -125,6 +125,35 @@ export function testAuthCookie(): string {
   return cachedAuthCookie;
 }
 
+/**
+ * Create a fresh super-admin user + session for tests that exercise
+ * super-only endpoints (/api/system/*, /api/health/*, /api/backups/*,
+ * the SMTP test, and the super-only setting keys). Returns the cookie
+ * value to attach via `headers: { cookie }`.
+ *
+ * Use `skipAuth: true` on the inject call so the auto-attached tenant
+ * cookie doesn't override it.
+ */
+export async function makeSuperAdminCookie(
+  app: FastifyInstance,
+  email = `super-${Date.now()}@local`,
+): Promise<string> {
+  const userRes = await pool.query<{ id: string }>(
+    `INSERT INTO users (email, name, password_hash, is_super_admin)
+     VALUES ($1, 'Super', 'placeholder', true)
+     RETURNING id`,
+    [email],
+  );
+  const userId = userRes.rows[0]!.id;
+  const sessionId = `super-test-${userId.slice(0, 8)}`;
+  await pool.query(
+    `INSERT INTO sessions (id, user_id, expires_at, active_tenant_id)
+     VALUES ($1, $2, now() + interval '1 hour', NULL)`,
+    [sessionId, userId],
+  );
+  return `smrtcash_session=${app.signCookie(sessionId)}`;
+}
+
 /** Insert an account directly and return its id (test helper). */
 export async function seedAccount(
   overrides: Partial<{

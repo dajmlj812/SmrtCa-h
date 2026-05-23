@@ -23,39 +23,41 @@ import { pool, query } from '../db/pool.js';
  *    surface the prompt.
  */
 
+/**
+ * Per-key metadata. `superOnly: true` means only super_admins can see,
+ * edit, or clear this setting — covers SMTP, backups, security keys,
+ * and the email base URL (all platform-level concerns).
+ */
 export const KNOWN_SETTINGS = [
-  // AI provider — live
-  { key: 'AI_PROVIDER', isSecret: false, restartRequired: false, label: 'AI provider' },
-  { key: 'ANTHROPIC_API_KEY', isSecret: true, restartRequired: false, label: 'Anthropic API key' },
-  { key: 'ANTHROPIC_MODEL', isSecret: false, restartRequired: false, label: 'Anthropic model' },
-  { key: 'OLLAMA_BASE_URL', isSecret: false, restartRequired: false, label: 'Ollama base URL' },
-  { key: 'OLLAMA_MODEL', isSecret: false, restartRequired: false, label: 'Ollama model' },
-  // Fuel-price source — live
-  { key: 'EIA_API_KEY', isSecret: true, restartRequired: false, label: 'EIA API key' },
-  // Savings suggestion tuning — live (whole-number percentages, default 20 and 50)
-  { key: 'SAVINGS_INCOME_PCT', isSecret: false, restartRequired: false, label: 'Savings — % of income' },
-  { key: 'SAVINGS_LEFTOVER_PCT', isSecret: false, restartRequired: false, label: 'Savings — % of leftover' },
-  // Backup config — live (scheduler re-reads on each tick)
-  { key: 'BACKUP_ENABLED', isSecret: false, restartRequired: false, label: 'Backup — enabled' },
-  { key: 'BACKUP_FREQUENCY', isSecret: false, restartRequired: false, label: 'Backup — frequency' },
-  { key: 'BACKUP_TIME', isSecret: false, restartRequired: false, label: 'Backup — time (HH:MM, 24h)' },
-  { key: 'BACKUP_RETENTION_DAYS', isSecret: false, restartRequired: false, label: 'Backup — retention (days)' },
-  { key: 'BACKUP_DIR', isSecret: false, restartRequired: false, label: 'Backup — directory' },
-  // SMTP — live (mailer loads config on each send)
-  { key: 'SMTP_HOST', isSecret: false, restartRequired: false, label: 'SMTP host' },
-  { key: 'SMTP_PORT', isSecret: false, restartRequired: false, label: 'SMTP port' },
-  { key: 'SMTP_USER', isSecret: false, restartRequired: false, label: 'SMTP username' },
-  { key: 'SMTP_PASS', isSecret: true, restartRequired: false, label: 'SMTP password' },
-  { key: 'SMTP_FROM', isSecret: false, restartRequired: false, label: 'SMTP from address' },
-  { key: 'SMTP_SECURE', isSecret: false, restartRequired: false, label: 'SMTP TLS-on-connect (port 465)' },
-  // Public-facing app URL — used to build absolute links in outgoing
-  // emails (invitations, future password resets). Defaults to the
-  // browser-detected origin when unset, but for fully-headless sends
-  // this needs to be configured.
-  { key: 'APP_BASE_URL', isSecret: false, restartRequired: false, label: 'App base URL (for email links)' },
-  // Security — restart required
-  { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, label: 'Session secret' },
-  { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, label: 'Attachment encryption key' },
+  // AI provider — live, tenant-admin visible
+  { key: 'AI_PROVIDER', isSecret: false, restartRequired: false, superOnly: false, label: 'AI provider' },
+  { key: 'ANTHROPIC_API_KEY', isSecret: true, restartRequired: false, superOnly: false, label: 'Anthropic API key' },
+  { key: 'ANTHROPIC_MODEL', isSecret: false, restartRequired: false, superOnly: false, label: 'Anthropic model' },
+  { key: 'OLLAMA_BASE_URL', isSecret: false, restartRequired: false, superOnly: false, label: 'Ollama base URL' },
+  { key: 'OLLAMA_MODEL', isSecret: false, restartRequired: false, superOnly: false, label: 'Ollama model' },
+  // Fuel-price source — live, tenant-admin visible
+  { key: 'EIA_API_KEY', isSecret: true, restartRequired: false, superOnly: false, label: 'EIA API key' },
+  // Savings suggestion tuning — live, tenant-admin visible
+  { key: 'SAVINGS_INCOME_PCT', isSecret: false, restartRequired: false, superOnly: false, label: 'Savings — % of income' },
+  { key: 'SAVINGS_LEFTOVER_PCT', isSecret: false, restartRequired: false, superOnly: false, label: 'Savings — % of leftover' },
+  // Backup config — super-admin only
+  { key: 'BACKUP_ENABLED', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — enabled' },
+  { key: 'BACKUP_FREQUENCY', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — frequency' },
+  { key: 'BACKUP_TIME', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — time (HH:MM, 24h)' },
+  { key: 'BACKUP_RETENTION_DAYS', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — retention (days)' },
+  { key: 'BACKUP_DIR', isSecret: false, restartRequired: false, superOnly: true, label: 'Backup — directory' },
+  // SMTP — super-admin only
+  { key: 'SMTP_HOST', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP host' },
+  { key: 'SMTP_PORT', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP port' },
+  { key: 'SMTP_USER', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP username' },
+  { key: 'SMTP_PASS', isSecret: true, restartRequired: false, superOnly: true, label: 'SMTP password' },
+  { key: 'SMTP_FROM', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP from address' },
+  { key: 'SMTP_SECURE', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP TLS-on-connect (port 465)' },
+  // App base URL — for outgoing email links. Super-admin only.
+  { key: 'APP_BASE_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'App base URL (for email links)' },
+  // Security — super-admin only, restart required
+  { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, superOnly: true, label: 'Session secret' },
+  { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, superOnly: true, label: 'Attachment encryption key' },
 ] as const;
 
 export type SettingKey = (typeof KNOWN_SETTINGS)[number]['key'];

@@ -11,6 +11,7 @@ import {
   settingMeta,
 } from '../domain/settings.js';
 import { tryMail, verifyConnection } from '../domain/mailer.js';
+import { requireSuperAdmin } from '../auth/rbac.js';
 
 interface PublicSettingRow {
   key: string;
@@ -45,8 +46,13 @@ async function buildRow(meta: (typeof KNOWN_SETTINGS)[number]): Promise<PublicSe
 }
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/settings', async () => {
-    const rows = await Promise.all(KNOWN_SETTINGS.map((m) => buildRow(m)));
+  // List: filter out super-only keys for non-super requesters so a
+  // tenant admin's UI never even sees them. Super admins get the full
+  // list.
+  app.get('/api/settings', async (req) => {
+    const isSuper = req.user?.isSuperAdmin === true;
+    const visible = KNOWN_SETTINGS.filter((m) => isSuper || !m.superOnly);
+    const rows = await Promise.all(visible.map((m) => buildRow(m)));
     return { settings: rows };
   });
 
@@ -56,6 +62,12 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       const key = req.params.key.toUpperCase();
       if (!isKnownSetting(key)) {
         return reply.code(400).send({ error: `Unknown setting: ${key}` });
+      }
+      const meta = settingMeta(key);
+      // Super-only gating: even tenant-admins can't touch SMTP_*,
+      // BACKUP_*, SESSION_SECRET, ATTACHMENT_ENCRYPTION_KEY, APP_BASE_URL.
+      if (meta.superOnly && !req.user?.isSuperAdmin) {
+        return reply.code(403).send({ error: 'Super admin only' });
       }
       const body = (req.body ?? {}) as { value?: unknown };
       if (typeof body.value !== 'string') {
@@ -67,7 +79,6 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
           .code(400)
           .send({ error: 'Use DELETE /api/settings/:key to clear, not an empty PUT' });
       }
-      const meta = settingMeta(key);
 
       // Per-key sanity checks.
       if (key === 'AI_PROVIDER' && !AI_PROVIDERS.includes(value)) {
@@ -120,10 +131,13 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       if (!isKnownSetting(key)) {
         return reply.code(400).send({ error: `Unknown setting: ${key}` });
       }
+      const meta = settingMeta(key as SettingKey);
+      if (meta.superOnly && !req.user?.isSuperAdmin) {
+        return reply.code(403).send({ error: 'Super admin only' });
+      }
       await clearSetting(key as SettingKey);
       // For live keys, clearing means "revert to env" — restore env value
       // to the in-memory config so the next call sees the env fallback.
-      const meta = settingMeta(key as SettingKey);
       if (!meta.restartRequired) {
         applyToConfig(key as SettingKey, process.env[key] ?? '');
       }
@@ -213,7 +227,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   // SMTP test: verify connection only, then send a one-line test email
   // to the supplied address. Used by the Settings page to confirm SMTP
   // is configured before relying on it for invitations / alerts.
+  // Super-admin only — SMTP is platform infrastructure.
   app.post('/api/admin/smtp-test', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
     const body = (req.body ?? {}) as { to?: unknown };
     const to = typeof body.to === 'string' ? body.to.trim() : '';
     if (to === '' || !/.+@.+\..+/.test(to)) {
@@ -242,6 +258,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   // in `npm run dev` the watcher restarts on next file change, otherwise
   // the operator restarts the process manually.
   app.post('/api/admin/restart', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
     req.log.warn('Operator-initiated restart via /api/admin/restart');
     reply.send({ restarting: true });
     // Give the response a moment to flush before exiting.

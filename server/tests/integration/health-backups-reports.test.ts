@@ -1,7 +1,20 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { makeTestApp, pool, resetDb, seedAccount } from '../setup/test-db.js';
+import {
+  makeSuperAdminCookie,
+  makeTestApp,
+  pool,
+  resetDb,
+  seedAccount,
+} from '../setup/test-db.js';
+
+// Health + backups + the SMTP test endpoint moved to super-admin only
+// in 0.9.1. Tests in those describe blocks build a one-shot
+// super-admin session and pass it explicitly via the cookie header.
+function asSuper(cookie: string) {
+  return { headers: { cookie }, skipAuth: true };
+}
 
 async function seedTxn(opts: {
   accountId: string;
@@ -26,8 +39,9 @@ async function seedTxn(opts: {
   return r.rows[0]!.id;
 }
 
-describe('Health metrics (Phase 7.6)', () => {
+describe('Health metrics (Phase 7.6, super-admin gated 0.9.1)', () => {
   let app: FastifyInstance;
+  let superCookie: string;
 
   beforeAll(async () => {
     app = await makeTestApp();
@@ -37,17 +51,26 @@ describe('Health metrics (Phase 7.6)', () => {
   });
   beforeEach(async () => {
     await resetDb();
+    superCookie = await makeSuperAdminCookie(app);
   });
 
-  it('returns app + db + storage sections', async () => {
+  it('tenant admin gets 403 on /api/health/metrics', async () => {
     const r = await app.inject({ method: 'GET', url: '/api/health/metrics' });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('returns app + db + storage sections to a super admin', async () => {
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/health/metrics',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
     expect(r.statusCode).toBe(200);
     const body = r.json();
     expect(body.app).toBeDefined();
     expect(body.app.uptime_seconds).toBeGreaterThanOrEqual(0);
     expect(body.app.node_version).toMatch(/^v\d+/);
-    // heap_size_limit is the real V8 ceiling — the Health page uses it
-    // for the Heap % gauge so the reading reflects actual headroom.
     expect(body.app.heap_size_limit_bytes).toBeGreaterThan(
       body.app.heap_used_bytes,
     );
@@ -63,8 +86,12 @@ describe('Health metrics (Phase 7.6)', () => {
     const acct = await seedAccount();
     await seedTxn({ accountId: acct, date: '2026-05-01', amountCents: -123 });
     await seedTxn({ accountId: acct, date: '2026-05-02', amountCents: -456 });
-
-    const r = await app.inject({ method: 'GET', url: '/api/health/metrics' });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/health/metrics',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
     const body = r.json();
     expect(body.db.table_counts.accounts).toBe(1);
     expect(body.db.table_counts.transactions).toBe(2);
@@ -74,12 +101,13 @@ describe('Health metrics (Phase 7.6)', () => {
     const r = await app.inject({
       method: 'GET',
       url: '/api/health/timeseries?window=60',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
     });
     expect(r.statusCode).toBe(200);
     const body = r.json();
     expect(body.window_seconds).toBe(60);
     expect(Array.isArray(body.points)).toBe(true);
-    // Each point (if any) must have the documented shape.
     for (const p of body.points) {
       expect(typeof p.ts).toBe('string');
       expect(typeof p.cpu_pct).toBe('number');
@@ -90,11 +118,14 @@ describe('Health metrics (Phase 7.6)', () => {
   });
 
   it('GET /api/health/live returns the most recent sample or null', async () => {
-    const r = await app.inject({ method: 'GET', url: '/api/health/live' });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/health/live',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
     expect(r.statusCode).toBe(200);
     const body = r.json();
-    // Test runs faster than the 5s sampler tick, so `latest` is almost
-    // always null. Either is valid; just enforce the contract.
     if (body.latest !== null) {
       expect(typeof body.latest.ts).toBe('string');
       expect(typeof body.latest.cpu_pct).toBe('number');
@@ -102,8 +133,9 @@ describe('Health metrics (Phase 7.6)', () => {
   });
 });
 
-describe('Backups (Phase 7.6)', () => {
+describe('Backups (Phase 7.6, super-admin gated 0.9.1)', () => {
   let app: FastifyInstance;
+  let superCookie: string;
 
   beforeAll(async () => {
     app = await makeTestApp();
@@ -113,16 +145,32 @@ describe('Backups (Phase 7.6)', () => {
   });
   beforeEach(async () => {
     await resetDb();
+    superCookie = await makeSuperAdminCookie(app);
+  });
+
+  it('tenant admin gets 403 on /api/backups', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/backups' });
+    expect(r.statusCode).toBe(403);
   });
 
   it('GET /api/backups returns an empty list initially', async () => {
-    const r = await app.inject({ method: 'GET', url: '/api/backups' });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/backups',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
     expect(r.statusCode).toBe(200);
     expect(r.json().backups).toEqual([]);
   });
 
   it('GET /api/backups/config returns defaults when nothing is set', async () => {
-    const r = await app.inject({ method: 'GET', url: '/api/backups/config' });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/backups/config',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
     expect(r.statusCode).toBe(200);
     const body = r.json();
     expect(body.enabled).toBe(false);
@@ -133,31 +181,45 @@ describe('Backups (Phase 7.6)', () => {
   });
 
   it('GET /api/backups/config reflects PUT /api/settings updates', async () => {
+    // BACKUP_* keys are now super-only — write via the super cookie.
     await app.inject({
       method: 'PUT',
       url: '/api/settings/BACKUP_ENABLED',
       payload: { value: 'true' },
-      headers: { 'content-type': 'application/json' },
-    });
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
     await app.inject({
       method: 'PUT',
       url: '/api/settings/BACKUP_FREQUENCY',
       payload: { value: 'weekly' },
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: superCookie },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skipAuth: true,
+    } as any);
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/backups/config',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
     });
-    const r = await app.inject({ method: 'GET', url: '/api/backups/config' });
     expect(r.json().enabled).toBe(true);
     expect(r.json().frequency).toBe('weekly');
   });
 
   it('lists only non-deleted backups', async () => {
-    // Seed two rows directly — one success, one deleted.
     await pool.query(
       `INSERT INTO backups (kind, status, path, db_bytes, total_bytes)
        VALUES ('manual', 'success', '/tmp/x1', 100, 100),
               ('manual', 'deleted', '/tmp/x2', 200, 200)`,
     );
-    const r = await app.inject({ method: 'GET', url: '/api/backups' });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/backups',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
     expect(r.json().backups).toHaveLength(1);
     expect(r.json().backups[0].path).toBe('/tmp/x1');
   });
@@ -172,6 +234,8 @@ describe('Backups (Phase 7.6)', () => {
     const r = await app.inject({
       method: 'DELETE',
       url: `/api/backups/${id}`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
     });
     expect(r.statusCode).toBe(204);
 
@@ -186,6 +250,8 @@ describe('Backups (Phase 7.6)', () => {
     const r = await app.inject({
       method: 'DELETE',
       url: '/api/backups/not-a-uuid',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
     });
     expect(r.statusCode).toBe(400);
   });
