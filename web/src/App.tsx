@@ -14,7 +14,8 @@ import { BudgetsPage } from './pages/BudgetsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
 import { VehiclesPage } from './pages/VehiclesPage';
-import { TollsPage } from './pages/TollsPage';
+import { RoutesPage } from './pages/RoutesPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 type AuthState = 'loading' | 'needs-setup' | 'needs-login' | 'authenticated';
 
@@ -82,9 +83,10 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/goals">Goals</NavLink>
           <NavLink to="/bills">Bills</NavLink>
           <NavLink to="/vehicles">Vehicles</NavLink>
-          <NavLink to="/tolls">Tolls</NavLink>
+          <NavLink to="/routes">Routes</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/import">Import</NavLink>
+          <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="sidebar-footer">
           Phase 7 · Wealth + AutoMagic
@@ -108,9 +110,10 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/bills" element={<BillsPage />} />
           <Route path="/vehicles" element={<VehiclesPage />} />
-          <Route path="/tolls" element={<TollsPage />} />
+          <Route path="/routes" element={<RoutesPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </div>

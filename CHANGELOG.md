@@ -9,8 +9,162 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 7.2 (multi-currency) and Phase 7.3 (retirement projections) work
+_Phase 7.4 (multi-currency) and Phase 7.5 (retirement projections) work
 will land here._
+
+---
+
+## [0.7.3] — 2026-05-23 — Commute routes, Misc + Savings, AI model picker
+
+Routes replace the old standalone toll list with a richer model: each
+route has a distance and an optional per-crossing toll, and every
+vehicle says how many times per week it takes that route. Fuel and
+toll math now both flow from the same source. The budget wizard gains
+two more editable rows (Misc with a memo, Savings with four suggestion
+chips), and the Settings page picks AI models from a provider-aware
+dropdown with token/cost hints.
+
+### Added
+
+- **`commute_routes` + `route_vehicle_assignments`** (migration 014).
+  A route has a name, distance, an optional toll/crossing, and N
+  vehicle assignments saying how many times that vehicle takes it per
+  week. The legacy `toll_routes` table is dropped after a one-shot
+  migration of existing rows (distance=0, toll = the old
+  weekly_estimate).
+- **`/routes` page** — replaces `/tolls`. Per-route card shows
+  distance, toll/crossing, total weekly crossings, computed weekly
+  toll. Inline edit of assignments (toggle a vehicle, set its
+  crossings/week).
+- **Route-driven fuel + toll math** in the wizard. For each active
+  vehicle, derived weekly miles = SUM(route.distance ×
+  this-vehicle's crossings). Vehicles with no route assignments fall
+  back to the stored `weekly_avg_miles`. Tolls = SUM(route.toll ×
+  total crossings) across active routes.
+- **Misc editable** in the wizard — a 4th row per period for
+  known-coming one-offs (oil change, birthday gift). Each Misc entry
+  has its own amount AND a memo, stored via the new `budgets.note`
+  column. Commit creates one row per period under the new
+  "Miscellaneous" category.
+- **Savings editable + 4 suggestion chips** — per-period preview shows
+  four numbers: **Goal-required** (from active `savings_goals` with
+  target_date; required-per-period = (target − current) /
+  periods-to-target), **% of income**, **% of leftover**, and the
+  **max**. Click a chip to populate the editable Savings amount.
+  Commit creates a Savings budget row per period when > 0.
+  Configurable via two new settings: `SAVINGS_INCOME_PCT` (default
+  20) and `SAVINGS_LEFTOVER_PCT` (default 50).
+- **AI model picker** — new `GET /api/settings/ai-models?provider=X`.
+  Claude returns a hardcoded list with per-model cost hints
+  (`claude-haiku-4-5` recommended for SmrtCash, sonnet for edge cases,
+  opus marked overkill). Ollama queries the configured base URL's
+  `/api/tags` and falls back to a curated list when unreachable. The
+  Settings page model field renders a dropdown with the recommended
+  model starred + a "Custom" escape hatch.
+- **EIA "create key" link** under the EIA_API_KEY field →
+  `https://www.eia.gov/opendata/register.php`.
+- **"Miscellaneous" and "Savings" leaf categories** seeded into the
+  default taxonomy.
+
+### Changed
+
+- The old `/api/toll-routes` endpoints and the `tollRoutes`
+  client-side functions are gone — `commuteRouteRoutes` replaces them.
+- The wizard's `flexCents` formula now subtracts Misc and Savings too.
+
+### Tests
+
+- **+13 server tests** (304 → 317): commute-routes CRUD (5),
+  route-driven wizard math + Misc/Savings flow (6), AI models endpoint
+  (3). Existing wizard test updated to use commute_routes instead of
+  toll_routes for the toll-sum assertion. Total automated coverage:
+  **330 tests** (server 317 + web 6 + Playwright 7).
+
+### Migration notes
+
+- **Upgrading from 0.7.2:** `npm run migrate --prefix server` applies
+  migration 014 (drops `toll_routes`, adds `commute_routes` +
+  `route_vehicle_assignments` + `budgets.note` + seeds the two new
+  categories).
+- Existing toll-route entries migrate to commute_routes with
+  distance=0. You'll want to revisit them to set the real distance and
+  add vehicle assignments — otherwise their tolls won't fire (no
+  crossings × any non-null toll = 0).
+
+---
+
+## [0.7.2] — 2026-05-23 — Settings page (GUI-managed runtime config)
+
+Stop SSHing into the box to edit `.env` and bounce the container. Every
+runtime-tweakable config value now has a GUI control on the new
+**Settings** page; the dangerous ones (session secret, attachment
+encryption key) are gated behind type-to-confirm dialogs.
+
+### Added
+
+- **`app_settings` table** (migration 013). One row per `(key, value)`
+  override. A non-null DB value wins over `process.env` at read time;
+  clearing the row falls back to env. Plain-text storage — same trust
+  boundary as `.env` on the same host.
+- **`domain/settings.ts`** — list of `KNOWN_SETTINGS`, each with
+  `is_secret` + `restart_required` metadata. `applyBootSettings()`
+  loads DB overrides into the in-memory `config` object before
+  Fastify registers the cookie plugin / parses the attachment key.
+  `applyToConfig()` hot-mutates the same object on live updates so the
+  next AI / fuel-price call sees the new value.
+- **Settings API**:
+  - `GET /api/settings` — every known setting with masked secret
+    values (`••••XXXX`, last 4 chars only), plus
+    `configured_in_gui` / `env_fallback_present` flags so the UI
+    can show provenance.
+  - `PUT /api/settings/:key` — value goes in clear, comes back
+    masked. Per-key validation (provider allow-list, encryption-key
+    shape, session secret length). Response carries
+    `restart_required: true` for `SESSION_SECRET` and
+    `ATTACHMENT_ENCRYPTION_KEY`.
+  - `DELETE /api/settings/:key` — clears the override, re-reads env
+    into in-memory config.
+- **`POST /api/admin/restart`** — flushes the response, then
+  `process.exit(0)`. Docker's `restart: unless-stopped` brings the
+  container back up; in dev the operator restarts the process.
+- **`/settings` page** — three cards:
+  - **AI Provider** — provider dropdown, Anthropic key/model,
+    Ollama base URL/model.
+  - **External APIs** — EIA API key.
+  - **Security — restart required** — SESSION_SECRET
+    (`type 'rotate' to confirm`) and ATTACHMENT_ENCRYPTION_KEY
+    (`type 'DESTROY EXISTING' to confirm`).
+  When a restart-required save lands, a banner + a top-right
+  **Restart server** button appear. The button POSTs to
+  `/api/admin/restart` and refreshes the page after 2 seconds.
+
+### Changed
+
+- **Boot order** — `buildApp()` calls `applyBootSettings()` before
+  registering `@fastify/cookie` so a GUI-set `SESSION_SECRET` wins over
+  `.env` at startup. Same for the attachment encryption key.
+
+### Tests
+
+- **+11 server tests** (293 → 304): list, masking, non-secret
+  passthrough, AI_PROVIDER allow-list, hot mutation,
+  restart_required surfaces correctly, unknown-key rejection,
+  empty-value rejection, SESSION_SECRET length validation,
+  ATTACHMENT_ENCRYPTION_KEY shape validation (hex + base64 +
+  invalid), DELETE-reverts-to-env.
+- Total automated coverage: **317 tests** (server 304 + web 6 +
+  Playwright 7).
+
+### Migration notes
+
+- **Upgrading from 0.7.1:** `npm run migrate --prefix server` applies
+  migration 013 (just the `app_settings` table).
+- Your existing `.env` continues to work — DB rows are additive
+  overrides. You can ignore the Settings page if you prefer the
+  `.env` workflow.
+- The restart endpoint requires a supervisor (`docker compose` does
+  this by default). Without one, calling it stops the server until
+  you restart it manually.
 
 ---
 

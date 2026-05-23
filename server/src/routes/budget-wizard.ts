@@ -41,6 +41,19 @@ function parseInput(body: unknown): WizardInput | { error: string } {
     }
     return out;
   }
+  function readStringOverrides(field: string): Record<number, string> | undefined {
+    const raw = b[field];
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw !== 'object') return undefined;
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      const idx = Number(k);
+      if (Number.isInteger(idx) && typeof v === 'string') {
+        out[idx] = v;
+      }
+    }
+    return out;
+  }
   return {
     periodType,
     anchor: b.anchor,
@@ -48,6 +61,9 @@ function parseInput(body: unknown): WizardInput | { error: string } {
     groceriesOverrideCents: readOverrides('groceriesOverrideCents'),
     fuelOverrideCents: readOverrides('fuelOverrideCents'),
     tollsOverrideCents: readOverrides('tollsOverrideCents'),
+    miscOverrideCents: readOverrides('miscOverrideCents'),
+    miscNoteOverride: readStringOverrides('miscNoteOverride'),
+    savingsOverrideCents: readOverrides('savingsOverrideCents'),
   };
 }
 

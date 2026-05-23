@@ -194,14 +194,29 @@ describe('AutoMagic budget wizard', () => {
     expect(r.json().preview.periods[0].fuelCents).toBe(2917);
   });
 
-  it('preview sums active toll routes', async () => {
-    await pool.query(
-      `INSERT INTO toll_routes (name, weekly_estimate_cents)
-       VALUES ('Hwy 99 commute', 4500), ('Bay Bridge', 2500)`,
+  it('preview sums tolls from active commute routes with assignments', async () => {
+    // Two active routes, each with a per-crossing toll + a vehicle taking it.
+    const vehicle = await pool.query<{ id: string }>(
+      `INSERT INTO vehicles (name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ('Daily', 'regular', 30, 0) RETURNING id`,
+    );
+    const r1 = await pool.query<{ id: string }>(
+      `INSERT INTO commute_routes (name, distance_miles, toll_per_crossing_cents)
+       VALUES ('Hwy 99', 20, 450) RETURNING id`, // $4.50 per crossing
+    );
+    const r2 = await pool.query<{ id: string }>(
+      `INSERT INTO commute_routes (name, distance_miles, toll_per_crossing_cents)
+       VALUES ('Bay Bridge', 10, 250) RETURNING id`, // $2.50 per crossing
     );
     await pool.query(
-      `INSERT INTO toll_routes (name, weekly_estimate_cents, active)
-       VALUES ('Old route', 9999, false)`,
+      `INSERT INTO route_vehicle_assignments (route_id, vehicle_id, crossings_per_week)
+       VALUES ($1, $2, 10), ($3, $2, 10)`,
+      [r1.rows[0]!.id, vehicle.rows[0]!.id, r2.rows[0]!.id],
+    );
+    // Inactive route with toll should NOT contribute.
+    await pool.query(
+      `INSERT INTO commute_routes (name, distance_miles, toll_per_crossing_cents, active)
+       VALUES ('Old route', 5, 9999, false)`,
     );
     const r = await app.inject({
       method: 'POST',
@@ -209,6 +224,7 @@ describe('AutoMagic budget wizard', () => {
       payload: { periodType: 'weekly', anchor: '2026-06-01', count: 1 },
       headers: { 'content-type': 'application/json' },
     });
+    // (10 * 450) + (10 * 250) = 7000
     expect(r.json().preview.periods[0].tollsCents).toBe(7000);
   });
 });

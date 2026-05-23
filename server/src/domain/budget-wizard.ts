@@ -1,24 +1,35 @@
 import { pool, query } from '../db/pool.js';
 import { advanceByFrequency } from '../routes/bills.js';
+import { getEffectiveValue } from './settings.js';
 
 /**
- * AutoMagic budget wizard projection.
+ * AutoMagic budget wizard projection (Phase 7.3 rev).
  *
- * Given a target cadence (period_type), an anchor start date, and a
- * count of future periods, produce a per-period breakdown:
+ * Inputs: target cadence + anchor + count + optional per-period
+ * overrides. For each future period we compute:
  *
- *   - income     — recurring_income instances landing in the window
- *   - bills      — each individual bill instance due in the window
- *   - groceries  — pre-fill from the last 8 weeks' Groceries spend
- *                  (median), scaled to the period length; editable
- *   - fuel       — weekly fuel cost across active vehicles, scaled
- *   - tolls      — weekly sum of active toll routes, scaled
- *   - flex       — implicit remainder (income − sum of the above)
+ *   - income      — recurring_income instances projected into the window
+ *   - bills       — each individual bill instance due in the window
+ *   - groceries   — pre-fill from the last 8 weeks' Groceries spend
+ *                   (median), scaled to the period length
+ *   - fuel        — route-driven: every active commute_route's
+ *                   assignments contribute (distance × crossings × per-
+ *                   mile fuel rate for that vehicle); vehicles with no
+ *                   assignments fall back to weekly_avg_miles
+ *   - tolls       — route-driven: every active commute_route's
+ *                   (toll_per_crossing × total crossings across vehicles)
+ *   - misc        — defaults to $0 (one-off expenses you know about);
+ *                   the user enters an amount + memo
+ *   - savings     — four suggestions surface (goal-required from
+ *                   savings_goals, % of income, % of flex, and the max).
+ *                   The user picks one; the chosen amount writes a
+ *                   Savings budget row on commit
+ *   - flex        — implicit remainder = income − bills − groceries −
+ *                   fuel − tolls − misc − savings
  *
- * The commit step writes:
- *   - one budget row per period for Groceries / Fuel / Tolls
- *   - one budget row per (period, bill instance) with `bill_id` set
- * Existing rows are never overwritten — duplicates are skipped.
+ * Commit writes per-period budget rows for the four editable categories
+ * (Groceries / Fuel / Tolls / Misc / Savings — five if Savings > 0) and
+ * one bill-linked row per bill instance. Skip-duplicates.
  */
 
 export type WizardPeriodType =
@@ -31,7 +42,7 @@ export type WizardPeriodType =
 const FREQ_TO_ADVANCE: Record<string, 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'one-time'> = {
   weekly: 'weekly',
   biweekly: 'biweekly',
-  semimonthly: 'monthly', // bill freq doesn't have semimonthly; the bill table only stores weekly/biweekly/monthly/yearly/one-time
+  semimonthly: 'monthly',
   monthly: 'monthly',
   yearly: 'yearly',
   'one-time': 'one-time',
@@ -58,7 +69,6 @@ function daysBetween(a: string, b: string): number {
   );
 }
 
-/** [start, end) for the i-th period (0-indexed) given the cadence. */
 export function periodRange(
   type: WizardPeriodType,
   anchor: string,
@@ -80,7 +90,6 @@ export function periodRange(
     const start = addDays(anchor, index * 15);
     return { start, end: addDays(start, 15) };
   }
-  // custom — caller supplies explicit ranges; this helper isn't called.
   const start = addDays(anchor, index);
   return { start, end: addDays(start, 1) };
 }
@@ -101,26 +110,28 @@ interface IncomeRow {
   next_expected_date: string;
 }
 
-interface VehicleRow {
-  fuel_type: string;
-  mpg: number | null;
-  kwh_per_mile: number | null;
-  electricity_rate_cents_per_kwh: number | null;
-  weekly_avg_miles: number;
+export interface SavingsSuggestions {
+  goalRequiredCents: number;
+  pctIncomeCents: number;
+  pctLeftoverCents: number;
+  /** max of the above three; what we recommend by default. */
+  maxCents: number;
 }
 
 export interface PeriodPreview {
   index: number;
   start: string;
   end: string;
-  /** Days in this period — drives the weekly→period scaling for groceries/fuel/tolls. */
   days: number;
   income: Array<{ id: string; name: string; amount_cents: number; date: string }>;
   bills: Array<{ id: string; name: string; amount_cents: number; date: string }>;
   groceriesCents: number;
   fuelCents: number;
   tollsCents: number;
-  /** Total income minus everything else (bills + groceries + fuel + tolls). */
+  miscCents: number;
+  miscNote: string;
+  savingsCents: number;
+  savingsSuggestions: SavingsSuggestions;
   flexCents: number;
 }
 
@@ -128,17 +139,19 @@ export interface WizardPreview {
   periodType: WizardPeriodType;
   anchor: string;
   count: number;
-  /** Source for the groceries default: median of last 8 weeks of Groceries category spend. */
+  /** Source for groceries: median of last 8 weeks of Groceries spend. */
   groceriesWeeklyMedianCents: number;
-  /** Source for fuel: weekly cost across all active vehicles. */
+  /** Source for fuel: total route-driven weekly fuel cost. */
   fuelWeeklyCents: number;
-  /** Sum of weekly_estimate across active toll routes. */
+  /** Source for tolls: total route-driven weekly toll cost. */
   tollsWeeklyCents: number;
+  /** Percentage knobs from app_settings (whole numbers, e.g. 20 = 20%). */
+  savingsIncomePct: number;
+  savingsLeftoverPct: number;
   periods: PeriodPreview[];
 }
 
 async function weeklyGroceriesMedian(): Promise<number> {
-  // Last 8 calendar weeks of transactions in the seeded "Groceries" category.
   const r = await pool.query<{ week: string; total: number }>(
     `WITH groc AS (
        SELECT date_trunc('week', txn_date)::date AS week,
@@ -161,38 +174,116 @@ async function weeklyGroceriesMedian(): Promise<number> {
     : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
 }
 
-async function weeklyFuelCents(): Promise<number> {
-  const vehicles = await pool.query<VehicleRow>(
-    `SELECT fuel_type, mpg::float8 AS mpg, kwh_per_mile::float8 AS kwh_per_mile,
-            electricity_rate_cents_per_kwh,
-            weekly_avg_miles::float8 AS weekly_avg_miles
-       FROM vehicles WHERE active`,
+/**
+ * Route-driven fuel + tolls. Returns weekly totals across all active
+ * routes and active vehicles.
+ *
+ *   per vehicle weekly miles =
+ *     SUM(commute_routes.distance × assignment.crossings)
+ *     for that vehicle's active-route assignments, OR
+ *     vehicles.weekly_avg_miles if no active-route assignment exists.
+ *
+ *   weekly tolls = SUM(route.toll_per_crossing × SUM(crossings))
+ *     across active routes with non-null toll.
+ */
+interface VehicleFuelRow {
+  id: string;
+  fuel_type: string;
+  mpg: number | null;
+  kwh_per_mile: number | null;
+  electricity_rate_cents_per_kwh: number | null;
+  weekly_avg_miles: number;
+  assigned_miles: number;
+}
+
+async function routeDrivenWeekly(): Promise<{
+  fuelCents: number;
+  tollsCents: number;
+}> {
+  const vehicles = await pool.query<VehicleFuelRow>(
+    `SELECT v.id, v.fuel_type,
+            v.mpg::float8 AS mpg,
+            v.kwh_per_mile::float8 AS kwh_per_mile,
+            v.electricity_rate_cents_per_kwh,
+            v.weekly_avg_miles::float8 AS weekly_avg_miles,
+            COALESCE(SUM(cr.distance_miles * a.crossings_per_week), 0)::float8
+              AS assigned_miles
+       FROM vehicles v
+  LEFT JOIN route_vehicle_assignments a ON a.vehicle_id = v.id
+  LEFT JOIN commute_routes cr ON cr.id = a.route_id AND cr.active
+      WHERE v.active
+   GROUP BY v.id`,
   );
   const prices = await pool.query<{ fuel_type: string; price_cents_per_gallon: number }>(
     `SELECT fuel_type, price_cents_per_gallon FROM fuel_prices`,
   );
-  const priceByGrade = new Map(prices.rows.map((p) => [p.fuel_type, Number(p.price_cents_per_gallon)]));
-  let totalCents = 0;
+  const priceByGrade = new Map(
+    prices.rows.map((p) => [p.fuel_type, Number(p.price_cents_per_gallon)]),
+  );
+
+  let fuelCents = 0;
   for (const v of vehicles.rows) {
+    const effectiveMiles =
+      v.assigned_miles > 0 ? v.assigned_miles : v.weekly_avg_miles;
+    if (effectiveMiles <= 0) continue;
     if (v.fuel_type === 'electric') {
       if (v.kwh_per_mile == null || v.electricity_rate_cents_per_kwh == null) continue;
-      totalCents += Number(v.weekly_avg_miles) * Number(v.kwh_per_mile) * Number(v.electricity_rate_cents_per_kwh);
+      fuelCents +=
+        effectiveMiles *
+        Number(v.kwh_per_mile) *
+        Number(v.electricity_rate_cents_per_kwh);
     } else {
       if (v.mpg == null || v.mpg <= 0) continue;
       const cpg = priceByGrade.get(v.fuel_type);
       if (cpg === undefined) continue;
-      totalCents += (Number(v.weekly_avg_miles) / Number(v.mpg)) * Number(cpg);
+      fuelCents += (effectiveMiles / Number(v.mpg)) * Number(cpg);
     }
   }
-  return Math.round(totalCents);
+
+  const tolls = await pool.query<{ total: number }>(
+    `SELECT COALESCE(
+       SUM(cr.toll_per_crossing_cents * COALESCE(crossings.total, 0)),
+       0
+     )::bigint AS total
+       FROM commute_routes cr
+  LEFT JOIN (
+        SELECT route_id, SUM(crossings_per_week) AS total
+          FROM route_vehicle_assignments
+      GROUP BY route_id
+     ) crossings ON crossings.route_id = cr.id
+      WHERE cr.active AND cr.toll_per_crossing_cents IS NOT NULL`,
+  );
+
+  return {
+    fuelCents: Math.round(fuelCents),
+    tollsCents: Number(tolls.rows[0]!.total),
+  };
 }
 
-async function weeklyTollsCents(): Promise<number> {
-  const r = await pool.query<{ total: number }>(
-    `SELECT COALESCE(SUM(weekly_estimate_cents), 0)::bigint AS total
-       FROM toll_routes WHERE active`,
+/** Period-level savings suggestion: goal-required across active goals. */
+async function goalRequiredForPeriod(
+  periodEnd: string,
+  periodDays: number,
+): Promise<number> {
+  const goals = await pool.query<{
+    target_amount_cents: number;
+    current_amount_cents: number;
+    target_date: string | null;
+  }>(
+    `SELECT target_amount_cents, current_amount_cents,
+            to_char(target_date, 'YYYY-MM-DD') AS target_date
+       FROM savings_goals
+      WHERE target_date IS NOT NULL`,
   );
-  return Number(r.rows[0]!.total);
+  let total = 0;
+  for (const g of goals.rows) {
+    const remaining = Number(g.target_amount_cents) - Number(g.current_amount_cents);
+    if (remaining <= 0) continue;
+    const daysToTarget = Math.max(1, daysBetween(periodEnd, g.target_date!));
+    const periodsToTarget = Math.max(1, daysToTarget / periodDays);
+    total += remaining / periodsToTarget;
+  }
+  return Math.round(total);
 }
 
 function scaleToPeriod(weeklyCents: number, days: number): number {
@@ -236,16 +327,22 @@ export interface WizardInput {
   periodType: WizardPeriodType;
   anchor: string;
   count: number;
-  /** Optional per-period overrides keyed by period index. */
   groceriesOverrideCents?: Record<number, number>;
   fuelOverrideCents?: Record<number, number>;
   tollsOverrideCents?: Record<number, number>;
+  miscOverrideCents?: Record<number, number>;
+  miscNoteOverride?: Record<number, string>;
+  savingsOverrideCents?: Record<number, number>;
 }
 
 export async function buildWizardPreview(input: WizardInput): Promise<WizardPreview> {
   const groceriesWeekly = await weeklyGroceriesMedian();
-  const fuelWeekly = await weeklyFuelCents();
-  const tollsWeekly = await weeklyTollsCents();
+  const { fuelCents: fuelWeekly, tollsCents: tollsWeekly } = await routeDrivenWeekly();
+
+  const savingsIncomePctStr = await getEffectiveValue('SAVINGS_INCOME_PCT');
+  const savingsLeftoverPctStr = await getEffectiveValue('SAVINGS_LEFTOVER_PCT');
+  const savingsIncomePct = Number(savingsIncomePctStr) || 20;
+  const savingsLeftoverPct = Number(savingsLeftoverPctStr) || 50;
 
   const bills = (
     await pool.query<BillRow>(
@@ -270,9 +367,32 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
       input.groceriesOverrideCents?.[i] ?? scaleToPeriod(groceriesWeekly, days);
     const fuelCents = input.fuelOverrideCents?.[i] ?? scaleToPeriod(fuelWeekly, days);
     const tollsCents = input.tollsOverrideCents?.[i] ?? scaleToPeriod(tollsWeekly, days);
+    const miscCents = input.miscOverrideCents?.[i] ?? 0;
+    const miscNote = input.miscNoteOverride?.[i] ?? '';
     const incomeTotal = incomeHere.reduce((acc, x) => acc + x.amount_cents, 0);
     const billsTotal = billsHere.reduce((acc, x) => acc + x.amount_cents, 0);
-    const flexCents = incomeTotal - billsTotal - groceriesCents - fuelCents - tollsCents;
+
+    // Savings suggestions — computed BEFORE the user's chosen value so
+    // the four numbers are always visible.
+    const goalRequiredCents = await goalRequiredForPeriod(end, days);
+    const pctIncomeCents = Math.round(incomeTotal * (savingsIncomePct / 100));
+    const preFlexCents =
+      incomeTotal - billsTotal - groceriesCents - fuelCents - tollsCents - miscCents;
+    const pctLeftoverCents =
+      preFlexCents > 0 ? Math.round(preFlexCents * (savingsLeftoverPct / 100)) : 0;
+    const maxCents = Math.max(goalRequiredCents, pctIncomeCents, pctLeftoverCents);
+
+    const savingsCents = input.savingsOverrideCents?.[i] ?? 0;
+
+    const flexCents =
+      incomeTotal -
+      billsTotal -
+      groceriesCents -
+      fuelCents -
+      tollsCents -
+      miscCents -
+      savingsCents;
+
     periods.push({
       index: i,
       start,
@@ -283,6 +403,15 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
       groceriesCents,
       fuelCents,
       tollsCents,
+      miscCents,
+      miscNote,
+      savingsCents,
+      savingsSuggestions: {
+        goalRequiredCents,
+        pctIncomeCents,
+        pctLeftoverCents,
+        maxCents,
+      },
       flexCents,
     });
   }
@@ -294,6 +423,8 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
     groceriesWeeklyMedianCents: groceriesWeekly,
     fuelWeeklyCents: fuelWeekly,
     tollsWeeklyCents: tollsWeekly,
+    savingsIncomePct,
+    savingsLeftoverPct,
     periods,
   };
 }
@@ -304,38 +435,19 @@ export interface CommitResult {
   perPeriod: Array<{ index: number; created: number; skipped: number }>;
 }
 
-/**
- * Write the wizard's preview rows to the database. For each period:
- *   - Groceries, Fuel, Tolls budget rows (category_id NULL, no bill_id)
- *   - one budget row per bill instance (category_id NULL, bill_id set)
- * Skip-duplicates rule:
- *   - Groceries/Fuel/Tolls — match on (period_type, period_month, label tag).
- *     We use a synthesized "label" via an existing-row check on (period, NULL category, NULL bill, amount-with-tag matching).
- *     For simplicity, we just skip if the same (period_start, category_id IS NULL, bill_id IS NULL, amount_cents) row exists.
- *   - Bill-linked — skip if a row already has (period_start, bill_id).
- *
- * The Groceries/Fuel/Tolls rows have no `category_id` (they aren't tied to a
- * single category like a normal flex pool either). The UI labels them
- * by inspecting their `memo`-equivalent... we don't have a memo column.
- *
- * IMPORTANT: budgets.amount_cents has `CHECK (amount_cents > 0)` so we
- * skip zero-amount rows entirely (a $0 groceries row is meaningless).
- */
 export async function commitWizard(
   preview: WizardPreview,
 ): Promise<CommitResult> {
-  // We need a way to label the three editable rows so the UI can show them
-  // as Groceries / Fuel / Tolls without pulling from category_id. The
-  // cleanest way without another schema change is to look up the existing
-  // seeded category ids by name and store them on the budget row. The
-  // categories taxonomy is hierarchical; we want the leaf categories.
   const catLookup = await pool.query<{ name: string; id: string }>(
     `SELECT lower(name) AS name, id FROM categories
-      WHERE lower(name) IN ('groceries', 'gas & fuel', 'tolls')`,
+      WHERE lower(name) IN ('groceries', 'gas & fuel', 'tolls', 'miscellaneous', 'savings')`,
   );
-  const groceriesCat = catLookup.rows.find((r) => r.name === 'groceries')?.id ?? null;
-  const fuelCat = catLookup.rows.find((r) => r.name === 'gas & fuel')?.id ?? null;
-  const tollsCat = catLookup.rows.find((r) => r.name === 'tolls')?.id ?? null;
+  const byName = new Map(catLookup.rows.map((r) => [r.name, r.id]));
+  const groceriesCat = byName.get('groceries') ?? null;
+  const fuelCat = byName.get('gas & fuel') ?? null;
+  const tollsCat = byName.get('tolls') ?? null;
+  const miscCat = byName.get('miscellaneous') ?? null;
+  const savingsCat = byName.get('savings') ?? null;
 
   let created = 0;
   let skipped = 0;
@@ -344,14 +456,19 @@ export async function commitWizard(
   for (const p of preview.periods) {
     let cCreated = 0;
     let cSkipped = 0;
-    const editableInputs: Array<{ catId: string | null; amount: number }> = [
-      { catId: groceriesCat, amount: p.groceriesCents },
-      { catId: fuelCat, amount: p.fuelCents },
-      { catId: tollsCat, amount: p.tollsCents },
+    const editableInputs: Array<{
+      catId: string | null;
+      amount: number;
+      note: string | null;
+    }> = [
+      { catId: groceriesCat, amount: p.groceriesCents, note: null },
+      { catId: fuelCat, amount: p.fuelCents, note: null },
+      { catId: tollsCat, amount: p.tollsCents, note: null },
+      { catId: miscCat, amount: p.miscCents, note: p.miscNote || null },
+      { catId: savingsCat, amount: p.savingsCents, note: null },
     ];
     for (const e of editableInputs) {
       if (e.amount <= 0 || e.catId === null) continue;
-      // Skip-duplicate: if a budget already exists for (period_start, category_id) at any period_type, skip.
       const existing = await pool.query(
         `SELECT 1 FROM budgets
           WHERE period_month = $1::date
@@ -364,9 +481,9 @@ export async function commitWizard(
         continue;
       }
       await query(
-        `INSERT INTO budgets (period_month, period_type, category_id, amount_cents)
-         VALUES ($1, $2, $3, $4)`,
-        [p.start, preview.periodType, e.catId, e.amount],
+        `INSERT INTO budgets (period_month, period_type, category_id, amount_cents, note)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [p.start, preview.periodType, e.catId, e.amount, e.note],
       );
       cCreated++;
     }

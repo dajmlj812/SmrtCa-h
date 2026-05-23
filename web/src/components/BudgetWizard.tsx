@@ -37,12 +37,15 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
 
-  /** Inline overrides for the three editable categories, keyed by period index. */
+  /** Inline overrides for each editable category, keyed by period index. */
   const [overrides, setOverrides] = useState<{
     groceries: Record<number, number>;
     fuel: Record<number, number>;
     tolls: Record<number, number>;
-  }>({ groceries: {}, fuel: {}, tolls: {} });
+    misc: Record<number, number>;
+    miscNote: Record<number, string>;
+    savings: Record<number, number>;
+  }>({ groceries: {}, fuel: {}, tolls: {}, misc: {}, miscNote: {}, savings: {} });
 
   const loadPreview = useCallback(async () => {
     setPreviewing(true);
@@ -55,6 +58,9 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         groceriesOverrideCents: overrides.groceries,
         fuelOverrideCents: overrides.fuel,
         tollsOverrideCents: overrides.tolls,
+        miscOverrideCents: overrides.misc,
+        miscNoteOverride: overrides.miscNote,
+        savingsOverrideCents: overrides.savings,
       });
       setPreview(p);
     } catch (e) {
@@ -68,7 +74,11 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     void loadPreview();
   }, [loadPreview]);
 
-  function override(field: 'groceries' | 'fuel' | 'tolls', idx: number, value: string) {
+  function override(
+    field: 'groceries' | 'fuel' | 'tolls' | 'misc' | 'savings',
+    idx: number,
+    value: string,
+  ) {
     const cents = Math.round(Number(value) * 100);
     setOverrides((prev) => {
       const next = { ...prev, [field]: { ...prev[field] } };
@@ -79,6 +89,20 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
       }
       return next;
     });
+  }
+
+  function overrideMiscNote(idx: number, value: string) {
+    setOverrides((prev) => ({
+      ...prev,
+      miscNote: { ...prev.miscNote, [idx]: value },
+    }));
+  }
+
+  function pickSavings(idx: number, cents: number) {
+    setOverrides((prev) => ({
+      ...prev,
+      savings: { ...prev.savings, [idx]: cents },
+    }));
   }
 
   async function commit() {
@@ -92,6 +116,9 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         groceriesOverrideCents: overrides.groceries,
         fuelOverrideCents: overrides.fuel,
         tollsOverrideCents: overrides.tolls,
+        miscOverrideCents: overrides.misc,
+        miscNoteOverride: overrides.miscNote,
+        savingsOverrideCents: overrides.savings,
       });
       onCommitted({ created: r.created, skipped: r.skipped });
     } catch (e) {
@@ -217,12 +244,26 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
                         cents={p.tollsCents}
                         onChange={(v) => override('tolls', p.index, v)}
                       />
+                      <MiscRow
+                        cents={p.miscCents}
+                        note={p.miscNote}
+                        onChangeCents={(v) => override('misc', p.index, v)}
+                        onChangeNote={(v) => overrideMiscNote(p.index, v)}
+                      />
+                      <SavingsRow
+                        cents={p.savingsCents}
+                        suggestions={p.savingsSuggestions}
+                        savingsIncomePct={preview.savingsIncomePct}
+                        savingsLeftoverPct={preview.savingsLeftoverPct}
+                        onChange={(v) => override('savings', p.index, v)}
+                        onPick={(c) => pickSavings(p.index, c)}
+                      />
                       <tr className="wizard-flex">
                         <td className="muted">Flex (remaining)</td>
                         <td className={`num ${p.flexCents >= 0 ? 'pos' : 'neg'}`}>
                           {formatCents(p.flexCents)}
                         </td>
-                        <td className="muted">income − bills − the three</td>
+                        <td className="muted">income − bills − everything above</td>
                       </tr>
                     </tbody>
                   </table>
@@ -281,5 +322,118 @@ function EditableRow({
       </td>
       <td className="muted">editable per period</td>
     </tr>
+  );
+}
+
+function MiscRow({
+  cents,
+  note,
+  onChangeCents,
+  onChangeNote,
+}: {
+  cents: number;
+  note: string;
+  onChangeCents: (v: string) => void;
+  onChangeNote: (v: string) => void;
+}) {
+  return (
+    <tr>
+      <td>Misc</td>
+      <td className="num">
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={(cents / 100).toFixed(2)}
+          onChange={(e) => onChangeCents(e.target.value)}
+          className="wizard-amount"
+        />
+      </td>
+      <td>
+        <input
+          type="text"
+          placeholder="what for? (oil change, gift, etc.)"
+          value={note}
+          onChange={(e) => onChangeNote(e.target.value)}
+          className="wizard-note"
+        />
+      </td>
+    </tr>
+  );
+}
+
+function SavingsRow({
+  cents,
+  suggestions,
+  savingsIncomePct,
+  savingsLeftoverPct,
+  onChange,
+  onPick,
+}: {
+  cents: number;
+  suggestions: {
+    goalRequiredCents: number;
+    pctIncomeCents: number;
+    pctLeftoverCents: number;
+    maxCents: number;
+  };
+  savingsIncomePct: number;
+  savingsLeftoverPct: number;
+  onChange: (v: string) => void;
+  onPick: (cents: number) => void;
+}) {
+  return (
+    <tr>
+      <td>Savings</td>
+      <td className="num">
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={(cents / 100).toFixed(2)}
+          onChange={(e) => onChange(e.target.value)}
+          className="wizard-amount"
+        />
+      </td>
+      <td className="wizard-savings-pickers">
+        <SuggestionChip
+          label="Goal-required"
+          cents={suggestions.goalRequiredCents}
+          onPick={onPick}
+        />
+        <SuggestionChip
+          label={`${savingsIncomePct}% income`}
+          cents={suggestions.pctIncomeCents}
+          onPick={onPick}
+        />
+        <SuggestionChip
+          label={`${savingsLeftoverPct}% leftover`}
+          cents={suggestions.pctLeftoverCents}
+          onPick={onPick}
+        />
+        <SuggestionChip label="Max" cents={suggestions.maxCents} onPick={onPick} />
+      </td>
+    </tr>
+  );
+}
+
+function SuggestionChip({
+  label,
+  cents,
+  onPick,
+}: {
+  label: string;
+  cents: number;
+  onPick: (cents: number) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="wizard-chip"
+      onClick={() => onPick(cents)}
+      title={`Click to use ${(cents / 100).toFixed(2)} as Savings for this period`}
+    >
+      <span className="muted">{label}:</span> ${(cents / 100).toFixed(2)}
+    </button>
   );
 }

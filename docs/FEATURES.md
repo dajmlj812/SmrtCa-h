@@ -114,7 +114,8 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 306-test automated suite (unit → e2e) | ✅ |
+| 330-test automated suite (unit → e2e) | ✅ |
+| GUI-managed runtime settings (no .env edits for live config) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
 | Single-user authentication | ✅ |
 | Encryption at rest (attachments AES-256-GCM; DB via host volume) | ✅ |

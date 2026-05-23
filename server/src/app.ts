@@ -27,9 +27,11 @@ import { normalizationRuleRoutes } from './routes/normalization-rules.js';
 import { splitRoutes } from './routes/splits.js';
 import { holdingRoutes } from './routes/holdings.js';
 import { vehicleRoutes } from './routes/vehicles.js';
-import { tollRouteRoutes } from './routes/toll-routes.js';
+import { commuteRouteRoutes } from './routes/commute-routes.js';
 import { fuelPriceRoutes } from './routes/fuel-prices.js';
 import { budgetWizardRoutes } from './routes/budget-wizard.js';
+import { settingsRoutes } from './routes/settings.js';
+import { applyBootSettings } from './domain/settings.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
 
 // Augment FastifyRequest with the authenticated user. Set by the auth
@@ -62,6 +64,11 @@ export interface BuildAppOptions {
 export async function buildApp(
   opts: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
+  // Hot-load DB-resident settings into `config` BEFORE registering the
+  // cookie plugin / parsing the attachment key — so GUI-set values win
+  // over .env at boot.
+  await applyBootSettings();
+
   const app = Fastify({ logger: opts.logger ?? true });
 
   await app.register(cors, { origin: true, credentials: true });
@@ -146,9 +153,10 @@ export async function buildApp(
   await app.register(splitRoutes);
   await app.register(holdingRoutes);
   await app.register(vehicleRoutes);
-  await app.register(tollRouteRoutes);
+  await app.register(commuteRouteRoutes);
   await app.register(fuelPriceRoutes);
   await app.register(budgetWizardRoutes);
+  await app.register(settingsRoutes);
 
   // Optional: serve the prebuilt web bundle from the same process. The
   // Docker image copies `web/dist` into `server/dist/public`; in dev the

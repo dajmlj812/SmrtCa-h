@@ -287,6 +287,7 @@ export const CATEGORY_TREE: readonly CategoryGroup[] = [
   {
     name: 'Savings & Investments',
     children: [
+      'Savings',
       'Emergency Fund',
       'Retirement Contribution',
       'Brokerage Deposit',
@@ -295,6 +296,7 @@ export const CATEGORY_TREE: readonly CategoryGroup[] = [
       'Crypto Purchase',
     ],
   },
+  { name: 'Miscellaneous', children: [] },
   { name: 'Uncategorized', children: [] },
 ];
 

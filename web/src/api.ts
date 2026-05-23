@@ -33,12 +33,29 @@ export interface Vehicle {
   created_at: string;
 }
 
-export interface TollRoute {
+export interface RouteAssignment {
+  id: string;
+  route_id: string;
+  vehicle_id: string;
+  vehicle_name?: string;
+  crossings_per_week: number;
+}
+
+export interface CommuteRoute {
   id: string;
   name: string;
-  weekly_estimate_cents: number;
+  distance_miles: number;
+  toll_per_crossing_cents: number | null;
   active: boolean;
   created_at: string;
+  assignments: RouteAssignment[];
+}
+
+export interface AiModelOption {
+  id: string;
+  label: string;
+  recommended: boolean;
+  note: string;
 }
 
 export interface FuelPrice {
@@ -46,6 +63,13 @@ export interface FuelPrice {
   price_cents_per_gallon: number;
   source: 'eia' | 'manual';
   fetched_at: string;
+}
+
+export interface WizardSavingsSuggestions {
+  goalRequiredCents: number;
+  pctIncomeCents: number;
+  pctLeftoverCents: number;
+  maxCents: number;
 }
 
 export interface WizardPeriodPreview {
@@ -58,7 +82,22 @@ export interface WizardPeriodPreview {
   groceriesCents: number;
   fuelCents: number;
   tollsCents: number;
+  miscCents: number;
+  miscNote: string;
+  savingsCents: number;
+  savingsSuggestions: WizardSavingsSuggestions;
   flexCents: number;
+}
+
+export interface AppSetting {
+  key: string;
+  label: string;
+  is_secret: boolean;
+  restart_required: boolean;
+  display_value: string;
+  configured_in_gui: boolean;
+  env_fallback_present: boolean;
+  updated_at: string | null;
 }
 
 export interface WizardPreview {
@@ -68,6 +107,8 @@ export interface WizardPreview {
   groceriesWeeklyMedianCents: number;
   fuelWeeklyCents: number;
   tollsWeeklyCents: number;
+  savingsIncomePct: number;
+  savingsLeftoverPct: number;
   periods: WizardPeriodPreview[];
 }
 
@@ -1024,30 +1065,53 @@ export const api = {
   deleteVehicle: (id: string) =>
     http<void>(`/api/vehicles/${id}`, { method: 'DELETE' }),
 
-  listTollRoutes: () =>
-    http<{ tollRoutes: TollRoute[] }>('/api/toll-routes').then(
-      (r) => r.tollRoutes,
-    ),
+  listCommuteRoutes: () =>
+    http<{ routes: CommuteRoute[] }>('/api/commute-routes').then((r) => r.routes),
 
-  createTollRoute: (input: { name: string; weeklyEstimateCents: number }) =>
-    http<{ tollRoute: TollRoute }>('/api/toll-routes', {
+  createCommuteRoute: (input: {
+    name: string;
+    distanceMiles: number;
+    tollPerCrossingCents?: number | null;
+    assignments?: Array<{ vehicleId: string; crossingsPerWeek: number }>;
+  }) =>
+    http<{ route: CommuteRoute }>('/api/commute-routes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
-    }).then((r) => r.tollRoute),
+    }).then((r) => r.route),
 
-  updateTollRoute: (
+  updateCommuteRoute: (
     id: string,
-    input: Partial<{ name: string; weeklyEstimateCents: number; active: boolean }>,
+    input: Partial<{
+      name: string;
+      distanceMiles: number;
+      tollPerCrossingCents: number | null;
+      active: boolean;
+    }>,
   ) =>
-    http<{ tollRoute: TollRoute }>(`/api/toll-routes/${id}`, {
+    http<{ route: CommuteRoute }>(`/api/commute-routes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
-    }).then((r) => r.tollRoute),
+    }).then((r) => r.route),
 
-  deleteTollRoute: (id: string) =>
-    http<void>(`/api/toll-routes/${id}`, { method: 'DELETE' }),
+  setRouteAssignments: (
+    id: string,
+    assignments: Array<{ vehicleId: string; crossingsPerWeek: number }>,
+  ) =>
+    http<{ ok: true; count: number }>(`/api/commute-routes/${id}/assignments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments }),
+    }),
+
+  deleteCommuteRoute: (id: string) =>
+    http<void>(`/api/commute-routes/${id}`, { method: 'DELETE' }),
+
+  aiModels: (provider: string) =>
+    http<{ provider: string; models: AiModelOption[]; note?: string }>(
+      `/api/settings/ai-models?provider=${encodeURIComponent(provider)}`,
+    ),
 
   listFuelPrices: () =>
     http<{ prices: FuelPrice[]; eiaConfigured: boolean }>('/api/fuel-prices'),
@@ -1077,6 +1141,9 @@ export const api = {
     groceriesOverrideCents?: Record<number, number>;
     fuelOverrideCents?: Record<number, number>;
     tollsOverrideCents?: Record<number, number>;
+    miscOverrideCents?: Record<number, number>;
+    miscNoteOverride?: Record<number, string>;
+    savingsOverrideCents?: Record<number, number>;
   }) =>
     http<{ preview: WizardPreview }>('/api/budgets/wizard/preview', {
       method: 'POST',
@@ -1091,6 +1158,9 @@ export const api = {
     groceriesOverrideCents?: Record<number, number>;
     fuelOverrideCents?: Record<number, number>;
     tollsOverrideCents?: Record<number, number>;
+    miscOverrideCents?: Record<number, number>;
+    miscNoteOverride?: Record<number, string>;
+    savingsOverrideCents?: Record<number, number>;
   }) =>
     http<{
       result: {
@@ -1103,4 +1173,21 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }).then((r) => r.result),
+
+  // ── Settings (Phase 7.2) ─────────────────────────────────
+  listSettings: () =>
+    http<{ settings: AppSetting[] }>('/api/settings').then((r) => r.settings),
+
+  putSetting: (key: string, value: string) =>
+    http<{ ok: true; restart_required: boolean }>(`/api/settings/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value }),
+    }),
+
+  clearSetting: (key: string) =>
+    http<void>(`/api/settings/${key}`, { method: 'DELETE' }),
+
+  restartServer: () =>
+    http<{ restarting: boolean }>('/api/admin/restart', { method: 'POST' }),
 };
