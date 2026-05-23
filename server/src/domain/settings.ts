@@ -68,6 +68,15 @@ export const KNOWN_SETTINGS = [
   // Security — super-admin only, restart required
   { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, superOnly: true, label: 'Session secret' },
   { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, superOnly: true, label: 'Attachment encryption key' },
+  // Plaid (Phase 8.2 / 0.11.2) — DISABLED BY DEFAULT. Plaid is the
+  // only data source that leaves the fully-local model: enabling it
+  // sends bank credentials through Plaid's servers. Super-admin-only;
+  // all PLAID_* keys must be set AND PLAID_ENABLED=true for any
+  // server-side code path to run.
+  { key: 'PLAID_ENABLED', isSecret: false, restartRequired: false, superOnly: true, label: 'Plaid — enabled' },
+  { key: 'PLAID_CLIENT_ID', isSecret: false, restartRequired: false, superOnly: true, label: 'Plaid — client_id' },
+  { key: 'PLAID_SECRET', isSecret: true, restartRequired: false, superOnly: true, label: 'Plaid — secret' },
+  { key: 'PLAID_ENV', isSecret: false, restartRequired: false, superOnly: true, label: 'Plaid — environment (sandbox/production)' },
 ] as const;
 
 export type SettingKey = (typeof KNOWN_SETTINGS)[number]['key'];
@@ -132,6 +141,29 @@ export async function listAllSettings(): Promise<SettingRow[]> {
     `SELECT key, value, is_secret, updated_at FROM app_settings`,
   );
   return r.rows;
+}
+
+export interface PlaidConfig {
+  clientId: string;
+  secret: string;
+  environment: 'sandbox' | 'development' | 'production';
+}
+
+/**
+ * Returns the active Plaid configuration when PLAID_ENABLED=true and
+ * client_id + secret + env are all set; otherwise null. Every server-
+ * side Plaid code path consults this gate before doing anything.
+ */
+export async function getPlaidConfig(): Promise<PlaidConfig | null> {
+  const enabled = (await getEffectiveValue('PLAID_ENABLED')).trim().toLowerCase();
+  if (enabled !== 'true' && enabled !== '1' && enabled !== 'yes') return null;
+  const clientId = (await getEffectiveValue('PLAID_CLIENT_ID')).trim();
+  const secret = (await getEffectiveValue('PLAID_SECRET')).trim();
+  const env = (await getEffectiveValue('PLAID_ENV')).trim().toLowerCase();
+  if (!clientId || !secret) return null;
+  const environment =
+    env === 'production' ? 'production' : env === 'development' ? 'development' : 'sandbox';
+  return { clientId, secret, environment };
 }
 
 /** Mask the tail of a secret value for display. */

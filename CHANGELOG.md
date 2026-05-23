@@ -9,9 +9,142 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_Phase 8 in progress. 0.11.0 + 0.11.1 shipped. Next: 0.11.2 Plaid
-(super-admin gated, off by default), 0.11.3 scheduled background
-sync._
+_Phase 8 in progress. 0.11.0–0.11.2 shipped. Next: 0.11.3 scheduled
+background sync runs OFX-DC + Plaid items on a configurable cadence._
+
+---
+
+## [0.11.2] — 2026-05-23 — Plaid integration (Phase 8.2)
+
+Third Phase 8 release. Adds Plaid as a third data source — same
+`TransactionDataSource` interface as OFX-DC, different backend — but
+gated behind a super-admin toggle and **disabled by default**.
+
+Plaid is the only data source that leaves the fully-local model:
+turning it on means bank credentials and statement traffic go through
+Plaid's servers. The roadmap called this out explicitly, so the
+on-by-default story stays "your data stays on your machine"; Plaid
+exists for users who actively opt in to the trade-off.
+
+### Gate
+
+- New super-only settings: `PLAID_ENABLED` (bool), `PLAID_CLIENT_ID`,
+  `PLAID_SECRET`, `PLAID_ENV` (sandbox / development / production).
+- `getPlaidConfig()` returns null unless all four are populated and
+  PLAID_ENABLED is truthy. Every route + data-source code path
+  consults this gate first.
+- `GET /api/plaid/status` is the only Plaid endpoint that works when
+  disabled — returns `{enabled: false, environment: null}`. The web
+  UI uses this to decide whether to even render the Plaid block.
+
+### Schema (migration 023)
+
+- **`plaid_items`** — one row per Plaid item (= one user@institution
+  login). Stores `plaid_item_id`, `institution_id`,
+  `institution_name`, AES-256-GCM-encrypted `access_token_encrypted`,
+  `sync_cursor`, `status`, and the same `last_sync_*` columns as
+  OFX-DC for consistent status surfacing.
+- **`plaid_account_links`** — maps a Plaid account_id to a SmrtCash
+  account_id within an item. UNIQUE(plaid_item_id, plaid_account_id)
+  so re-running the mapping is idempotent.
+
+### Plaid client (`server/src/domain/plaid.ts`)
+
+- Hand-rolled REST wrapper. No SDK — global `fetch`, JSON in / JSON
+  out. Endpoints used: `/link/token/create`,
+  `/item/public_token/exchange`, `/accounts/get`,
+  `/transactions/sync`, `/item/remove`.
+- Categorized error types: `auth_failed` (INVALID_CLIENT_ID,
+  INVALID_SECRET, INVALID_ACCESS_TOKEN, ITEM_LOGIN_REQUIRED),
+  `invalid_request`, `rate_limited` (HTTP 429), `http_error`,
+  `transport_error` (fetch reject / timeout).
+- `mapPlaidTransaction()` — handles the sign flip: Plaid uses
+  positive = outflow, SmrtCash uses negative = outflow, so amounts
+  are inverted at the boundary. Falls back to `name` when
+  `merchant_name` is absent. Surfaces pending status into memo.
+
+### Data source (`server/src/datasource/plaid.ts`)
+
+- Implements `TransactionDataSource`. Paginates `/transactions/sync`
+  starting from the stored cursor until `has_more=false` (max 50
+  pages safety guard).
+- `fetchPlaidItemTransactions()` returns transactions GROUPED BY
+  SmrtCash account via the link table — this is the shape the route
+  needs because one Plaid item can fan out to multiple SmrtCash
+  accounts.
+- Unmapped Plaid accounts are tracked separately and reported in
+  the sync response so the user knows to map them.
+
+### Routes (`server/src/routes/plaid.ts`)
+
+- `GET    /api/plaid/status` — public to authenticated users.
+- `POST   /api/plaid/link-token` — creates the link_token for the
+  browser widget. Admin only.
+- `POST   /api/plaid/exchange` — accepts the public_token from
+  Plaid Link, exchanges for access_token + item_id, fetches the
+  account list, persists encrypted. Admin only.
+- `GET    /api/plaid/items` — list items + their account links.
+- `POST   /api/plaid/items/:id/link-account` — bulk-write the
+  Plaid → SmrtCash account mappings. Admin only.
+- `POST   /api/plaid/items/:id/sync` — run a full sync. Calls
+  `persistBatch()` per linked account so dedup + counters work
+  identically to file imports and OFX-DC. Admin + spouse.
+- `DELETE /api/plaid/items/:id` — best-effort calls Plaid's
+  `/item/remove` (stops billing in production), then deletes the
+  local row. Admin only.
+
+### Web
+
+- New `PlaidSection.tsx` component. Renders only when status
+  reports enabled.
+- "Connect via Plaid" button — loads the Plaid Link script from
+  `cdn.plaid.com` on-demand the first time it's clicked. The
+  script is the only external JS in the entire SPA and only loads
+  when the user actively initiates a connection.
+- Post-exchange: account-mapper modal lets the user pick which
+  SmrtCash account each Plaid account routes to (with "Skip"
+  option per account).
+- Items table: Institution / linked accounts / last-sync / status
+  pill / per-row Sync / Remove buttons.
+
+### Importer / persistence
+
+- `import_batches.format_id` now sees `'plaid'` as a value
+  alongside `'csv'`, `'xlsx'`, `'ofx'`, `'qfx'`, `'qif'`, `'ofx_dc'`.
+  No schema change needed — it's a free-text column.
+
+### Tests (+17 server)
+
+- `tests/unit/plaid-client.test.ts` — 8 tests: host routing, body
+  shape (client_id + secret + payload), `auth_failed` on
+  INVALID_CLIENT_ID, `rate_limited` on HTTP 429, transport rejection,
+  cursor passthrough, amount-sign inversion, fallback to `name`
+  when `merchant_name` absent.
+- `tests/integration/plaid.test.ts` — 9 tests: status off/on, gate
+  rejects link-token when disabled, happy-path link-token,
+  exchange + DB encryption check (token not stored in plaintext),
+  account mapping, full sync (transaction lands on mapped
+  SmrtCash account, cursor advances, status flips to ok), sync
+  surfaces auth_failed, DELETE calls /item/remove and removes the
+  row.
+- Total: **467 tests** (461 server + 6 web), all green.
+
+### Files
+
+```
+server/src/db/migrations/023_phase8_2_plaid.sql       (new)
+server/src/domain/plaid.ts                            (new)
+server/src/domain/settings.ts                         (+PLAID_* keys, getPlaidConfig)
+server/src/datasource/plaid.ts                        (new)
+server/src/routes/plaid.ts                            (new)
+server/src/app.ts                                     (register routes)
+server/tests/setup/test-db.ts                         (TRUNCATE plaid_*)
+server/tests/unit/plaid-client.test.ts                (new)
+server/tests/integration/plaid.test.ts                (new)
+web/src/api.ts                                        (Plaid types + methods)
+web/src/components/PlaidSection.tsx                   (new)
+web/src/pages/ConnectionsPage.tsx                     (mount PlaidSection)
+```
 
 ---
 

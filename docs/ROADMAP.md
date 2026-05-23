@@ -18,7 +18,7 @@ nothing is "all or nothing."
 | 5 | Dockerization, Auth & Hardening | ✅ Complete — 2026-05-22 |
 | 6 | Budgeting & Cash Flow | ✅ Complete — 2026-05-22 |
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
-| 8 | Connectivity & Automation | 🔜 In progress — 8.0 ✅ · 8.1 ✅ |
+| 8 | Connectivity & Automation | 🔜 In progress — 8.0 ✅ · 8.1 ✅ · 8.2 ✅ |
 | 9 | Mobile, Assistant & Experience | 📋 Planned |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
@@ -234,9 +234,14 @@ Sliced into four releases:
   AES-256-GCM encrypted under `ATTACHMENT_ENCRYPTION_KEY`), OFX 1.x
   SGML request builder, `/api/ofx-dc/connections` CRUD + `/test` +
   `/sync` routes, web Connections page with Test / Sync now.
-- **8.2** 📋 — **Plaid integration**, super-admin-gated and disabled
-  by default. Clearly flagged as leaving the fully-local model.
-  Same data-source interface, different backend.
+- **8.2** ✅ (released as 0.11.2) — **Plaid integration**,
+  super-admin-gated via the `PLAID_ENABLED` setting and disabled
+  by default. New `plaid_items` + `plaid_account_links` tables
+  (access tokens AES-256-GCM encrypted), full
+  link-token / public-token exchange / `/transactions/sync` /
+  `/item/remove` flow, web Connections page extension that only
+  renders when `/api/plaid/status` reports enabled=true and only
+  loads Plaid's external Link widget on-demand.
 - **8.3** 📋 — **scheduled background sync** + auto-import. A
   per-tenant cadence calls `fetch()` on each enabled data source
   and runs the same dedup + persistence path.

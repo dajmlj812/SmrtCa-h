@@ -94,6 +94,43 @@ export interface OfxDcConnectionInput {
   enabled?: boolean;
 }
 
+export interface PlaidItemSummary {
+  id: string;
+  plaid_item_id: string;
+  institution_id: string | null;
+  institution_name: string | null;
+  status: string;
+  last_sync_at: string | null;
+  last_sync_status: string;
+  last_sync_error: string | null;
+  last_sync_imported: number | null;
+  last_sync_skipped: number | null;
+  created_at: string;
+  has_cursor: boolean;
+}
+
+export interface PlaidAccountInfo {
+  account_id: string;
+  name: string;
+  official_name: string | null;
+  type: string;
+  subtype: string | null;
+  mask: string | null;
+}
+
+export interface PlaidItemAccountLink {
+  plaid_account_id: string;
+  account_id: string;
+  plaid_account_name: string | null;
+  plaid_account_mask: string | null;
+  plaid_account_type: string | null;
+  plaid_account_subtype: string | null;
+}
+
+export interface PlaidItemWithLinks extends PlaidItemSummary {
+  links: PlaidItemAccountLink[];
+}
+
 export interface OfxDcActionResult {
   ok: boolean;
   kind?: string;
@@ -1841,6 +1878,62 @@ export const api = {
     http<OfxDcActionResult>(`/api/ofx-dc/connections/${id}/sync`, {
       method: 'POST',
     }),
+
+  // ── Plaid (Phase 8.2 / 0.11.2) — disabled by default ─────
+  plaidStatus: () =>
+    http<{ enabled: boolean; environment: string | null }>('/api/plaid/status'),
+
+  plaidLinkToken: () =>
+    http<{ link_token: string; expiration: string }>('/api/plaid/link-token', {
+      method: 'POST',
+    }),
+
+  plaidExchange: (publicToken: string) =>
+    http<{ item: PlaidItemSummary; accounts: PlaidAccountInfo[] }>(
+      '/api/plaid/exchange',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicToken }),
+      },
+    ),
+
+  plaidListItems: () =>
+    http<{ items: PlaidItemWithLinks[] }>('/api/plaid/items').then((r) => r.items),
+
+  plaidLinkAccounts: (
+    itemId: string,
+    links: Array<{
+      plaidAccountId: string;
+      accountId: string;
+      plaidAccountName?: string;
+      plaidAccountMask?: string;
+      plaidAccountType?: string;
+      plaidAccountSubtype?: string;
+    }>,
+  ) =>
+    http<{ ok: true; linkedCount: number }>(
+      `/api/plaid/items/${itemId}/link-account`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ links }),
+      },
+    ),
+
+  plaidSyncItem: (itemId: string) =>
+    http<{
+      ok: boolean;
+      importedCount?: number;
+      skippedCount?: number;
+      errorCount?: number;
+      unmappedCount?: number;
+      error?: string;
+      kind?: string;
+    }>(`/api/plaid/items/${itemId}/sync`, { method: 'POST' }),
+
+  plaidDeleteItem: (itemId: string) =>
+    http<void>(`/api/plaid/items/${itemId}`, { method: 'DELETE' }),
 
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),

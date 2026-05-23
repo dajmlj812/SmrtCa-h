@@ -41,6 +41,7 @@ import { systemRoutes } from './routes/system.js';
 import { exchangeRatesRoutes } from './routes/exchange-rates.js';
 import { projectionRoutes } from './routes/projections.js';
 import { ofxDcRoutes } from './routes/ofx-dc.js';
+import { plaidRoutes } from './routes/plaid.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { metricsRecorder } from './domain/metrics-recorder.js';
@@ -200,6 +201,7 @@ export async function buildApp(
   await app.register(exchangeRatesRoutes);
   await app.register(projectionRoutes);
   await app.register(ofxDcRoutes);
+  await app.register(plaidRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.

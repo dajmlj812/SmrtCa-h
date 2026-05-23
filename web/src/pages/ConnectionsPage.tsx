@@ -7,6 +7,7 @@ import {
   type OfxDcConnectionInput,
 } from '../api';
 import { formatDate } from '../format';
+import { PlaidSection } from '../components/PlaidSection';
 
 /**
  * Phase 8.1 (0.11.1) — Bank Connections via OFX Direct Connect.
@@ -382,6 +383,8 @@ export function ConnectionsPage() {
       <div className="section-title" style={{ marginTop: 24 }}>
         Connections
       </div>
+      <PlaidSection accounts={accounts} />
+
       {connections.length === 0 ? (
         <p className="empty">No bank connections yet.</p>
       ) : (
