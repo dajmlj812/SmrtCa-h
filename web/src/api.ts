@@ -875,14 +875,14 @@ export const api = {
     tenantId: string,
     input: { emailHint?: string; role: 'admin' | 'member' | 'viewer' },
   ) =>
-    http<{ invitation: Invitation }>(
-      `/api/tenants/${tenantId}/invitations`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      },
-    ).then((r) => r.invitation),
+    http<{
+      invitation: Invitation;
+      email: { sent: boolean; reason?: string };
+    }>(`/api/tenants/${tenantId}/invitations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
 
   revokeInvitation: (tenantId: string, invId: string) =>
     http<void>(`/api/tenants/${tenantId}/invitations/${invId}`, {
@@ -1520,6 +1520,18 @@ export const api = {
 
   restartServer: () =>
     http<{ restarting: boolean }>('/api/admin/restart', { method: 'POST' }),
+
+  smtpTest: (to: string) =>
+    http<{
+      ok: boolean;
+      message_id?: string;
+      stage?: string;
+      reason?: string;
+    }>('/api/admin/smtp-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to }),
+    }),
 
   // ── Health (Phase 7.6 + 7.8) ─────────────────────────────
   healthMetrics: () => http<HealthSnapshot>('/api/health/metrics'),

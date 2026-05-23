@@ -13,6 +13,54 @@ _Multi-currency support and retirement projections still queued._
 
 ---
 
+## [0.8.1] — 2026-05-23 — SMTP for outbound communications
+
+GUI-managed SMTP plumbing with the first use case wired: invitation
+emails. Future password resets, bill-due alerts, and backup-failure
+notifications slot in as additional `tryMail()` callers.
+
+### Added
+
+- **nodemailer** dependency (server). One transport built on demand
+  per send; no persistent connection pool — fine for self-hosted
+  volume.
+- **`domain/mailer.ts`** — `tryMail()` sends one message, returns
+  `{ sent: false, reason }` when SMTP is unconfigured so callers can
+  decide between sending and surfacing a "configure SMTP" hint.
+  `verifyConnection()` validates the transport for the Test button.
+  `renderInvitationEmail()` builds the invitation HTML + text body.
+- **New settings keys** (all live, mailer reads on each send):
+  `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` (masked secret),
+  `SMTP_FROM`, `SMTP_SECURE` (TLS-on-connect for port 465), and
+  `APP_BASE_URL` (operator-set base URL for email links — needed for
+  headless sends where request headers aren't reliable).
+- **`POST /api/admin/smtp-test`** — verifies the connection then
+  sends a one-line test email. Owner-only. Reports the failure stage
+  (`verify` vs `send`) when it doesn't work.
+- **Settings page** gets an SMTP section with all six keys + an
+  inline test-send panel that displays the result inline.
+- **Invitation create** now sends the invite link via email when SMTP
+  is configured AND an `emailHint` was supplied. Best-effort: if the
+  send fails, the invite row still exists, the InviteForm stays open
+  with the failure reason, and the copy-link button on the row still
+  works.
+
+### Tests
+
+- `+4` integration tests (`smtp.test.ts`): test-send 400s without a
+  recipient, test-send 400s with reason when SMTP unconfigured, invite
+  create still 201s with `email.sent=false` reason, no-hint reports
+  the no-hint reason.
+- **Total: 363** (server 357 + web 6).
+
+### Notes
+
+- The provided test environment doesn't reach a real SMTP server;
+  coverage of the success path will land alongside a future
+  vi.mock-based suite or a CI-side fake SMTP fixture.
+
+---
+
 ## [0.8.0] — 2026-05-23 — Multi-tenant + multi-user foundation
 
 Headline shift: SmrtCash is no longer a single-user-per-instance app.

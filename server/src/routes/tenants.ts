@@ -9,6 +9,8 @@ import {
 } from '../auth/passwords.js';
 import { createSession, setSessionTenant, SESSION_COOKIE } from '../auth/sessions.js';
 import { config } from '../config.js';
+import { renderInvitationEmail, tryMail } from '../domain/mailer.js';
+import { getEffectiveValue } from '../domain/settings.js';
 
 /**
  *   GET  /api/tenants                       — tenants the user belongs to
@@ -200,7 +202,48 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
          RETURNING id, token, expires_at::text`,
         [req.params.id, emailHint, inviteRole, token, req.user.id, expiresAt],
       );
-      return reply.code(201).send({ invitation: r.rows[0] });
+
+      // Best-effort email when SMTP is configured AND an email was
+      // supplied. Failure to send is NOT fatal — the invite row still
+      // exists and the copy-link UI works as a fallback.
+      let emailResult: { sent: boolean; reason?: string } = {
+        sent: false,
+        reason: 'No email hint provided',
+      };
+      if (emailHint) {
+        try {
+          const tenantRes = await pool.query<{ name: string }>(
+            `SELECT name FROM tenants WHERE id = $1`,
+            [req.params.id],
+          );
+          const inviterRes = await pool.query<{
+            name: string | null;
+            email: string | null;
+          }>(`SELECT name, email FROM users WHERE id = $1`, [req.user.id]);
+          const baseUrl = await resolveBaseUrl(req.headers);
+          const inviter =
+            inviterRes.rows[0]?.name || inviterRes.rows[0]?.email || 'A teammate';
+          const rendered = renderInvitationEmail({
+            tenantName: tenantRes.rows[0]?.name ?? 'your workspace',
+            inviterName: inviter,
+            role: inviteRole,
+            acceptUrl: `${baseUrl}/invite/${token}`,
+            expiresAt: expiresAt.toISOString().slice(0, 10),
+          });
+          const sendRes = await tryMail({ to: emailHint, ...rendered });
+          emailResult = { sent: sendRes.sent, reason: sendRes.reason };
+        } catch (err) {
+          emailResult = {
+            sent: false,
+            reason: err instanceof Error ? err.message : 'Send failed',
+          };
+        }
+      }
+
+      return reply.code(201).send({
+        invitation: r.rows[0],
+        email: emailResult,
+      });
     },
   );
 
@@ -349,4 +392,28 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+}
+
+/**
+ * Resolve the public base URL for outgoing links. Priority:
+ *   1. APP_BASE_URL setting (operator-set; required for headless sends
+ *      where the request that creates the invite has no real headers).
+ *   2. The request's Origin / Host header (best-effort fallback when
+ *      the create-invite call came from a browser session).
+ */
+async function resolveBaseUrl(headers: Record<string, unknown>): Promise<string> {
+  const fromSettings = (await getEffectiveValue('APP_BASE_URL')).trim();
+  if (fromSettings !== '') {
+    return fromSettings.replace(/\/+$/, '');
+  }
+  const origin = headers['origin'];
+  if (typeof origin === 'string' && origin.startsWith('http')) {
+    return origin.replace(/\/+$/, '');
+  }
+  const proto = headers['x-forwarded-proto'] ?? 'http';
+  const host = headers['host'];
+  if (typeof host === 'string') {
+    return `${String(proto)}://${host}`.replace(/\/+$/, '');
+  }
+  return 'http://localhost:4000';
 }

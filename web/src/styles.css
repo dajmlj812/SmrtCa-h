@@ -1719,3 +1719,18 @@ tr.selected {
   letter-spacing: 0.05em;
   margin: 8px 0;
 }
+
+/* SMTP test panel on the Settings page (Phase 8.1) */
+.smtp-test-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+.smtp-test-row input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}

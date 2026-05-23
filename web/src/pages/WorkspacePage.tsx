@@ -317,10 +317,19 @@ function InviteForm({
     setSubmitting(true);
     setError(null);
     try {
-      await api.createInvitation(tenantId, {
+      const r = await api.createInvitation(tenantId, {
         emailHint: emailHint.trim() || undefined,
         role,
       });
+      // When email was requested but didn't send, leave the form open
+      // with the reason so the user can decide whether to fix SMTP or
+      // fall back to copy-link.
+      if (emailHint.trim() && !r.email.sent) {
+        setError(
+          `Invitation created, but email not sent: ${r.email.reason ?? 'unknown'}. Close this form to copy the link from the list below.`,
+        );
+        return;
+      }
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Create failed');

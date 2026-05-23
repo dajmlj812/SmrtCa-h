@@ -10,6 +10,7 @@ import {
   setDbValue,
   settingMeta,
 } from '../domain/settings.js';
+import { tryMail, verifyConnection } from '../domain/mailer.js';
 
 interface PublicSettingRow {
   key: string;
@@ -208,6 +209,33 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       return { provider, models: [] };
     },
   );
+
+  // SMTP test: verify connection only, then send a one-line test email
+  // to the supplied address. Used by the Settings page to confirm SMTP
+  // is configured before relying on it for invitations / alerts.
+  app.post('/api/admin/smtp-test', async (req, reply) => {
+    const body = (req.body ?? {}) as { to?: unknown };
+    const to = typeof body.to === 'string' ? body.to.trim() : '';
+    if (to === '' || !/.+@.+\..+/.test(to)) {
+      return reply.code(400).send({ error: 'to must be a valid email address' });
+    }
+    const verify = await verifyConnection();
+    if (!verify.ok) {
+      return reply.code(400).send({ ok: false, stage: 'verify', reason: verify.reason });
+    }
+    const result = await tryMail({
+      to,
+      subject: 'SmrtCash SMTP test',
+      text:
+        'This is a SmrtCash SMTP test message.\n\n' +
+        'If you can read this, your SMTP configuration is working. ' +
+        'Invitations and other outbound messages will use this same path.',
+    });
+    if (!result.sent) {
+      return reply.code(400).send({ ok: false, stage: 'send', reason: result.reason });
+    }
+    return { ok: true, message_id: result.messageId };
+  });
 
   // Restart endpoint — used to apply restart-required settings. In Docker
   // the supervisor (`restart: unless-stopped`) brings the process back up;

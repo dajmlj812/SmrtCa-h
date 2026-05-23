@@ -41,6 +41,18 @@ export const KNOWN_SETTINGS = [
   { key: 'BACKUP_TIME', isSecret: false, restartRequired: false, label: 'Backup — time (HH:MM, 24h)' },
   { key: 'BACKUP_RETENTION_DAYS', isSecret: false, restartRequired: false, label: 'Backup — retention (days)' },
   { key: 'BACKUP_DIR', isSecret: false, restartRequired: false, label: 'Backup — directory' },
+  // SMTP — live (mailer loads config on each send)
+  { key: 'SMTP_HOST', isSecret: false, restartRequired: false, label: 'SMTP host' },
+  { key: 'SMTP_PORT', isSecret: false, restartRequired: false, label: 'SMTP port' },
+  { key: 'SMTP_USER', isSecret: false, restartRequired: false, label: 'SMTP username' },
+  { key: 'SMTP_PASS', isSecret: true, restartRequired: false, label: 'SMTP password' },
+  { key: 'SMTP_FROM', isSecret: false, restartRequired: false, label: 'SMTP from address' },
+  { key: 'SMTP_SECURE', isSecret: false, restartRequired: false, label: 'SMTP TLS-on-connect (port 465)' },
+  // Public-facing app URL — used to build absolute links in outgoing
+  // emails (invitations, future password resets). Defaults to the
+  // browser-detected origin when unset, but for fully-headless sends
+  // this needs to be configured.
+  { key: 'APP_BASE_URL', isSecret: false, restartRequired: false, label: 'App base URL (for email links)' },
   // Security — restart required
   { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, label: 'Session secret' },
   { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, label: 'Attachment encryption key' },

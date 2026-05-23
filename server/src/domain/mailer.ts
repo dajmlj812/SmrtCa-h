@@ -1,0 +1,173 @@
+import nodemailer, { type Transporter } from 'nodemailer';
+import { getEffectiveValue } from './settings.js';
+
+/**
+ * SMTP mailer. Builds a nodemailer transport on demand from
+ * runtime-editable settings (SMTP_HOST, SMTP_PORT, SMTP_USER,
+ * SMTP_PASS, SMTP_FROM, SMTP_SECURE), sends one message, and tears
+ * down. For a single-instance self-hosted finance app the volume is
+ * low enough that the per-call connection cost doesn't matter; an
+ * "outbox" table + worker only earns its complexity at higher volume.
+ *
+ * Every send goes through `tryMail()` — when SMTP is unconfigured, the
+ * function returns `{ sent: false, reason: 'smtp not configured' }`
+ * instead of throwing. Callers (invite creation, future bill alerts)
+ * use the return value to decide whether to fall back to the copy-link
+ * path or surface a "configure SMTP" hint.
+ */
+
+export interface MailMessage {
+  to: string;
+  subject: string;
+  /** Plain text body. Used as a fallback for HTML-disabled clients. */
+  text: string;
+  /** Optional HTML body. */
+  html?: string;
+}
+
+export interface MailResult {
+  sent: boolean;
+  /** Message-Id from the SMTP server when sent; null otherwise. */
+  messageId?: string;
+  /** Human-readable reason when `sent === false`. */
+  reason?: string;
+}
+
+interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  from: string;
+  secure: boolean;
+}
+
+async function loadConfig(): Promise<SmtpConfig | null> {
+  const [host, port, user, pass, from, secure] = await Promise.all([
+    getEffectiveValue('SMTP_HOST'),
+    getEffectiveValue('SMTP_PORT'),
+    getEffectiveValue('SMTP_USER'),
+    getEffectiveValue('SMTP_PASS'),
+    getEffectiveValue('SMTP_FROM'),
+    getEffectiveValue('SMTP_SECURE'),
+  ]);
+  if (host.trim() === '' || from.trim() === '') return null;
+  const portNum = Number(port) || 587;
+  return {
+    host: host.trim(),
+    port: portNum,
+    user: user.trim(),
+    pass: pass, // never trim — passwords can be whitespace-sensitive
+    from: from.trim(),
+    // SMTP_SECURE === 'true' implies TLS-on-connect (typically port 465).
+    // Otherwise STARTTLS is negotiated when available — that's the
+    // common case for ports 587 / 25.
+    secure: secure.toLowerCase() === 'true',
+  };
+}
+
+function buildTransport(cfg: SmtpConfig): Transporter {
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: cfg.user !== '' ? { user: cfg.user, pass: cfg.pass } : undefined,
+  });
+}
+
+/**
+ * Send a message. Returns { sent: false } when SMTP is unconfigured;
+ * throws when SMTP IS configured but the send itself fails — that's a
+ * real error the caller should surface.
+ */
+export async function tryMail(msg: MailMessage): Promise<MailResult> {
+  const cfg = await loadConfig();
+  if (!cfg) {
+    return {
+      sent: false,
+      reason: 'SMTP not configured — set SMTP_HOST and SMTP_FROM on the Settings page',
+    };
+  }
+  const transport = buildTransport(cfg);
+  try {
+    const info = await transport.sendMail({
+      from: cfg.from,
+      to: msg.to,
+      subject: msg.subject,
+      text: msg.text,
+      html: msg.html,
+    });
+    return { sent: true, messageId: info.messageId };
+  } finally {
+    transport.close();
+  }
+}
+
+/** Verify the configured SMTP connection (no send). Used by the Test button. */
+export async function verifyConnection(): Promise<{
+  ok: boolean;
+  reason?: string;
+}> {
+  const cfg = await loadConfig();
+  if (!cfg) {
+    return { ok: false, reason: 'SMTP not configured' };
+  }
+  const transport = buildTransport(cfg);
+  try {
+    await transport.verify();
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    transport.close();
+  }
+}
+
+/** Render the email body for an invitation link. */
+export function renderInvitationEmail(opts: {
+  tenantName: string;
+  inviterName: string;
+  role: string;
+  acceptUrl: string;
+  expiresAt: string;
+}): { subject: string; text: string; html: string } {
+  const subject = `You're invited to join ${opts.tenantName} on SmrtCash`;
+  const text = [
+    `${opts.inviterName} has invited you to join "${opts.tenantName}" on SmrtCash`,
+    `as a ${opts.role}.`,
+    ``,
+    `Accept your invitation:`,
+    opts.acceptUrl,
+    ``,
+    `This invitation expires ${opts.expiresAt}.`,
+    ``,
+    `If you weren't expecting this email, you can safely ignore it — the`,
+    `link is only useful to whoever you forward it to.`,
+  ].join('\n');
+  const html = [
+    `<p>${escapeHtml(opts.inviterName)} has invited you to join`,
+    `<strong>${escapeHtml(opts.tenantName)}</strong> on SmrtCash`,
+    `as a <strong>${escapeHtml(opts.role)}</strong>.</p>`,
+    `<p><a href="${escapeAttr(opts.acceptUrl)}"`,
+    `style="display:inline-block;padding:10px 18px;background:#6366f1;`,
+    `color:#fff;border-radius:4px;text-decoration:none">Accept invitation</a></p>`,
+    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
+    `<code>${escapeHtml(opts.acceptUrl)}</code></p>`,
+    `<p style="color:#6b7280;font-size:0.85em">This invitation expires ${escapeHtml(opts.expiresAt)}.</p>`,
+  ].join(' ');
+  return { subject, text, html };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escapeAttr(s: string): string {
+  return escapeHtml(s);
+}

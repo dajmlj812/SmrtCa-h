@@ -23,6 +23,20 @@ const SECTIONS: Array<{ title: string; subtitle: string; keys: string[] }> = [
     keys: ['EIA_API_KEY'],
   },
   {
+    title: 'SMTP — outbound email',
+    subtitle:
+      'Powers invitation emails (and future password resets / alerts). Leave blank to disable — invites still work via copy-link.',
+    keys: [
+      'SMTP_HOST',
+      'SMTP_PORT',
+      'SMTP_USER',
+      'SMTP_PASS',
+      'SMTP_FROM',
+      'SMTP_SECURE',
+      'APP_BASE_URL',
+    ],
+  },
+  {
     title: 'Security — restart required',
     subtitle:
       'Rotating these breaks things if done wrong. The server must restart for new values to apply.',
@@ -149,32 +163,90 @@ export function SettingsPage() {
       {loading ? (
         <p className="empty">Loading…</p>
       ) : (
-        SECTIONS.map((section) => (
-          <div key={section.title} className="page-section">
-            <div className="page-section-head">
-              <div>
-                <h2>{section.title}</h2>
-                <div className="muted" style={{ fontSize: 13 }}>
-                  {section.subtitle}
+        <>
+          {SECTIONS.map((section) => (
+            <div key={section.title} className="page-section">
+              <div className="page-section-head">
+                <div>
+                  <h2>{section.title}</h2>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {section.subtitle}
+                  </div>
                 </div>
               </div>
+              <div className="card settings-list">
+                {section.keys.map((key) => {
+                  const setting = settings.find((s) => s.key === key);
+                  if (!setting) return null;
+                  return (
+                    <SettingRow
+                      key={setting.key}
+                      setting={setting}
+                      onSave={(v) => void save(setting, v)}
+                      onClear={() => void clearKey(setting)}
+                    />
+                  );
+                })}
+                {section.title.startsWith('SMTP') && <SmtpTestPanel />}
+              </div>
             </div>
-            <div className="card settings-list">
-              {section.keys.map((key) => {
-                const setting = settings.find((s) => s.key === key);
-                if (!setting) return null;
-                return (
-                  <SettingRow
-                    key={setting.key}
-                    setting={setting}
-                    onSave={(v) => void save(setting, v)}
-                    onClear={() => void clearKey(setting)}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ))
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SmtpTestPanel() {
+  const [to, setTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+
+  async function run() {
+    if (to.trim() === '') return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api.smtpTest(to.trim());
+      if (r.ok) {
+        setResult({ ok: true, text: `Sent (Message-Id ${r.message_id ?? '—'})` });
+      } else {
+        setResult({
+          ok: false,
+          text: `Failed at ${r.stage ?? '?'}: ${r.reason ?? 'unknown'}`,
+        });
+      }
+    } catch (e) {
+      setResult({ ok: false, text: e instanceof Error ? e.message : 'Test failed' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="smtp-test-row">
+      <input
+        type="email"
+        placeholder="Send a test message to…"
+        value={to}
+        onChange={(e) => setTo(e.target.value)}
+        disabled={busy}
+      />
+      <button
+        className="btn"
+        type="button"
+        onClick={() => void run()}
+        disabled={busy || to.trim() === ''}
+      >
+        {busy ? 'Sending…' : 'Send test'}
+      </button>
+      {result && (
+        <span className={result.ok ? 'pill status-keep-pill' : 'pill status-cancel-pill'}>
+          {result.text}
+        </span>
       )}
     </div>
   );
