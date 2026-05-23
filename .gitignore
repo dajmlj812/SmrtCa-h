@@ -31,6 +31,9 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Claude Code personal overrides (keep .claude/settings.json shareable)
+.claude/settings.local.json
+
 # Never commit real financial data
 samples/*.CSV
 samples/*.csv
