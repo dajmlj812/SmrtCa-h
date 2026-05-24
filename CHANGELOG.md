@@ -9,11 +9,72 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.16.0 shipped. The /signup → email-verify → /billing flow is
-the SaaS happy path for new customers; the public-signup gate
-defaults off so existing self-host deployments inherit no new
-attack surface. Next on v0.16: per-tenant attachment-encryption
-rotation (0.16.1)._
+_0.16.0–0.16.1 shipped. New customers can self-serve from
+/signup; super admins now have a /system/subscriptions console
+that backs the runbook's courtesy-grant / Stripe-sync / force-
+cancel flows from the UI instead of the CLI. Per-tenant
+attachment-encryption rotation slides to 0.16.2._
+
+---
+
+## [0.16.1] — 2026-05-24 — Super-admin subscriptions console
+
+A new third tab on /system shows every tenant's billing state on
+one screen, with audit-logged actions for the three operations
+the runbook calls out as common:
+
+- **Grant courtesy plan** — UPSERT a local `subscriptions` row
+  with `status='active'` and a chosen period (1–365 days).
+  Plan + days + free-form reason are recorded in `audit_log`.
+  Doesn't touch Stripe; the webhook overwrites this row if the
+  tenant later goes through Checkout.
+- **Sync from Stripe** — for tenants with a stored
+  `stripe_subscription_id`, re-pulls the live subscription and
+  funnels it through the existing `handleSubscriptionUpsert`
+  so the result is identical to what a real
+  `customer.subscription.updated` webhook would produce. Useful
+  when a webhook delivery was dropped and our row drifted.
+- **Force-cancel (local only)** — `DELETE` the row entirely.
+  Explicit confirm prompt warns that Stripe still considers the
+  sub live unless cancelled separately; the next webhook will
+  recreate the row otherwise.
+
+### Backend
+
+- `GET /api/system/subscriptions` — list every tenant joined
+  with their subscription row (LEFT JOIN, so tenants without a
+  sub appear with null fields). Includes member count + Stripe
+  IDs for the operator to copy into the Stripe dashboard.
+- `POST /api/system/subscriptions/:tenantId/grant` — body
+  `{ plan, days, reason? }`; validates plan ∈ {starter,plus,
+  family} and days ∈ 1..365.
+- `POST /api/system/subscriptions/:tenantId/sync` — 503 when
+  Stripe isn't configured, 404 when no `stripe_subscription_id`
+  on file, 502 when Stripe lookup fails, 200 on success.
+- `DELETE /api/system/subscriptions/:tenantId` — 404 when no
+  row exists, 200 + `cleared:true` on success.
+- All four routes super-admin-gated via `requireSuperAdmin`.
+
+### Web
+
+- `SystemPage` gains a third tab dispatcher
+  (`overview | subscriptions | audit`). New `SubscriptionsTab`
+  renders a filterable table (all / paying / trialing / past_due
+  / no plan), free-text search across name+slug+stripe customer,
+  and per-row action buttons. Includes a `GrantModal` for the
+  courtesy-grant flow with the audit-logged reason field.
+- New nav link "Subscriptions" between Overview and Audit log
+  in the super-admin sidebar. New route at
+  `/system/subscriptions`.
+
+### Tests
+
+`server/tests/integration/system-subscriptions.test.ts` — 11
+new cases covering the super-admin gate on every route, list
+shape (null fields for tenants with no sub, populated for the
+seeded Default), grant validation + UPSERT + audit, grant
+overwrite, grant 404 on unknown tenant, force-cancel 200 + 404,
+sync 503 / 404 paths. Full suite green: 729 server + 6 web.
 
 ---
 

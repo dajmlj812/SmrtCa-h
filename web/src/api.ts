@@ -910,6 +910,37 @@ export interface TenantSummary {
   role: 'admin' | 'spouse' | 'child';
 }
 
+/**
+ * 0.16.1 — one row in the super-admin subscriptions table. Tenant
+ * fields are always populated; subscription fields are null when
+ * the tenant has no row in `subscriptions` (a fresh signup with no
+ * plan picked yet, for example).
+ */
+export interface SystemSubscriptionRow {
+  tenant_id: string;
+  tenant_name: string;
+  tenant_slug: string;
+  tenant_created_at: string;
+  member_count: number;
+  plan_id: 'starter' | 'plus' | 'family' | null;
+  status:
+    | 'trialing'
+    | 'active'
+    | 'past_due'
+    | 'canceled'
+    | 'incomplete'
+    | 'incomplete_expired'
+    | 'unpaid'
+    | 'paused'
+    | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  trial_end: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+  sub_updated_at: string | null;
+}
+
 export interface Member {
   user_id: string;
   email: string | null;
@@ -1472,6 +1503,35 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+    }),
+
+  // 0.16.1 — super-admin subscriptions console.
+  systemListSubscriptions: () =>
+    http<{ rows: SystemSubscriptionRow[] }>('/api/system/subscriptions').then(
+      (r) => r.rows,
+    ),
+
+  systemGrantSubscription: (
+    tenantId: string,
+    input: { plan: 'starter' | 'plus' | 'family'; days: number; reason?: string },
+  ) =>
+    http<{ granted: true; plan: string; current_period_end: string }>(
+      `/api/system/subscriptions/${tenantId}/grant`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ),
+
+  systemSyncSubscription: (tenantId: string) =>
+    http<{ synced: true }>(`/api/system/subscriptions/${tenantId}/sync`, {
+      method: 'POST',
+    }),
+
+  systemForceCancelSubscription: (tenantId: string) =>
+    http<{ cleared: true }>(`/api/system/subscriptions/${tenantId}`, {
+      method: 'DELETE',
     }),
 
   // Child→account assignments (admin only)

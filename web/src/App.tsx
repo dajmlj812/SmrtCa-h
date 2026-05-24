@@ -149,6 +149,7 @@ function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
           <NavLink to="/system" end>
             Overview
           </NavLink>
+          <NavLink to="/system/subscriptions">Subscriptions</NavLink>
           <NavLink to="/system/audit">Audit log</NavLink>
           <NavLink to="/health">Health</NavLink>
           <NavLink to="/backups">Backups</NavLink>
@@ -170,6 +171,10 @@ function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
         <Routes>
           <Route path="/" element={<SystemPage tab="overview" />} />
           <Route path="/system" element={<SystemPage tab="overview" />} />
+          <Route
+            path="/system/subscriptions"
+            element={<SystemPage tab="subscriptions" />}
+          />
           <Route path="/system/audit" element={<SystemPage tab="audit" />} />
           <Route path="/health" element={<HealthPage />} />
           <Route path="/backups" element={<BackupsPage />} />
@@ -248,7 +253,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.16.0
+          SmrtCash · v0.16.1
           <button
             className="btn secondary logout-btn"
             type="button"

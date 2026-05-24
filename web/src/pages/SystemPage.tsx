@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '../api';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { api, type SystemSubscriptionRow } from '../api';
 import { AuthProvidersSection } from '../components/AuthProvidersSection';
 import { ExchangeRatesSection } from '../components/ExchangeRatesSection';
 import { AutoSyncSection } from '../components/AutoSyncSection';
@@ -27,23 +27,34 @@ interface AuditEntry {
 }
 
 /**
- * /system — super-admin console. Two tabs:
+ * /system — super-admin console. Three tabs:
  *
- *   overview  — list tenants with safe stats (counts only — never
- *               balances or transaction descriptions). Create new
- *               tenants. Invite a tenant admin. Manage super-admin
- *               operators.
+ *   overview     — list tenants with safe stats (counts only — never
+ *                  balances or transaction descriptions). Create new
+ *                  tenants. Invite a tenant admin. Manage super-admin
+ *                  operators.
  *
- *   audit     — chronological log of mutating actions across the
- *               platform. Filterable by tenant + action.
+ *   subscriptions — 0.16.1 — every tenant's billing state on one
+ *                  screen. Grant courtesy access, force-sync from
+ *                  Stripe, or force-cancel locally. All actions
+ *                  audit-log.
+ *
+ *   audit        — chronological log of mutating actions across the
+ *                  platform. Filterable by tenant + action.
  *
  * Super-admin sessions never have a tenant context, so every link
  * here is system-scoped. There are no links into a tenant's data —
  * by design.
  */
 
-export function SystemPage({ tab }: { tab: 'overview' | 'audit' }) {
-  return tab === 'audit' ? <AuditTab /> : <OverviewTab />;
+export function SystemPage({
+  tab,
+}: {
+  tab: 'overview' | 'audit' | 'subscriptions';
+}) {
+  if (tab === 'audit') return <AuditTab />;
+  if (tab === 'subscriptions') return <SubscriptionsTab />;
+  return <OverviewTab />;
 }
 
 function OverviewTab() {
@@ -478,6 +489,397 @@ function AuditTab() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── 0.16.1: Subscriptions tab ─────────────────────────────────
+
+type StatusFilter = 'all' | 'paying' | 'trialing' | 'past_due' | 'none';
+type PlanKey = 'starter' | 'plus' | 'family';
+
+function isPaying(s: SystemSubscriptionRow['status']): boolean {
+  return s === 'trialing' || s === 'active' || s === 'past_due';
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
+  return iso.slice(0, 10);
+}
+
+function SubscriptionsTab() {
+  const [rows, setRows] = useState<SystemSubscriptionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [searchText, setSearchText] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [grantTarget, setGrantTarget] = useState<SystemSubscriptionRow | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.systemListSubscriptions();
+      setRows(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (filter === 'paying' && !isPaying(r.status)) return false;
+      if (filter === 'trialing' && r.status !== 'trialing') return false;
+      if (filter === 'past_due' && r.status !== 'past_due') return false;
+      if (filter === 'none' && r.status !== null) return false;
+      if (searchText.trim() !== '') {
+        const q = searchText.trim().toLowerCase();
+        const hay = `${r.tenant_name} ${r.tenant_slug} ${r.stripe_customer_id ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [rows, filter, searchText]);
+
+  const summary = useMemo(() => {
+    const out = {
+      total: rows.length,
+      paying: 0,
+      trialing: 0,
+      past_due: 0,
+      none: 0,
+    };
+    for (const r of rows) {
+      if (isPaying(r.status)) out.paying++;
+      if (r.status === 'trialing') out.trialing++;
+      if (r.status === 'past_due') out.past_due++;
+      if (r.status === null) out.none++;
+    }
+    return out;
+  }, [rows]);
+
+  async function syncFromStripe(row: SystemSubscriptionRow) {
+    if (!row.stripe_subscription_id) return;
+    setBusy(`sync-${row.tenant_id}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.systemSyncSubscription(row.tenant_id);
+      setSuccess(`Synced ${row.tenant_name} from Stripe.`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sync failed');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function forceCancel(row: SystemSubscriptionRow) {
+    if (
+      !confirm(
+        `Force-cancel ${row.tenant_name}'s subscription LOCALLY?\n\n` +
+          `This clears the row in our database but does NOT touch Stripe. ` +
+          `If Stripe still considers their subscription active you must cancel it ` +
+          `from the Stripe dashboard separately, or the next webhook will recreate the row.`,
+      )
+    )
+      return;
+    setBusy(`del-${row.tenant_id}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.systemForceCancelSubscription(row.tenant_id);
+      setSuccess(`Cleared local subscription for ${row.tenant_name}.`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Cancel failed');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>Subscriptions</h1>
+          <div className="subtitle">
+            Every tenant's billing state. Actions audit-log. Stripe stays
+            the source of truth — use <em>Sync</em> after a webhook miss
+            rather than hand-editing.
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="banner error">{error}</div>}
+      {success && <div className="banner success">{success}</div>}
+
+      <div className="health-counts" style={{ marginBottom: 16 }}>
+        <span className="health-count">
+          <strong>{summary.total}</strong> tenants
+        </span>
+        <span className="health-count">
+          <strong>{summary.paying}</strong> paying
+        </span>
+        <span className="health-count">
+          <strong>{summary.trialing}</strong> trialing
+        </span>
+        <span className="health-count">
+          <strong>{summary.past_due}</strong> past due
+        </span>
+        <span className="health-count">
+          <strong>{summary.none}</strong> no plan
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as StatusFilter)}
+        >
+          <option value="all">All ({summary.total})</option>
+          <option value="paying">Paying ({summary.paying})</option>
+          <option value="trialing">Trialing ({summary.trialing})</option>
+          <option value="past_due">Past due ({summary.past_due})</option>
+          <option value="none">No plan ({summary.none})</option>
+        </select>
+        <input
+          type="search"
+          placeholder="Search name / slug / Stripe customer id…"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ flex: 1, maxWidth: 360 }}
+        />
+        <button className="btn secondary" type="button" onClick={() => void load()}>
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="empty">Loading…</p>
+      ) : filtered.length === 0 ? (
+        <p className="empty">No tenants match the current filter.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="txn-table">
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Plan</th>
+                <th>Status</th>
+                <th>Trial end</th>
+                <th>Renews</th>
+                <th>Stripe customer</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.tenant_id}>
+                  <td>
+                    <div>
+                      <strong>{r.tenant_name}</strong>
+                    </div>
+                    <div className="muted small">
+                      {r.tenant_slug} · {r.member_count} member
+                      {r.member_count === 1 ? '' : 's'}
+                    </div>
+                  </td>
+                  <td>{r.plan_id ?? <span className="muted">—</span>}</td>
+                  <td>
+                    {r.status ? (
+                      <span className={`pill ${pillClass(r.status)}`}>
+                        {r.status.replace(/_/g, ' ')}
+                        {r.cancel_at_period_end && ' · ending'}
+                      </span>
+                    ) : (
+                      <span className="muted">No subscription</span>
+                    )}
+                  </td>
+                  <td>{formatDate(r.trial_end)}</td>
+                  <td>{formatDate(r.current_period_end)}</td>
+                  <td>
+                    {r.stripe_customer_id ? (
+                      <code style={{ fontSize: '0.85em' }}>{r.stripe_customer_id}</code>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                  <td className="row-actions">
+                    <button
+                      className="btn small"
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => setGrantTarget(r)}
+                    >
+                      Grant
+                    </button>
+                    {r.stripe_subscription_id && (
+                      <button
+                        className="btn small secondary"
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => void syncFromStripe(r)}
+                      >
+                        {busy === `sync-${r.tenant_id}` ? 'Syncing…' : 'Sync'}
+                      </button>
+                    )}
+                    {r.status && (
+                      <button
+                        className="btn small danger"
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => void forceCancel(r)}
+                      >
+                        {busy === `del-${r.tenant_id}` ? 'Cancelling…' : 'Force cancel'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {grantTarget && (
+        <GrantModal
+          row={grantTarget}
+          onClose={() => setGrantTarget(null)}
+          onGranted={() => {
+            setGrantTarget(null);
+            setSuccess(`Granted subscription to ${grantTarget.tenant_name}.`);
+            void load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function pillClass(status: NonNullable<SystemSubscriptionRow['status']>): string {
+  switch (status) {
+    case 'trialing':
+    case 'active':
+      return 'pos';
+    case 'past_due':
+    case 'incomplete':
+    case 'unpaid':
+      return 'warn';
+    case 'canceled':
+    case 'incomplete_expired':
+    case 'paused':
+      return 'muted';
+    default:
+      return 'muted';
+  }
+}
+
+function GrantModal({
+  row,
+  onClose,
+  onGranted,
+}: {
+  row: SystemSubscriptionRow;
+  onClose: () => void;
+  onGranted: () => void;
+}) {
+  const [plan, setPlan] = useState<PlanKey>('plus');
+  const [days, setDays] = useState(30);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await api.systemGrantSubscription(row.tenant_id, {
+        plan,
+        days,
+        reason: reason.trim() || undefined,
+      });
+      onGranted();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Grant failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Grant courtesy subscription</h2>
+        <p className="muted">
+          Tenant: <strong>{row.tenant_name}</strong>
+        </p>
+        <p className="muted small">
+          Writes a local <code>subscriptions</code> row with status{' '}
+          <code>active</code> and the chosen period. Does not touch Stripe.
+          If the tenant later goes through Checkout the webhook overwrites
+          this row.
+        </p>
+        {err && <div className="banner error">{err}</div>}
+        <form onSubmit={submit}>
+          <div className="field">
+            <label htmlFor="grant-plan">Plan</label>
+            <select
+              id="grant-plan"
+              value={plan}
+              onChange={(e) => setPlan(e.target.value as PlanKey)}
+            >
+              <option value="starter">Starter</option>
+              <option value="plus">Plus</option>
+              <option value="family">Family</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="grant-days">Days</label>
+            <input
+              id="grant-days"
+              type="number"
+              min={1}
+              max={365}
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+              required
+            />
+            <div className="hint">1–365 days.</div>
+          </div>
+          <div className="field">
+            <label htmlFor="grant-reason">Reason (optional, audit-logged)</label>
+            <input
+              id="grant-reason"
+              type="text"
+              placeholder="e.g. apology credit, contest prize, internal demo"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <div className="row-actions" style={{ marginTop: 12 }}>
+            <button className="btn" type="submit" disabled={submitting}>
+              {submitting ? 'Granting…' : 'Grant'}
+            </button>
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

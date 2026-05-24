@@ -1,10 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import type Stripe from 'stripe';
 import { pool, query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import { listAudit, recordAudit } from '../domain/audit.js';
 import { hashPassword, validatePassword, PasswordPolicyError } from '../auth/passwords.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
+import { getStripe, isStripeConfigured } from '../billing/stripe.js';
+import { handleSubscriptionUpsert } from '../billing/webhook-handlers.js';
+import { PLAN_FEATURES, type Plan } from '../auth/entitlements.js';
 
 /**
  * Super-admin console endpoints. Gated by `req.user.isSuperAdmin`.
@@ -242,6 +246,212 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
     });
     return reply.code(201).send({ id: userId });
   });
+
+  // ── 0.16.1: super-admin subscriptions console ──────────────
+  //
+  //   GET    /api/system/subscriptions             — list all tenants with sub state
+  //   POST   /api/system/subscriptions/:tenantId/grant — courtesy grant
+  //   POST   /api/system/subscriptions/:tenantId/sync  — re-pull from Stripe
+  //   DELETE /api/system/subscriptions/:tenantId       — local force-cancel
+  //
+  // The runbook's "courtesy access" and "reconciling a state
+  // mismatch" sections previously sent the operator to a CLI
+  // script; these routes back the same flows from the UI. Every
+  // mutation audits.
+
+  app.get('/api/system/subscriptions', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+    // LEFT JOIN tenants → subscriptions so tenants without a row
+    // appear with everything null (state = "no subscription").
+    // Sort: newest tenants first; gives the operator a fresh-signup
+    // view at the top.
+    const r = await query<{
+      tenant_id: string;
+      tenant_name: string;
+      tenant_slug: string;
+      tenant_created_at: string;
+      member_count: number;
+      plan_id: string | null;
+      status: string | null;
+      stripe_customer_id: string | null;
+      stripe_subscription_id: string | null;
+      trial_end: string | null;
+      current_period_end: string | null;
+      cancel_at_period_end: boolean | null;
+      sub_updated_at: string | null;
+    }>(
+      `SELECT t.id AS tenant_id,
+              t.name AS tenant_name,
+              t.slug AS tenant_slug,
+              t.created_at::text AS tenant_created_at,
+              COALESCE(m.member_count, 0)::int AS member_count,
+              s.plan_id,
+              s.status,
+              s.stripe_customer_id,
+              s.stripe_subscription_id,
+              s.trial_end::text AS trial_end,
+              s.current_period_end::text AS current_period_end,
+              s.cancel_at_period_end,
+              s.updated_at::text AS sub_updated_at
+         FROM tenants t
+    LEFT JOIN subscriptions s ON s.tenant_id = t.id
+    LEFT JOIN (SELECT tenant_id, COUNT(*) AS member_count FROM memberships GROUP BY tenant_id) m
+           ON m.tenant_id = t.id
+     ORDER BY t.created_at DESC`,
+    );
+    return { rows: r.rows };
+  });
+
+  app.post<{ Params: { tenantId: string } }>(
+    '/api/system/subscriptions/:tenantId/grant',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      if (!isUuid(req.params.tenantId)) {
+        return reply.code(400).send({ error: 'Invalid tenant id' });
+      }
+      const body = (req.body ?? {}) as {
+        plan?: unknown;
+        days?: unknown;
+        reason?: unknown;
+      };
+      const plan = typeof body.plan === 'string' ? (body.plan as Plan) : '';
+      if (!(plan in PLAN_FEATURES)) {
+        return reply.code(400).send({ error: 'plan must be starter, plus, or family' });
+      }
+      const days = Number(body.days);
+      if (!Number.isFinite(days) || days < 1 || days > 365) {
+        return reply.code(400).send({ error: 'days must be between 1 and 365' });
+      }
+      const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+
+      // Ensure the tenant exists.
+      const t = await pool.query<{ id: string }>(
+        `SELECT id FROM tenants WHERE id = $1`,
+        [req.params.tenantId],
+      );
+      if (t.rowCount === 0) {
+        return reply.code(404).send({ error: 'Tenant not found' });
+      }
+
+      const periodEnd = new Date(Date.now() + days * 86400_000);
+      await pool.query(
+        // UPSERT — overrides any prior plan/status. Stripe IDs are
+        // intentionally left untouched: if the tenant later goes
+        // through Checkout the webhook will fill them in.
+        `INSERT INTO subscriptions
+           (tenant_id, plan_id, status, current_period_end, cancel_at_period_end)
+         VALUES ($1, $2, 'active', $3, false)
+         ON CONFLICT (tenant_id) DO UPDATE SET
+           plan_id = EXCLUDED.plan_id,
+           status = EXCLUDED.status,
+           current_period_end = EXCLUDED.current_period_end,
+           cancel_at_period_end = false,
+           updated_at = now()`,
+        [req.params.tenantId, plan, periodEnd],
+      );
+
+      await recordAudit({
+        tenantId: req.params.tenantId,
+        actorUserId: req.user!.id,
+        actorKind: 'super_admin',
+        action: 'subscription.grant',
+        targetKind: 'subscription',
+        targetId: req.params.tenantId,
+        details: { plan, days, reason: reason || null },
+      });
+      return reply.send({ granted: true, plan, current_period_end: periodEnd.toISOString() });
+    },
+  );
+
+  app.post<{ Params: { tenantId: string } }>(
+    '/api/system/subscriptions/:tenantId/sync',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      if (!isUuid(req.params.tenantId)) {
+        return reply.code(400).send({ error: 'Invalid tenant id' });
+      }
+      if (!isStripeConfigured()) {
+        return reply.code(503).send({ error: 'Billing is not configured' });
+      }
+      // Need a stripe_subscription_id to pull from; courtesy-granted
+      // rows have none.
+      const row = await pool.query<{ stripe_subscription_id: string | null }>(
+        `SELECT stripe_subscription_id FROM subscriptions WHERE tenant_id = $1`,
+        [req.params.tenantId],
+      );
+      const stripeSubId = row.rows[0]?.stripe_subscription_id ?? null;
+      if (!stripeSubId) {
+        return reply.code(404).send({
+          error: 'No Stripe subscription id on file for this tenant — nothing to sync',
+        });
+      }
+
+      let sub: Stripe.Subscription;
+      try {
+        sub = await getStripe().subscriptions.retrieve(stripeSubId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, tenantId: req.params.tenantId }, 'Stripe sync failed');
+        return reply.code(502).send({ error: `Stripe lookup failed: ${msg}` });
+      }
+      // Re-use the webhook-handler's UPSERT logic so a sync produces
+      // exactly the same row as a real customer.subscription.updated
+      // event would.
+      const fakeEvent = {
+        type: 'customer.subscription.updated' as Stripe.Event.Type,
+        data: { object: sub } as Stripe.Event.Data,
+      } as Stripe.Event;
+      const result = await handleSubscriptionUpsert(fakeEvent);
+      await recordAudit({
+        tenantId: req.params.tenantId,
+        actorUserId: req.user!.id,
+        actorKind: 'super_admin',
+        action: 'subscription.sync',
+        targetKind: 'subscription',
+        targetId: req.params.tenantId,
+        details: { applied: result.applied, reason: result.reason ?? null },
+      });
+      if (!result.applied) {
+        return reply.code(409).send({
+          error: result.reason ?? 'Sync rejected (missing metadata?)',
+        });
+      }
+      return reply.send({ synced: true });
+    },
+  );
+
+  app.delete<{ Params: { tenantId: string } }>(
+    '/api/system/subscriptions/:tenantId',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      if (!isUuid(req.params.tenantId)) {
+        return reply.code(400).send({ error: 'Invalid tenant id' });
+      }
+      // Local force-cancel: clears the subscriptions row entirely.
+      // We do NOT touch Stripe — that's the operator's job via the
+      // Stripe dashboard, by design (the runbook explains why
+      // hand-editing rows is dangerous when Stripe still considers
+      // the subscription live). This action is meant for tenants
+      // who have no Stripe sub (courtesy-granted, dev/test rows) or
+      // for cleanup after the Stripe side has already been canceled.
+      const result = await pool.query(
+        `DELETE FROM subscriptions WHERE tenant_id = $1`,
+        [req.params.tenantId],
+      );
+      if (result.rowCount === 0) {
+        return reply.code(404).send({ error: 'No subscription on this tenant' });
+      }
+      await recordAudit({
+        tenantId: req.params.tenantId,
+        actorUserId: req.user!.id,
+        actorKind: 'super_admin',
+        action: 'subscription.force_cancel',
+        targetKind: 'subscription',
+        targetId: req.params.tenantId,
+      });
+      return reply.send({ cleared: true });
+    },
+  );
 
   // Token to bootstrap the first tenant admin: super_admin creates the
   // tenant + a one-time link for the new admin to redeem.
