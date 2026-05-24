@@ -161,10 +161,49 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.8 shipped. 0.17.8 adds a &quot;Include accounts&quot;
-checklist to the AutoMagic wizard so the user can scope which
-accounts contribute bills, recurring income, and grocery
-history to the suggested budgets.</em></p>
+<p><em>0.17.0–0.17.9 shipped. 0.17.9 fixes the Period Overview&#39;s
+Bills section to show bills even without a committed budget
+row, and adds a &quot;Run AutoMagic&quot; CTA in the set-aside empty
+state.</em></p>
+<hr>
+<h2 id="0179-2026-05-24-bills-show-independent-of-wizard-commit">[0.17.9] — 2026-05-24 — Bills show independent of wizard commit<a class="heading-anchor" href="#0179-2026-05-24-bills-show-independent-of-wizard-commit">#</a></h2>
+<p>After 0.17.7&#39;s Period Overview, an operator with a cleared
+budgets table reported &quot;not showing bills or what was
+configured for set aside — this is the data that should come
+from the AutoMagic Setup wizard.&quot;</p>
+<p>Diagnosis: the Bills section sourced its rows from <strong>committed
+budget rows</strong> (the wizard creates one budget row per
+(period, bill)). If no budget row exists for the period, bills
+were silently dropped — even though the underlying bills are
+real money that&#39;s still due.</p>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<p><code>GET /api/budgets/period</code> now sources bill events from the
+<code>bills</code> table directly:</p>
+<ul>
+<li>Compute bill instances in the active period via the same
+<code>instancesIn</code> helper used by the wizard (frequency-walked).</li>
+<li>If a committed budget row exists for that (period, bill),
+use the row&#39;s <code>amount_cents</code> — the wizard may have
+overridden the master amount.</li>
+<li>Otherwise fall back to the bill&#39;s own <code>amount_cents</code>.</li>
+<li><code>budget_id</code> is now <code>string | null</code> on each row; null
+signals &quot;no commitment yet, this is just the master bill.&quot;</li>
+</ul>
+<p>Net effect: bills always render in the Period Overview when
+they&#39;re due, regardless of whether AutoMagic has committed
+budget rows for the period.</p>
+<h3 id="empty-state-for-set-aside">Empty state for set-aside<a class="heading-anchor" href="#empty-state-for-set-aside">#</a></h3>
+<p>The Set Aside section still requires wizard-committed rows
+(those amounts only exist after a wizard run). The empty
+state now shows a small CTA card explaining the gap and a
+<strong>✨ Run AutoMagic Setup</strong> button that opens the wizard
+modal directly. Response gains a <code>has_committed_budgets</code>
+flag — true when at least one budget row exists for the
+active period.</p>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>14 budget + wizard integration tests still pass. No new
+tests in this slice — the change is a SELECT swap (bills
+table replaces budget filter) plus a UI empty state.</p>
 <hr>
 <h2 id="0178-2026-05-24-wizard-account-includeexclude">[0.17.8] — 2026-05-24 — Wizard account include/exclude<a class="heading-anchor" href="#0178-2026-05-24-wizard-account-includeexclude">#</a></h2>
 <p>Operator who has multiple accounts (personal checking +
@@ -5817,7 +5856,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 21:19:06 UTC · commit 23fc3f8</span>
+  <span>Generated 2026-05-24 21:26:51 UTC · commit 4e81e1e</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

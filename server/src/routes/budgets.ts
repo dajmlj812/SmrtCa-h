@@ -567,40 +567,47 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         'next_expected_date',
       );
 
-      // Bill events come from BUDGET rows where bill_id IS NOT NULL —
-      // the wizard committed one per (period, bill) so the dates
-      // and amounts are already tenant-scoped + period-pinned. Cross-
-      // reference to bills for the next_due_date so we can show
-      // "due Jun 15" etc.
+      // 0.17.9 — Bills are facts in the `bills` table; they're due
+      // whether or not the AutoMagic wizard committed a budget row
+      // for them. Source the bill events from the bills table
+      // directly (via instancesIn) so they always render. If a
+      // wizard committed an amount override (different from the
+      // bill's own amount_cents) for this bill in this period,
+      // that pinned amount wins.
       const billsRes = await pool.query<BillRow>(
         `SELECT id, name, amount_cents, frequency, next_due_date
            FROM bills
           WHERE tenant_id = $1 AND active`,
         [tenantId],
       );
-      const billsById = new Map(billsRes.rows.map((b) => [b.id, b]));
-      const billsByInstance = instancesIn(
+      const billInstances = instancesIn(
         billsRes.rows,
         activeWindow.start,
         activeWindow.end,
         'next_due_date',
       );
 
-      const billEvents = activeRows
-        .filter((r) => r.bill_id !== null)
-        .map((r) => {
-          // Find the dated instance for this bill in this window.
-          const inst = billsByInstance.find((i) => i.id === r.bill_id);
-          const masterBill = billsById.get(r.bill_id!);
+      // Map from bill_id → committed budget row in this window (if any).
+      const committedByBillId = new Map(
+        activeRows
+          .filter((r) => r.bill_id !== null)
+          .map((r) => [r.bill_id!, r]),
+      );
+
+      const billEvents = billInstances
+        .map((inst) => {
+          const committed = committedByBillId.get(inst.id);
           return {
-            budget_id: r.id,
-            bill_id: r.bill_id!,
-            name: r.bill_name ?? masterBill?.name ?? '(unknown bill)',
-            amount_cents: Number(r.amount_cents),
-            date: inst?.date ?? null,
+            budget_id: committed?.id ?? null,
+            bill_id: inst.id,
+            name: inst.name,
+            amount_cents: committed
+              ? Number(committed.amount_cents)
+              : inst.amount_cents,
+            date: inst.date,
           };
         })
-        .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+        .sort((a, b) => a.date.localeCompare(b.date));
 
       // Modifiable / editable category budgets. "Savings" is the
       // one that requires manual action (the user has to transfer
@@ -636,6 +643,11 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         bills: billEvents,
         editable,
         totals,
+        // 0.17.9 — true when at least one budget row exists for this
+        // tenant in the active period (committed by AutoMagic or
+        // manual upsert). False means "wizard hasn't run for this
+        // period" — the UI shows a CTA in the set-aside section.
+        has_committed_budgets: activeRows.length > 0,
       };
     },
   );

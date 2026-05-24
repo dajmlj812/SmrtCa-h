@@ -178,9 +178,16 @@ export function BudgetsPage() {
         * bills line-per-bill, modifiable budgets, net. Renders
         * above the budget-vs-actual table (which is kept below
         * for spot-checking actuals against budgets).
+        * 0.17.9 — always render if anything could be shown
+        * (income from recurring_income, bills from bills table,
+        * or editable from committed budget rows). The empty
+        * state for set-aside shows a CTA pointing at AutoMagic.
         */}
-      {period && (period.income.length > 0 || period.bills.length > 0 || period.editable.length > 0) && (
-        <PeriodOverview summary={period} />
+      {period && (
+        <PeriodOverview
+          summary={period}
+          onRunWizard={() => setShowWizard(true)}
+        />
       )}
 
       {!loading && rows.length === 0 && (
@@ -439,7 +446,13 @@ function BudgetAddForm({
  * flag on Savings, and a leftover/overextended net at the
  * bottom.
  */
-function PeriodOverview({ summary }: { summary: BudgetPeriodSummary }) {
+function PeriodOverview({
+  summary,
+  onRunWizard,
+}: {
+  summary: BudgetPeriodSummary;
+  onRunWizard: () => void;
+}) {
   const { period, income, bills, editable, totals } = summary;
   const periodLabel = PERIOD_LABELS[period.type];
   const overextended = totals.net_cents < 0;
@@ -511,7 +524,22 @@ function PeriodOverview({ summary }: { summary: BudgetPeriodSummary }) {
         Set aside — <strong className="neg">{formatCents(totals.editable_cents)}</strong>
       </h3>
       {editable.length === 0 ? (
-        <p className="muted small">No modifiable categories set for this period.</p>
+        <div className="card" style={{ background: 'var(--surface-3)', padding: 12 }}>
+          <p style={{ margin: 0 }}>
+            <strong>No category allowances configured for this period.</strong>
+          </p>
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Run AutoMagic Setup to suggest amounts for groceries, fuel, tolls, savings, etc. based on your history + bills + income.
+          </p>
+          <button
+            className="btn"
+            type="button"
+            onClick={onRunWizard}
+            style={{ marginTop: 8 }}
+          >
+            ✨ Run AutoMagic Setup
+          </button>
+        </div>
       ) : (
         <table className="txn-table">
           <thead>

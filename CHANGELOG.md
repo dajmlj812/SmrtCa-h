@@ -9,10 +9,59 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.8 shipped. 0.17.8 adds a "Include accounts"
-checklist to the AutoMagic wizard so the user can scope which
-accounts contribute bills, recurring income, and grocery
-history to the suggested budgets._
+_0.17.0–0.17.9 shipped. 0.17.9 fixes the Period Overview's
+Bills section to show bills even without a committed budget
+row, and adds a "Run AutoMagic" CTA in the set-aside empty
+state._
+
+---
+
+## [0.17.9] — 2026-05-24 — Bills show independent of wizard commit
+
+After 0.17.7's Period Overview, an operator with a cleared
+budgets table reported "not showing bills or what was
+configured for set aside — this is the data that should come
+from the AutoMagic Setup wizard."
+
+Diagnosis: the Bills section sourced its rows from **committed
+budget rows** (the wizard creates one budget row per
+(period, bill)). If no budget row exists for the period, bills
+were silently dropped — even though the underlying bills are
+real money that's still due.
+
+### Fix
+
+`GET /api/budgets/period` now sources bill events from the
+`bills` table directly:
+
+- Compute bill instances in the active period via the same
+  `instancesIn` helper used by the wizard (frequency-walked).
+- If a committed budget row exists for that (period, bill),
+  use the row's `amount_cents` — the wizard may have
+  overridden the master amount.
+- Otherwise fall back to the bill's own `amount_cents`.
+- `budget_id` is now `string | null` on each row; null
+  signals "no commitment yet, this is just the master bill."
+
+Net effect: bills always render in the Period Overview when
+they're due, regardless of whether AutoMagic has committed
+budget rows for the period.
+
+### Empty state for set-aside
+
+The Set Aside section still requires wizard-committed rows
+(those amounts only exist after a wizard run). The empty
+state now shows a small CTA card explaining the gap and a
+**✨ Run AutoMagic Setup** button that opens the wizard
+modal directly. Response gains a `has_committed_budgets`
+flag — true when at least one budget row exists for the
+active period.
+
+### Tests
+
+14 budget + wizard integration tests still pass. No new
+tests in this slice — the change is a SELECT swap (bills
+table replaces budget filter) plus a UI empty state.
 
 ---
 

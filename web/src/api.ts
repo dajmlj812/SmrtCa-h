@@ -537,11 +537,14 @@ export interface BudgetPeriodSummary {
     date: string;
   }>;
   bills: Array<{
-    budget_id: string;
+    /** 0.17.9 — null when no budget row has been committed for this
+     *  bill in this period. The amount falls back to the bill's
+     *  master amount in that case. */
+    budget_id: string | null;
     bill_id: string;
     name: string;
     amount_cents: number;
-    date: string | null;
+    date: string;
   }>;
   editable: Array<{
     budget_id: string;
@@ -558,6 +561,13 @@ export interface BudgetPeriodSummary {
     /** Positive = leftover; negative = overextended for the period. */
     net_cents: number;
   };
+  /**
+   * 0.17.9 — true when AutoMagic (or a manual upsert) committed at
+   * least one budget row for this period. False means the
+   * set-aside section's empty state should show a "Run AutoMagic"
+   * CTA; bills still render from the master bills table either way.
+   */
+  has_committed_budgets: boolean;
 }
 
 export interface NormalizationRule {
