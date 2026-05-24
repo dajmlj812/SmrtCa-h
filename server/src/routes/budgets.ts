@@ -499,34 +499,13 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
       const asOf = isYmd(req.query.asOf) ? req.query.asOf : ymdToday();
+      const ctx = await fetchPeriodCtx(tenantId);
 
       // Pick the active period by scanning budget rows. The first
       // row whose currentPeriod covers asOf defines the window.
-      const budgets = await query<{
-        id: string;
-        period_month: string;
-        period_type: PeriodType;
-        period_end: string | null;
-        category_id: string | null;
-        bill_id: string | null;
-        amount_cents: number;
-        category_name: string | null;
-        bill_name: string | null;
-      }>(
-        `SELECT b.id, b.period_month, b.period_type, b.period_end,
-                b.category_id, b.bill_id, b.amount_cents, b.note,
-                c.name AS category_name,
-                bl.name AS bill_name, bl.next_due_date AS bill_next_due_date
-           FROM budgets b
-      LEFT JOIN categories c ON c.id = b.category_id
-      LEFT JOIN bills      bl ON bl.id = b.bill_id
-          WHERE b.tenant_id = $1`,
-        [tenantId],
-      );
-
       let activeWindow: { start: string; end: string; type: PeriodType } | null = null;
-      const activeRows: typeof budgets.rows = [];
-      for (const b of budgets.rows) {
+      const activeRows: typeof ctx.budgets = [];
+      for (const b of ctx.budgets) {
         const win = currentPeriod({
           anchor: b.period_month,
           periodType: b.period_type,
@@ -551,106 +530,211 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         activeWindow = { start, end, type: 'monthly' };
       }
 
-      // Income events from recurring_income (no budget rows for
-      // income — it's a target, not a commitment). Walk frequency
-      // forward like the wizard does.
-      const incomeRowsRes = await pool.query<IncomeRow & { active: boolean }>(
-        `SELECT id, name, amount_cents, frequency, next_expected_date, active
-           FROM recurring_income
-          WHERE tenant_id = $1 AND active`,
-        [tenantId],
-      );
-      const incomeEvents = instancesIn(
-        incomeRowsRes.rows,
-        activeWindow.start,
-        activeWindow.end,
-        'next_expected_date',
-      );
-
-      // 0.17.9 — Bills are facts in the `bills` table; they're due
-      // whether or not the AutoMagic wizard committed a budget row
-      // for them. Source the bill events from the bills table
-      // directly (via instancesIn) so they always render. If a
-      // wizard committed an amount override (different from the
-      // bill's own amount_cents) for this bill in this period,
-      // that pinned amount wins.
-      const billsRes = await pool.query<BillRow>(
-        `SELECT id, name, amount_cents, frequency, next_due_date
-           FROM bills
-          WHERE tenant_id = $1 AND active`,
-        [tenantId],
-      );
-      const billInstances = instancesIn(
-        billsRes.rows,
-        activeWindow.start,
-        activeWindow.end,
-        'next_due_date',
-      );
-
-      // Map from bill_id → committed budget row in this window (if any).
-      const committedByBillId = new Map(
-        activeRows
-          .filter((r) => r.bill_id !== null)
-          .map((r) => [r.bill_id!, r]),
-      );
-
-      const billEvents = billInstances
-        .map((inst) => {
-          const committed = committedByBillId.get(inst.id);
-          return {
-            budget_id: committed?.id ?? null,
-            bill_id: inst.id,
-            name: inst.name,
-            amount_cents: committed
-              ? Number(committed.amount_cents)
-              : inst.amount_cents,
-            date: inst.date,
-          };
-        })
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      // Modifiable / editable category budgets. "Savings" is the
-      // one that requires manual action (the user has to transfer
-      // money to their savings account each period). Others are
-      // just spending caps.
-      const editable = activeRows
-        .filter((r) => r.category_id !== null)
-        .map((r) => ({
-          budget_id: r.id,
-          category_id: r.category_id!,
-          category_name: r.category_name ?? '(uncategorized)',
-          amount_cents: Number(r.amount_cents),
-          // Heuristic: name-based. Savings is the one the user
-          // physically moves money into; other categories are
-          // pre-committed spend.
-          requires_manual_action:
-            (r.category_name ?? '').toLowerCase() === 'savings',
-        }))
-        .sort((a, b) => a.category_name.localeCompare(b.category_name));
-
-      const totals = {
-        income_cents: incomeEvents.reduce((s, e) => s + Number(e.amount_cents), 0),
-        bills_cents: billEvents.reduce((s, e) => s + Number(e.amount_cents), 0),
-        editable_cents: editable.reduce((s, e) => s + Number(e.amount_cents), 0),
-        net_cents: 0,
-      };
-      totals.net_cents = totals.income_cents - totals.bills_cents - totals.editable_cents;
-
-      return {
-        period: activeWindow,
-        asOf,
-        income: incomeEvents,
-        bills: billEvents,
-        editable,
-        totals,
-        // 0.17.9 — true when at least one budget row exists for this
-        // tenant in the active period (committed by AutoMagic or
-        // manual upsert). False means "wizard hasn't run for this
-        // period" — the UI shows a CTA in the set-aside section.
-        has_committed_budgets: activeRows.length > 0,
-      };
+      const summary = buildPeriodSummary(activeWindow, activeRows, ctx);
+      return { ...summary, asOf };
     },
   );
+
+  // ── 0.17.10: ALL committed periods, stacked ────────────────
+  //
+  // The user runs AutoMagic with, say, 5 weekly periods. They
+  // want to see all 5 cards on /budgets — one per period —
+  // before the monthly budget-vs-actual section. The plural
+  // endpoint groups budget rows by their distinct period
+  // window, builds a per-period summary for each, and returns
+  // them sorted ascending by period start. Falls back to a
+  // single calendar-month placeholder when no commits exist
+  // (so the UI's empty state CTA renders inside a card).
+  app.get('/api/budgets/periods', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const ctx = await fetchPeriodCtx(tenantId);
+
+    // Group budget rows by distinct window. Window is computed
+    // from each row's (anchor, type, period_end) — the wizard
+    // creates rows at distinct anchors per period, so the
+    // groupings collapse naturally.
+    const groups = new Map<
+      string,
+      {
+        window: { start: string; end: string; type: PeriodType };
+        rows: typeof ctx.budgets;
+      }
+    >();
+    for (const b of ctx.budgets) {
+      const win = currentPeriod({
+        anchor: b.period_month,
+        periodType: b.period_type,
+        periodEnd: b.period_end,
+        // asOf = the anchor itself returns the canonical window
+        // for THIS row, not whatever cadence-step covers today.
+        asOf: b.period_month,
+      });
+      const key = `${win.start}|${win.end}|${b.period_type}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.rows.push(b);
+      } else {
+        groups.set(key, {
+          window: { start: win.start, end: win.end, type: b.period_type },
+          rows: [b],
+        });
+      }
+    }
+
+    if (groups.size === 0) {
+      // No commits: return one calendar-month placeholder so the
+      // UI still has a card to render with bills + income + the
+      // "Run AutoMagic" CTA. asOf defaults to today.
+      const today = ymdToday();
+      const [y, m] = today.split('-').map(Number) as [number, number];
+      const start = `${y}-${String(m).padStart(2, '0')}-01`;
+      const end = nextMonthStart(start);
+      const window = { start, end, type: 'monthly' as PeriodType };
+      return {
+        periods: [{ ...buildPeriodSummary(window, [], ctx), asOf: today }],
+      };
+    }
+
+    const periods = Array.from(groups.values())
+      .map(({ window, rows }) => ({
+        ...buildPeriodSummary(window, rows, ctx),
+        asOf: window.start,
+      }))
+      .sort((a, b) => a.period.start.localeCompare(b.period.start));
+    return { periods };
+  });
+
+}
+
+// ── 0.17.10: shared helpers for the period summary endpoints ─
+
+interface BudgetRowSummary {
+  id: string;
+  period_month: string;
+  period_type: PeriodType;
+  period_end: string | null;
+  category_id: string | null;
+  bill_id: string | null;
+  amount_cents: number;
+  category_name: string | null;
+  bill_name: string | null;
+}
+
+interface PeriodCtx {
+  budgets: BudgetRowSummary[];
+  bills: BillRow[];
+  income: IncomeRow[];
+}
+
+/**
+ * Pulls the three input sets the period summary needs in parallel.
+ * Tenant-scoped. Used by both /api/budgets/period (singular) and
+ * /api/budgets/periods (plural) so the SELECTs aren't duplicated.
+ */
+async function fetchPeriodCtx(tenantId: string): Promise<PeriodCtx> {
+  const [budgets, bills, income] = await Promise.all([
+    query<BudgetRowSummary>(
+      `SELECT b.id, b.period_month, b.period_type, b.period_end,
+              b.category_id, b.bill_id, b.amount_cents,
+              c.name AS category_name,
+              bl.name AS bill_name
+         FROM budgets b
+    LEFT JOIN categories c ON c.id = b.category_id
+    LEFT JOIN bills      bl ON bl.id = b.bill_id
+        WHERE b.tenant_id = $1`,
+      [tenantId],
+    ),
+    pool.query<BillRow>(
+      `SELECT id, name, amount_cents, frequency, next_due_date
+         FROM bills WHERE tenant_id = $1 AND active`,
+      [tenantId],
+    ),
+    pool.query<IncomeRow>(
+      `SELECT id, name, amount_cents, frequency, next_expected_date
+         FROM recurring_income WHERE tenant_id = $1 AND active`,
+      [tenantId],
+    ),
+  ]);
+  return { budgets: budgets.rows, bills: bills.rows, income: income.rows };
+}
+
+/**
+ * Builds a single period summary: income events + bill events +
+ * editable category budgets + totals + has_committed_budgets, for
+ * the given window. `activeRows` is the subset of budget rows
+ * whose periods overlap this window (already filtered by caller).
+ * `ctx.bills` and `ctx.income` are the unfiltered master tables;
+ * we filter them by window here via instancesIn.
+ */
+function buildPeriodSummary(
+  window: { start: string; end: string; type: PeriodType },
+  activeRows: BudgetRowSummary[],
+  ctx: PeriodCtx,
+) {
+  const incomeEvents = instancesIn(
+    ctx.income,
+    window.start,
+    window.end,
+    'next_expected_date',
+  );
+
+  const billInstances = instancesIn(
+    ctx.bills,
+    window.start,
+    window.end,
+    'next_due_date',
+  );
+  const committedByBillId = new Map(
+    activeRows.filter((r) => r.bill_id !== null).map((r) => [r.bill_id!, r]),
+  );
+  const billEvents = billInstances
+    .map((inst) => {
+      const committed = committedByBillId.get(inst.id);
+      return {
+        budget_id: committed?.id ?? null,
+        bill_id: inst.id,
+        name: inst.name,
+        amount_cents: committed ? Number(committed.amount_cents) : inst.amount_cents,
+        date: inst.date,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Modifiable / editable category budgets. "Savings" is the one
+  // that requires manual action (the user has to transfer money
+  // each period). Others are pre-committed spending caps.
+  const editable = activeRows
+    .filter((r) => r.category_id !== null)
+    .map((r) => ({
+      budget_id: r.id,
+      category_id: r.category_id!,
+      category_name: r.category_name ?? '(uncategorized)',
+      amount_cents: Number(r.amount_cents),
+      requires_manual_action:
+        (r.category_name ?? '').toLowerCase() === 'savings',
+    }))
+    .sort((a, b) => a.category_name.localeCompare(b.category_name));
+
+  const totals = {
+    income_cents: incomeEvents.reduce((s, e) => s + Number(e.amount_cents), 0),
+    bills_cents: billEvents.reduce((s, e) => s + Number(e.amount_cents), 0),
+    editable_cents: editable.reduce((s, e) => s + Number(e.amount_cents), 0),
+    net_cents: 0,
+  };
+  totals.net_cents = totals.income_cents - totals.bills_cents - totals.editable_cents;
+
+  return {
+    period: window,
+    income: incomeEvents,
+    bills: billEvents,
+    editable,
+    totals,
+    // 0.17.9 — true when at least one committed budget row covers
+    // this window. False means "wizard hasn't run for this
+    // period" — the UI shows the CTA in the set-aside section.
+    has_committed_budgets: activeRows.length > 0,
+  };
 }
 
 function nextMonthStart(ymd: string): string {

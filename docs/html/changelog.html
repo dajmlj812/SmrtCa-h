@@ -161,10 +161,68 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.9 shipped. 0.17.9 fixes the Period Overview&#39;s
-Bills section to show bills even without a committed budget
-row, and adds a &quot;Run AutoMagic&quot; CTA in the set-aside empty
-state.</em></p>
+<p><em>0.17.0–0.17.10 shipped. 0.17.10 stacks one Period Overview
+card per committed period above the budget-vs-actual table —
+when AutoMagic creates 5 weekly periods, you now see 5 cards
+instead of one.</em></p>
+<hr>
+<h2 id="01710-2026-05-24-stacked-period-overviews">[0.17.10] — 2026-05-24 — Stacked period overviews<a class="heading-anchor" href="#01710-2026-05-24-stacked-period-overviews">#</a></h2>
+<p>Operator feedback after 0.17.9:</p>
+<blockquote>
+<p>&quot;I want the AutoMagic wizard to add Groceries, Fuel, Tolls,
+Misc, and Savings entries… presented after the bills and
+before the leftover. Depending on what the user selected in
+the wizard there would be a section for every period that
+was created before presenting the monthly actuals.&quot;</p>
+</blockquote>
+<p>The wizard already creates rows for every category + period;
+the gap was on the read side. The /budgets page only rendered
+the <strong>single</strong> period covering today. If the user committed 5
+weekly periods, only one card showed; the other four were
+invisible.</p>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<p>New endpoint <strong><code>GET /api/budgets/periods</code></strong> returns all
+distinct committed period windows as an array, each with its
+own income / bills / set-aside / totals / has_committed_budgets
+shape. Sorted ascending by <code>period.start</code>.</p>
+<ul>
+<li>Groups budget rows by distinct <code>(period_month, period_type, period_end)</code> tuples — the wizard creates rows at distinct
+anchors per period, so the grouping collapses naturally.</li>
+<li>Each group&#39;s window is computed via the existing
+<code>currentPeriod</code> helper with <code>asOf = the row&#39;s own anchor</code>
+(returns the canonical window for that row, not whatever
+cadence-step covers today).</li>
+<li>Bills + income filtered into each window via <code>instancesIn</code>.</li>
+<li>When no commits exist anywhere, the response falls back to
+a single calendar-month placeholder so the empty-state CTA
+in the set-aside section still has a card to render in.</li>
+</ul>
+<h3 id="shared-helpers-extracted">Shared helpers extracted<a class="heading-anchor" href="#shared-helpers-extracted">#</a></h3>
+<p>The bill/income/editable/totals computation was duplicated in
+the singular <code>/period</code> route. Extracted into two reusable
+pieces:</p>
+<ul>
+<li><code>fetchPeriodCtx(tenantId)</code> — parallel SELECT of budgets +
+bills + income, all tenant-scoped</li>
+<li><code>buildPeriodSummary(window, activeRows, ctx)</code> — given a
+window + the budget rows that cover it + the master tables,
+produces a <code>BudgetPeriodSummary</code></li>
+</ul>
+<p>Both <code>/api/budgets/period</code> and <code>/api/budgets/periods</code> use the
+same helpers; the difference is just which budget rows feed
+into <code>activeRows</code>.</p>
+<h3 id="web">Web<a class="heading-anchor" href="#web">#</a></h3>
+<p><code>BudgetsPage</code> now fetches the plural endpoint and maps
+each summary to a <code>PeriodOverview</code> card. The month picker
+still scopes the budget-vs-actual table below (each card
+already says its own period range). Wizard run with 5 weekly
+periods → 5 cards stacked. Wizard run with 1 monthly period
+→ 1 card. No commits → 1 placeholder card with CTA.</p>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>14 existing budget + wizard tests still pass. No new tests in
+this slice — the helpers are a pure refactor of code already
+exercised by the singular <code>/period</code> test path; the plural
+route is the same helpers in a loop.</p>
 <hr>
 <h2 id="0179-2026-05-24-bills-show-independent-of-wizard-commit">[0.17.9] — 2026-05-24 — Bills show independent of wizard commit<a class="heading-anchor" href="#0179-2026-05-24-bills-show-independent-of-wizard-commit">#</a></h2>
 <p>After 0.17.7&#39;s Period Overview, an operator with a cleared
@@ -5856,7 +5914,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 21:26:51 UTC · commit 4e81e1e</span>
+  <span>Generated 2026-05-24 21:41:19 UTC · commit 11dae7c</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -43,7 +43,10 @@ export function BudgetsPage() {
   const [month, setMonth] = useState<string>(() => firstOfMonth(new Date()));
   const [rows, setRows] = useState<BudgetVsActualRow[]>([]);
   const [totals, setTotals] = useState({ budgeted_cents: 0, actual_cents: 0 });
-  const [period, setPeriod] = useState<BudgetPeriodSummary | null>(null);
+  // 0.17.10 — array of all committed period windows, one card
+  // per period. Empty array → one calendar-month fallback so the
+  // empty-state CTA still has somewhere to render.
+  const [periods, setPeriods] = useState<BudgetPeriodSummary[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,18 +59,20 @@ export function BudgetsPage() {
     try {
       // Pass the 15th of the month so the monthly period covers it cleanly.
       const asOf = m.replace(/-01$/, '-15');
-      // 0.17.7 — fetch the period cash-flow summary alongside the
-      // budget-vs-actual table. The summary renders above; the
-      // table renders below (kept for actuals review).
-      const [actuals, cats, periodSummary] = await Promise.all([
+      // 0.17.7 — fetch period cash-flow alongside the budget-vs-
+      // actual table.
+      // 0.17.10 — use the plural endpoint so we get every
+      // committed period stacked. The month picker still controls
+      // budget-vs-actual below; the period cards are all-of-them.
+      const [actuals, cats, periodsArr] = await Promise.all([
         api.budgetActuals(asOf),
         api.listCategories(),
-        api.budgetPeriod(asOf),
+        api.budgetPeriods(),
       ]);
       setRows(actuals.rows);
       setTotals(actuals.totals);
       setCategories(cats);
-      setPeriod(periodSummary);
+      setPeriods(periodsArr);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load budgets');
     } finally {
@@ -174,21 +179,18 @@ export function BudgetsPage() {
 
       {error && <div className="banner error">{error}</div>}
 
-      {/* 0.17.7 — period cash-flow overview. Income with dates,
-        * bills line-per-bill, modifiable budgets, net. Renders
-        * above the budget-vs-actual table (which is kept below
-        * for spot-checking actuals against budgets).
-        * 0.17.9 — always render if anything could be shown
-        * (income from recurring_income, bills from bills table,
-        * or editable from committed budget rows). The empty
-        * state for set-aside shows a CTA pointing at AutoMagic.
+      {/* 0.17.10 — one PeriodOverview card per committed period.
+        * Stacked in ascending period.start order. When nothing is
+        * committed yet, the server returns a single calendar-
+        * month placeholder so the CTA still has a card to render.
         */}
-      {period && (
+      {periods.map((p) => (
         <PeriodOverview
-          summary={period}
+          key={`${p.period.start}-${p.period.end}-${p.period.type}`}
+          summary={p}
           onRunWizard={() => setShowWizard(true)}
         />
-      )}
+      ))}
 
       {!loading && rows.length === 0 && (
         <div className="card empty-card">

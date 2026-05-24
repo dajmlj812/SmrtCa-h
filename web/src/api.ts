@@ -1787,6 +1787,14 @@ export const api = {
   budgetPeriod: (asOf: string) =>
     http<BudgetPeriodSummary>(`/api/budgets/period?asOf=${encodeURIComponent(asOf)}`),
 
+  // 0.17.10 — ALL committed period windows, stacked. One card
+  // per period that the wizard committed. Falls back to a
+  // single calendar-month placeholder when no commits exist.
+  budgetPeriods: () =>
+    http<{ periods: BudgetPeriodSummary[] }>(`/api/budgets/periods`).then(
+      (r) => r.periods,
+    ),
+
   // ── Goals ────────────────────────────────────────────────
   listGoals: () =>
     http<{ goals: SavingsGoal[] }>('/api/goals').then((r) => r.goals),

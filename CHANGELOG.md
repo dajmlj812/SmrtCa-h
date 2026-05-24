@@ -9,10 +9,79 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.9 shipped. 0.17.9 fixes the Period Overview's
-Bills section to show bills even without a committed budget
-row, and adds a "Run AutoMagic" CTA in the set-aside empty
-state._
+_0.17.0–0.17.10 shipped. 0.17.10 stacks one Period Overview
+card per committed period above the budget-vs-actual table —
+when AutoMagic creates 5 weekly periods, you now see 5 cards
+instead of one._
+
+---
+
+## [0.17.10] — 2026-05-24 — Stacked period overviews
+
+Operator feedback after 0.17.9:
+
+> "I want the AutoMagic wizard to add Groceries, Fuel, Tolls,
+> Misc, and Savings entries… presented after the bills and
+> before the leftover. Depending on what the user selected in
+> the wizard there would be a section for every period that
+> was created before presenting the monthly actuals."
+
+The wizard already creates rows for every category + period;
+the gap was on the read side. The /budgets page only rendered
+the **single** period covering today. If the user committed 5
+weekly periods, only one card showed; the other four were
+invisible.
+
+### Fix
+
+New endpoint **`GET /api/budgets/periods`** returns all
+distinct committed period windows as an array, each with its
+own income / bills / set-aside / totals / has_committed_budgets
+shape. Sorted ascending by `period.start`.
+
+- Groups budget rows by distinct `(period_month, period_type,
+  period_end)` tuples — the wizard creates rows at distinct
+  anchors per period, so the grouping collapses naturally.
+- Each group's window is computed via the existing
+  `currentPeriod` helper with `asOf = the row's own anchor`
+  (returns the canonical window for that row, not whatever
+  cadence-step covers today).
+- Bills + income filtered into each window via `instancesIn`.
+- When no commits exist anywhere, the response falls back to
+  a single calendar-month placeholder so the empty-state CTA
+  in the set-aside section still has a card to render in.
+
+### Shared helpers extracted
+
+The bill/income/editable/totals computation was duplicated in
+the singular `/period` route. Extracted into two reusable
+pieces:
+
+- `fetchPeriodCtx(tenantId)` — parallel SELECT of budgets +
+  bills + income, all tenant-scoped
+- `buildPeriodSummary(window, activeRows, ctx)` — given a
+  window + the budget rows that cover it + the master tables,
+  produces a `BudgetPeriodSummary`
+
+Both `/api/budgets/period` and `/api/budgets/periods` use the
+same helpers; the difference is just which budget rows feed
+into `activeRows`.
+
+### Web
+
+`BudgetsPage` now fetches the plural endpoint and maps
+each summary to a `PeriodOverview` card. The month picker
+still scopes the budget-vs-actual table below (each card
+already says its own period range). Wizard run with 5 weekly
+periods → 5 cards stacked. Wizard run with 1 monthly period
+→ 1 card. No commits → 1 placeholder card with CTA.
+
+### Tests
+
+14 existing budget + wizard tests still pass. No new tests in
+this slice — the helpers are a pure refactor of code already
+exercised by the singular `/period` test path; the plural
+route is the same helpers in a loop.
 
 ---
 
