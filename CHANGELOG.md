@@ -9,10 +9,121 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_All known issues closed (KI-02, KI-05, KI-06, KI-08 retired in
-0.14.7; KI-07 in 0.14.x; portability/tar in 0.14.5). 634/634
-server tests passing. The project is in a fully-clean state —
-backlog done, hardening done, KI list empty._
+_0.15.x — SaaS pivot in progress. 0.15.0 ships the schema +
+entitlement core. Pricing and feature gating locked in
+`docs/SAAS_PLAN.md`. Slices 0.15.1 through 0.15.5 still pending
+(Stripe checkout/webhook, route gating, billing UI, dunning,
+SaaS-readiness)._
+
+---
+
+## [0.15.0] — 2026-05-23 — SaaS pivot, slice 1: entitlement core (schema + helpers)
+
+First slice of the SaaS pivot. No Stripe integration yet, no
+routes gated yet — that's 0.15.1 and 0.15.2. This slice just
+puts the building blocks in place.
+
+### Schema (migration 030)
+
+- `subscriptions` (tenant_id PK) — mirrors Stripe's subscription
+  shape so the webhook can UPSERT directly: `stripe_customer_id`,
+  `stripe_subscription_id`, `plan_id` (starter/plus/family),
+  `status` (full Stripe status set), `trial_end`,
+  `current_period_end`, `cancel_at_period_end`.
+- `usage_counters` (tenant_id + feature_key + period_start PK) —
+  per-billing-period metering for AI assistant tool calls and OCR
+  receipt pages. Atomic increment via INSERT ... ON CONFLICT.
+- `stripe_processed_events` — webhook idempotency table for 0.15.1.
+
+### Entitlement core (`server/src/auth/entitlements.ts`)
+
+- `Plan` type + `FEATURES` const + `PLAN_FEATURES` map. Single
+  source of truth for "what does each tier include" — mirrors
+  `docs/SAAS_PLAN.md`.
+- `getActiveSubscription(tenantId)` — fetches the row.
+- `effectivePlan(tenantId)` — resolves the plan with status
+  semantics: trialing + active + past_due → entitled; canceled
+  honors `cancel_at_period_end` until `current_period_end`;
+  incomplete/unpaid/paused → not entitled.
+- `requireFeature(tenantId, feature)` — null on grant, `{status:
+  402, error}` on deny. Mirrors the rbac helper pattern. **402
+  Payment Required** is used (not 403) so the web client can
+  distinguish "needs upgrade" from "forbidden by role".
+- `requireBankConnectionSlot(tenantId)` — checks the live
+  OFX-DC + Plaid item count against the plan's
+  `bankConnectionCap` (Starter 0, Plus 10, Family 25).
+- `requireHouseholdSeat(tenantId)` — checks `memberships` count
+  against the plan's `householdMemberCap` (Starter+Plus 1, Family 6).
+- `checkAndIncrementQuota(tenantId, feature, n)` — atomic
+  per-period meter for AI assistant + OCR. Returns granted +
+  remaining + cap. On overshoot, rolls back the optimistic
+  increment so quotas can't go above cap. Records usage even
+  on unlimited tiers (Family) for future analytics.
+
+**Routes are NOT wired yet.** Adding `requireFeature` to existing
+routes is 0.15.2. The 0.15.0 codebase will keep running normally
+for any tenant without a subscription row.
+
+### Dev script (`scripts/grant-saas-plan.mjs`)
+
+CLI to grant a SaaS subscription to a tenant directly in the DB,
+bypassing Stripe. Lets the operator (the dev user) self-grant a
+Family plan on their existing Default tenant so 0.15.2's route
+gates won't lock them out when wired in.
+
+Usage:
+
+```
+node scripts/grant-saas-plan.mjs --tenant default --plan family
+node scripts/grant-saas-plan.mjs --tenant default --plan plus --trial-days 14
+```
+
+UPSERT semantics — safe to re-run.
+
+### Tests (+21)
+
+`tests/unit/entitlements.test.ts` covers:
+
+- Plan resolution: no-sub / trialing / active / past_due /
+  canceled-with-grace / canceled-past-period / incomplete /
+  unpaid / paused.
+- requireFeature: Starter denies all premium; Plus has Plus
+  features + denies Family-only; Family has all.
+- Bank-connection cap: Starter cap=0 denies; Plus cap=10
+  enforced via live count of plaid_items + ofx_dc_connections.
+- Household seat cap: Starter at 1, Family at 6 enforced
+  against `memberships`.
+- Quota: unlimited (Family) grants + records usage; plus cap
+  (500 AI / 200 OCR) honored; overshoot denies AND rolls back
+  the counter; absent feature denies and writes nothing; OCR
+  and AI quotas are independent counters.
+
+- Total: **661 tests** (655 server + 6 web). All green.
+
+### Files
+
+```
+server/src/db/migrations/030_subscriptions.sql       (new)
+server/src/auth/entitlements.ts                      (new)
+server/tests/unit/entitlements.test.ts               (new — 21 tests)
+scripts/grant-saas-plan.mjs                          (new)
+docs/SAAS_PLAN.md                                    (already committed at 147adac)
+package.json + server/package.json + web/package.json (0.14.7 → 0.15.0)
+```
+
+### Coming next
+
+- **0.15.1** — Stripe products + Checkout session + webhook
+  (idempotent via `stripe_processed_events`). Needs Stripe
+  test-mode API keys.
+- **0.15.2** — Apply `requireFeature` to ~14 premium routes;
+  new test file `tests/security/entitlements.test.ts` verifies
+  each gate.
+- **0.15.3** — `/billing` page in web (current plan, change-plan,
+  Stripe Customer Portal redirect, usage meters, trial banner).
+- **0.15.4** — Dunning + grace window + cancellation/downgrade UX.
+- **0.15.5** — SaaS readiness: signup flow, drop self-host docs,
+  KMS-backed per-tenant attachment keys, ToS/PP stubs.
 
 ---
 
