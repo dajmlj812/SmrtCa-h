@@ -64,10 +64,27 @@ function parseInput(body: unknown): Omit<WizardInput, 'tenantId'> | { error: str
     if (!Number.isFinite(v) || v < 0 || v > 100) return undefined;
     return v;
   }
+  // 0.17.8 — accept accountIds[] for the "include these accounts"
+  // filter. Loose-typed (string[]), validated as UUIDs at parse
+  // time; an invalid entry rejects the whole input. Undefined
+  // or empty list = include every account (the wizard service
+  // treats null + [] as "no filter").
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let accountIds: string[] | undefined;
+  if (Array.isArray(b.accountIds)) {
+    accountIds = [];
+    for (const id of b.accountIds) {
+      if (typeof id !== 'string' || !UUID.test(id)) {
+        return { error: 'accountIds must be UUIDs' };
+      }
+      accountIds.push(id);
+    }
+  }
   return {
     periodType,
     anchor: b.anchor,
     count,
+    accountIds,
     groceriesOverrideCents: readOverrides('groceriesOverrideCents'),
     fuelOverrideCents: readOverrides('fuelOverrideCents'),
     tollsOverrideCents: readOverrides('tollsOverrideCents'),

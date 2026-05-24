@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, type WizardPreview } from '../api';
+import { api, type Account, type WizardPreview } from '../api';
 import { formatCents, formatDate } from '../format';
 
 type PeriodType = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
@@ -55,6 +55,47 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
   const [incomePctOverride, setIncomePctOverride] = useState<string>('');
   const [leftoverPctOverride, setLeftoverPctOverride] = useState<string>('');
 
+  /**
+   * 0.17.8 — accounts the wizard should consider. Loaded from
+   * the tenant's account list; defaults to "every account
+   * selected". Unchecking an account removes its bills,
+   * recurring income, and grocery-spend history from the
+   * wizard's data sources. Bills/income with NULL account_id
+   * (household-wide) stay regardless — those apply to every
+   * account by design.
+   */
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(
+    new Set(),
+  );
+  useEffect(() => {
+    void api
+      .listAccounts()
+      .then((rows) => {
+        setAccounts(rows);
+        // Default: all accounts included.
+        setSelectedAccountIds(new Set(rows.map((a) => a.id)));
+      })
+      .catch(() => undefined);
+  }, []);
+  function toggleAccount(id: string) {
+    setSelectedAccountIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  const allSelected =
+    accounts.length > 0 && selectedAccountIds.size === accounts.length;
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedAccountIds(new Set());
+    } else {
+      setSelectedAccountIds(new Set(accounts.map((a) => a.id)));
+    }
+  }
+
   /** Parse a percent-input string. '' or out-of-range -> undefined. */
   function parsePct(s: string): number | undefined {
     if (s.trim() === '') return undefined;
@@ -67,10 +108,21 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     setPreviewing(true);
     setError(null);
     try {
+      // 0.17.8 — when every account is selected (the default),
+      // send no filter so the wizard considers everything. When
+      // a subset is selected, send the explicit list. Sending
+      // an empty list would tell the server "no accounts" which
+      // we never want from this UI; the "deselect all" state is
+      // already a clear signal that the user wants nothing.
+      const accountIds =
+        accounts.length > 0 && !allSelected
+          ? Array.from(selectedAccountIds)
+          : undefined;
       const p = await api.budgetWizardPreview({
         periodType,
         anchor,
         count,
+        ...(accountIds ? { accountIds } : {}),
         groceriesOverrideCents: overrides.groceries,
         fuelOverrideCents: overrides.fuel,
         tollsOverrideCents: overrides.tolls,
@@ -86,7 +138,17 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     } finally {
       setPreviewing(false);
     }
-  }, [periodType, anchor, count, overrides, incomePctOverride, leftoverPctOverride]);
+  }, [
+    periodType,
+    anchor,
+    count,
+    overrides,
+    incomePctOverride,
+    leftoverPctOverride,
+    accounts.length,
+    allSelected,
+    selectedAccountIds,
+  ]);
 
   useEffect(() => {
     void loadPreview();
@@ -127,10 +189,20 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     setCommitting(true);
     setError(null);
     try {
+      // 0.17.8 — same accountIds plumbing as preview so the
+      // commit reads the same filtered data the user saw in the
+      // preview. (The wizard service technically reads from
+      // preview, so this is belt-and-suspenders, but if the
+      // server ever re-derives during commit it'll still match.)
+      const accountIds =
+        accounts.length > 0 && !allSelected
+          ? Array.from(selectedAccountIds)
+          : undefined;
       const r = await api.budgetWizardCommit({
         periodType,
         anchor,
         count,
+        ...(accountIds ? { accountIds } : {}),
         groceriesOverrideCents: overrides.groceries,
         fuelOverrideCents: overrides.fuel,
         tollsOverrideCents: overrides.tolls,
@@ -247,6 +319,66 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
               onChange={(e) => setLeftoverPctOverride(e.target.value)}
             />
           </div>
+          {/*
+            * 0.17.8 — accounts to include. Defaults to every account
+            * checked. Unchecking removes that account's bills,
+            * recurring income, and grocery transactions from the
+            * wizard's data sources. Bills/income with no account
+            * (household-wide) stay in regardless.
+            */}
+          {accounts.length > 0 && (
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <label>
+                Include accounts{' '}
+                <span className="muted small">
+                  · {selectedAccountIds.size} of {accounts.length}
+                </span>
+              </label>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  padding: '8px 10px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  background: 'var(--surface-3)',
+                }}
+              >
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate =
+                        selectedAccountIds.size > 0 && !allSelected;
+                    }}
+                    onChange={toggleAll}
+                  />
+                  <strong>{allSelected ? 'Deselect all' : 'Select all'}</strong>
+                </label>
+                {accounts.map((a) => (
+                  <label
+                    key={a.id}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedAccountIds.has(a.id)}
+                      onChange={() => toggleAccount(a.id)}
+                    />
+                    {a.name}
+                  </label>
+                ))}
+              </div>
+              <div className="muted small" style={{ marginTop: 4 }}>
+                Bills and income that aren't tied to any specific account
+                (household-wide) are always included.
+              </div>
+            </div>
+          )}
           <button className="btn secondary" type="submit" disabled={previewing}>
             {previewing ? 'Previewing…' : 'Refresh preview'}
           </button>

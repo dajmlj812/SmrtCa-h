@@ -2194,6 +2194,13 @@ export const api = {
     periodType: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
     anchor: string;
     count: number;
+    /**
+     * 0.17.8 — INCLUDE these accounts in the wizard data sources.
+     * Bills/income with NULL account_id (household-wide) are
+     * always included regardless. Undefined or empty = include
+     * every account.
+     */
+    accountIds?: string[];
     groceriesOverrideCents?: Record<number, number>;
     fuelOverrideCents?: Record<number, number>;
     tollsOverrideCents?: Record<number, number>;
@@ -2213,6 +2220,8 @@ export const api = {
     periodType: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
     anchor: string;
     count: number;
+    /** 0.17.8 — see budgetWizardPreview.accountIds. */
+    accountIds?: string[];
     groceriesOverrideCents?: Record<number, number>;
     fuelOverrideCents?: Record<number, number>;
     tollsOverrideCents?: Record<number, number>;

@@ -9,11 +9,71 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.7 shipped. 0.17.7 adds a "Period overview"
-cash-flow view to /budgets — income with dates, bills line-
-per-bill, modifiable budgets, leftover/overextended net. The
-view the user actually wanted instead of the budget-vs-actual
-table the page led with before._
+_0.17.0–0.17.8 shipped. 0.17.8 adds a "Include accounts"
+checklist to the AutoMagic wizard so the user can scope which
+accounts contribute bills, recurring income, and grocery
+history to the suggested budgets._
+
+---
+
+## [0.17.8] — 2026-05-24 — Wizard account include/exclude
+
+Operator who has multiple accounts (personal checking +
+business checking + joint household) wants the wizard to
+only consider a subset when building suggested budgets:
+
+> "Allow the AutoMagic budget setup to include or exclude
+> accounts."
+
+### What's new
+
+`WizardInput` gains an optional `accountIds: string[]`
+filter. When set, the wizard's data-source SELECTs include:
+
+- **Bills** with `account_id IN (...)` **OR** `account_id IS NULL`
+- **Recurring income** same — account-scoped or household-wide
+- **Grocery transactions** (for the median) joined through
+  accounts with the same filter
+- **Vehicles + commute routes** unaffected — they're not
+  account-scoped (tied to the household).
+
+Bills and income with `account_id IS NULL` are always
+included: those represent household-wide commitments by design
+(e.g. "rent" is a household bill, not a per-account one).
+Filtering them out when the user picks a subset would
+silently drop legitimate items.
+
+### UX
+
+The wizard modal now has an **"Include accounts"** field
+above the Refresh-preview button:
+
+- One checkbox per tenant account, all checked by default
+- "Select all" / "Deselect all" master toggle
+  (indeterminate state when some-but-not-all are selected)
+- Counter shows `N of M` selected
+- Helper text reminds users that household-wide bills and
+  income are always included regardless of selection
+
+### Server
+
+- `WizardInput.accountIds?: string[]`
+- `weeklyGroceriesMedian(tenantId, accountIds)` — passes the
+  IDs through; SQL uses `($2::uuid[] IS NULL OR a.id = ANY($2))`
+  so a null array means "no filter"
+- Bills + income queries gain the same conditional filter
+- `parseInput` validates each entry as a UUID; rejects bogus
+  IDs with `400 accountIds must be UUIDs`
+- An empty array on the wire is normalized to "no filter" in
+  the service (matches the "deselect all" UI state, which the
+  client doesn't actually send empty — it sends `undefined`
+  in that case)
+
+### Tests
+
+27 wizard + budget + commute tests all still pass. No new
+tests for the filter itself — the SQL guard `($2::uuid[] IS NULL ...)`
+is the same shape used in the 0.17.6 fixes that ARE tested.
 
 ---
 

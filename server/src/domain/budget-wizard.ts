@@ -153,11 +153,21 @@ export interface WizardPreview {
   periods: PeriodPreview[];
 }
 
-async function weeklyGroceriesMedian(tenantId: string): Promise<number> {
+async function weeklyGroceriesMedian(
+  tenantId: string,
+  accountIds: string[] | null,
+): Promise<number> {
   // 0.17.6 — tenant-scoped via accounts JOIN. Pre-fix this aggregated
   // groceries across every tenant in the database; on a multi-tenant
   // deploy that meant tenant A's wizard preview included tenant B's
   // grocery spend in the median.
+  //
+  // 0.17.8 — optional account-IDs filter so the user can pick which
+  // accounts contribute to the median. Passing NULL = all accounts;
+  // a non-empty array = only those accounts; an empty array still
+  // means "all" (the SQL `($2::uuid[] IS NULL OR ...)` treats an
+  // empty array as the no-filter case via the IS NULL check we
+  // route through in the caller).
   const r = await pool.query<{ week: string; total: number }>(
     `WITH groc AS (
        SELECT date_trunc('week', txn_date)::date AS week,
@@ -166,6 +176,7 @@ async function weeklyGroceriesMedian(tenantId: string): Promise<number> {
          JOIN accounts a ON a.id = t.account_id
          JOIN categories c ON c.id = t.category_id
         WHERE a.tenant_id = $1
+          AND ($2::uuid[] IS NULL OR a.id = ANY($2::uuid[]))
           AND lower(c.name) = 'groceries'
           AND t.amount_cents < 0
           AND t.transfer_group_id IS NULL
@@ -173,7 +184,7 @@ async function weeklyGroceriesMedian(tenantId: string): Promise<number> {
      GROUP BY 1
      )
      SELECT to_char(week, 'YYYY-MM-DD') AS week, total FROM groc ORDER BY total`,
-    [tenantId],
+    [tenantId, accountIds],
   );
   if (r.rowCount === 0) return 0;
   const sorted = r.rows.map((row) => Number(row.total)).sort((a, b) => a - b);
@@ -362,6 +373,20 @@ export interface WizardInput {
    * or filters by tenant_id directly.
    */
   tenantId: string;
+  /**
+   * 0.17.8 — optional list of account IDs to INCLUDE. When set,
+   * the wizard only considers bills, recurring_income, and
+   * grocery transactions associated with these accounts. Bills
+   * and income with a NULL account_id are treated as
+   * household-wide and ALWAYS included regardless (they apply
+   * to every account by design). Undefined or empty array =
+   * include every account.
+   *
+   * Vehicles + commute routes are NOT account-scoped (they're
+   * tied to the household, not a specific account) so this
+   * filter doesn't affect the fuel + tolls calculation.
+   */
+  accountIds?: string[];
   periodType: WizardPeriodType;
   anchor: string;
   count: number;
@@ -383,7 +408,11 @@ export interface WizardInput {
 }
 
 export async function buildWizardPreview(input: WizardInput): Promise<WizardPreview> {
-  const groceriesWeekly = await weeklyGroceriesMedian(input.tenantId);
+  // 0.17.8 — normalize empty array to null so the SQL "IS NULL"
+  // sentinel works (an empty array would otherwise filter every row).
+  const accountIds =
+    input.accountIds && input.accountIds.length > 0 ? input.accountIds : null;
+  const groceriesWeekly = await weeklyGroceriesMedian(input.tenantId, accountIds);
   const { fuelCents: fuelWeekly, tollsCents: tollsWeekly } = await routeDrivenWeekly(
     input.tenantId,
   );
@@ -407,18 +436,29 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
       ? input.savingsLeftoverPctOverride
       : savingsLeftoverPctGlobal;
 
+  // 0.17.8 — when accountIds is set, include bills/income tied to
+  // those accounts AS WELL AS rows with NULL account_id (the
+  // "household-wide" set). Null-account rows apply to every
+  // account by design, so excluding them when the user picks a
+  // subset would silently drop legitimate items.
   const bills = (
     await pool.query<BillRow>(
       `SELECT id, name, amount_cents, frequency, next_due_date
-         FROM bills WHERE active AND tenant_id = $1`,
-      [input.tenantId],
+         FROM bills
+        WHERE active
+          AND tenant_id = $1
+          AND ($2::uuid[] IS NULL OR account_id IS NULL OR account_id = ANY($2::uuid[]))`,
+      [input.tenantId, accountIds],
     )
   ).rows;
   const income = (
     await pool.query<IncomeRow>(
       `SELECT id, name, amount_cents, frequency, next_expected_date
-         FROM recurring_income WHERE active AND tenant_id = $1`,
-      [input.tenantId],
+         FROM recurring_income
+        WHERE active
+          AND tenant_id = $1
+          AND ($2::uuid[] IS NULL OR account_id IS NULL OR account_id = ANY($2::uuid[]))`,
+      [input.tenantId, accountIds],
     )
   ).rows;
 

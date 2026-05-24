@@ -161,11 +161,64 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.7 shipped. 0.17.7 adds a &quot;Period overview&quot;
-cash-flow view to /budgets — income with dates, bills line-
-per-bill, modifiable budgets, leftover/overextended net. The
-view the user actually wanted instead of the budget-vs-actual
-table the page led with before.</em></p>
+<p><em>0.17.0–0.17.8 shipped. 0.17.8 adds a &quot;Include accounts&quot;
+checklist to the AutoMagic wizard so the user can scope which
+accounts contribute bills, recurring income, and grocery
+history to the suggested budgets.</em></p>
+<hr>
+<h2 id="0178-2026-05-24-wizard-account-includeexclude">[0.17.8] — 2026-05-24 — Wizard account include/exclude<a class="heading-anchor" href="#0178-2026-05-24-wizard-account-includeexclude">#</a></h2>
+<p>Operator who has multiple accounts (personal checking +
+business checking + joint household) wants the wizard to
+only consider a subset when building suggested budgets:</p>
+<blockquote>
+<p>&quot;Allow the AutoMagic budget setup to include or exclude
+accounts.&quot;</p>
+</blockquote>
+<h3 id="what39s-new">What&#39;s new<a class="heading-anchor" href="#what39s-new">#</a></h3>
+<p><code>WizardInput</code> gains an optional <code>accountIds: string[]</code>
+filter. When set, the wizard&#39;s data-source SELECTs include:</p>
+<ul>
+<li><strong>Bills</strong> with <code>account_id IN (...)</code> <strong>OR</strong> <code>account_id IS NULL</code></li>
+<li><strong>Recurring income</strong> same — account-scoped or household-wide</li>
+<li><strong>Grocery transactions</strong> (for the median) joined through
+accounts with the same filter</li>
+<li><strong>Vehicles + commute routes</strong> unaffected — they&#39;re not
+account-scoped (tied to the household).</li>
+</ul>
+<p>Bills and income with <code>account_id IS NULL</code> are always
+included: those represent household-wide commitments by design
+(e.g. &quot;rent&quot; is a household bill, not a per-account one).
+Filtering them out when the user picks a subset would
+silently drop legitimate items.</p>
+<h3 id="ux">UX<a class="heading-anchor" href="#ux">#</a></h3>
+<p>The wizard modal now has an <strong>&quot;Include accounts&quot;</strong> field
+above the Refresh-preview button:</p>
+<ul>
+<li>One checkbox per tenant account, all checked by default</li>
+<li>&quot;Select all&quot; / &quot;Deselect all&quot; master toggle
+(indeterminate state when some-but-not-all are selected)</li>
+<li>Counter shows <code>N of M</code> selected</li>
+<li>Helper text reminds users that household-wide bills and
+income are always included regardless of selection</li>
+</ul>
+<h3 id="server">Server<a class="heading-anchor" href="#server">#</a></h3>
+<ul>
+<li><code>WizardInput.accountIds?: string[]</code></li>
+<li><code>weeklyGroceriesMedian(tenantId, accountIds)</code> — passes the
+IDs through; SQL uses <code>($2::uuid[] IS NULL OR a.id = ANY($2))</code>
+so a null array means &quot;no filter&quot;</li>
+<li>Bills + income queries gain the same conditional filter</li>
+<li><code>parseInput</code> validates each entry as a UUID; rejects bogus
+IDs with <code>400 accountIds must be UUIDs</code></li>
+<li>An empty array on the wire is normalized to &quot;no filter&quot; in
+the service (matches the &quot;deselect all&quot; UI state, which the
+client doesn&#39;t actually send empty — it sends <code>undefined</code>
+in that case)</li>
+</ul>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>27 wizard + budget + commute tests all still pass. No new
+tests for the filter itself — the SQL guard <code>($2::uuid[] IS NULL ...)</code>
+is the same shape used in the 0.17.6 fixes that ARE tested.</p>
 <hr>
 <h2 id="0177-2026-05-24-period-cash-flow-view-on-budgets">[0.17.7] — 2026-05-24 — Period cash-flow view on /budgets<a class="heading-anchor" href="#0177-2026-05-24-period-cash-flow-view-on-budgets">#</a></h2>
 <p>Operator feedback after 0.17.6 made the 61 AutoMagic-created
@@ -5764,7 +5817,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 21:08:48 UTC · commit df66ced</span>
+  <span>Generated 2026-05-24 21:19:06 UTC · commit 23fc3f8</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
