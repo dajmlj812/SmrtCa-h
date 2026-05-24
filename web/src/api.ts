@@ -1197,7 +1197,16 @@ export const api = {
     }).then((r) => r.result);
   },
 
-  normalize: (opts: { accountId?: string; limit?: number } = {}) =>
+  normalize: (
+    opts: {
+      accountId?: string;
+      limit?: number;
+      // 0.17.5 — 'all' includes already-normalized rows in the
+      // selection. 'manual' rows are still left alone in both
+      // modes. Default 'pending' = legacy behavior.
+      mode?: 'pending' | 'all';
+    } = {},
+  ) =>
     http<{ summary: NormalizationSummary }>('/api/normalize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1211,6 +1220,17 @@ export const api = {
     const q = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
     return http<{ pending: number }>(`/api/normalize/pending-count${q}`).then(
       (r) => r.pending,
+    );
+  },
+
+  // 0.17.5 — richer counts for the "Re-normalize already-
+  // normalized too?" prompt. Returns counts by status in one
+  // round-trip; 'manual' is informational only (those rows
+  // never get touched).
+  normalizeCounts: (accountId?: string) => {
+    const q = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
+    return http<{ pending: number; normalized: number; manual: number }>(
+      `/api/normalize/counts${q}`,
     );
   },
 

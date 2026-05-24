@@ -1,8 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { getProviderId } from '../ai/factory.js';
-import { countPendingTransactions, normalizePending } from '../ai/normalize-service.js';
+import {
+  countByNormalizationStatus,
+  countPendingTransactions,
+  normalizePending,
+} from '../ai/normalize-service.js';
 import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
-import { FEATURES, requireFeature } from '../auth/entitlements.js';
+import {
+  FEATURES,
+  checkAndIncrementQuota,
+  requireFeature,
+} from '../auth/entitlements.js';
 import { isUuid } from '../util.js';
 
 /**
@@ -38,6 +46,27 @@ export async function normalizeRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // 0.17.5 — richer count powering the "Re-normalize already-
+  // normalized too?" prompt. Single round-trip GROUP BY across
+  // every status.
+  app.get<{ Querystring: { accountId?: string } }>(
+    '/api/normalize/counts',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      let accountId: string | undefined;
+      if (req.query.accountId !== undefined && req.query.accountId !== '') {
+        if (!isUuid(req.query.accountId)) {
+          return reply.code(400).send({ error: 'Invalid accountId' });
+        }
+        const ok = await assertAccountInTenant(tenantId, req.query.accountId);
+        if (!ok) return reply.code(404).send({ error: 'Account not found' });
+        accountId = req.query.accountId;
+      }
+      return countByNormalizationStatus(tenantId, accountId);
+    },
+  );
+
   app.post('/api/normalize', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
@@ -67,10 +96,47 @@ export async function normalizeRoutes(app: FastifyInstance): Promise<void> {
       limit = Math.floor(n);
     }
 
+    // 0.17.5 — mode controls which rows the service touches.
+    // Default 'pending' = original behavior. 'all' lets the user
+    // re-normalize already-normalized rows (e.g. after switching
+    // AI providers). 'manual' rows are NEVER touched in either
+    // mode — those are user choices the AI doesn't override.
+    let mode: 'pending' | 'all' = 'pending';
+    if (body.mode !== undefined && body.mode !== null) {
+      if (body.mode !== 'pending' && body.mode !== 'all') {
+        return reply
+          .code(400)
+          .send({ error: 'mode must be "pending" or "all"' });
+      }
+      mode = body.mode;
+    }
+
+    // 0.17.5 — meter the call against the AI_ASSISTANT quota.
+    // Every normalize batch makes `limit` LLM calls (one per
+    // transaction) to the AI provider; that's the same compute
+    // cost as a chat message and should count against the same
+    // monthly cap. The /billing meter was stuck at 0 before this
+    // because the normalize route didn't touch the counter at
+    // all — only /api/assistant/chat did. For Family (unlimited)
+    // tenants the counter still ticks via bumpCounter so usage is
+    // visible on /billing.
+    const charge = limit ?? 1; // server caps at 2000 internally
+    const quota = await checkAndIncrementQuota(
+      tenantId,
+      FEATURES.AI_ASSISTANT,
+      charge,
+    );
+    if (!quota.granted) {
+      return reply
+        .code(quota.denial!.status)
+        .send({ error: quota.denial!.error });
+    }
+
     const summary = await normalizePending({
       tenantId,
       ...(accountId ? { accountId } : {}),
       ...(limit !== undefined ? { limit } : {}),
+      mode,
     });
     return { summary };
   });

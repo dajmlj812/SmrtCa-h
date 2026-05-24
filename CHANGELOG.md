@@ -9,9 +9,102 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.4 shipped. 0.17.4 adds a live progress indicator
-to the AI normalize flow — long runs now show "X of Y" with a
-progress bar instead of a silent "Normalizing…" button._
+_0.17.0–0.17.5 shipped. 0.17.5 makes the AI normalize button
+charge the AI-assistant quota counter (it wasn't, so /billing
+showed 0 even after thousands of normalize calls) and prompts
+the user before re-running AI on already-normalized rows
+instead of silently skipping them._
+
+---
+
+## [0.17.5] — 2026-05-24 — Meter normalize + re-normalize prompt
+
+Two bugs surfaced during the smrtcash-test deploy after the
+0.17.4 progress-indicator ship made it easy to hammer
+Normalize:
+
+### Bug 1 — billing meter stuck at 0
+
+**Symptom.** 155 normalize batches in 4 hours, /billing's
+"AI assistant calls" stuck at 0.
+
+**Cause.** The normalize route never called
+`checkAndIncrementQuota`. Only `/api/assistant/chat` did.
+AI compute was happening (≈10 LLM calls per batch) but the
+meter never moved — operators couldn't see usage and Plus
+tenants could over-normalize past their cap.
+
+**Fix.** `POST /api/normalize` now calls
+`checkAndIncrementQuota(tenantId, FEATURES.AI_ASSISTANT, limit)`
+before doing any work. The same monthly cap that protects
+Plus from runaway chat usage now applies to normalize too;
+Family stays unlimited but the counter ticks so /billing
+shows real usage. Charge is `limit` (the chunk size) per
+batch — close enough for cap enforcement, slightly over-counts
+errors. Pre-work check refuses with 402 if a batch would
+exceed the cap.
+
+### Bug 2 — already-normalized rows silently skipped
+
+**Symptom.** Click Normalize after everything's done →
+button does nothing visible. No feedback, no prompt to redo.
+
+**Cause.** The route's SELECT only picked `status='pending'`
+rows; already-normalized rows were silently filtered out.
+
+**Fix.** Three pieces:
+
+- `POST /api/normalize` accepts a new `mode: 'pending' | 'all'`
+  body param. `'pending'` = legacy behavior (default).
+  `'all'` includes already-normalized rows in the SELECT and
+  in the UPDATE's WHERE. `'manual'` rows are never touched
+  in either mode — those are user choices the AI doesn't
+  override.
+- New `GET /api/normalize/counts` returns
+  `{ pending, normalized, manual }` in one round-trip.
+- `TransactionsPage.runNormalize()` fetches counts first
+  and shows the right confirmation prompt:
+  - `pending > 0, normalized = 0` → run silently (default
+    case)
+  - `pending = 0, normalized = 0` → "nothing to do" banner
+  - `pending = 0, normalized > 0` → "Nothing pending. Re-run
+    AI on the N already-normalized? This counts against
+    your monthly AI quota."
+  - `pending > 0, normalized > 0` → "N pending. Also re-run
+    AI on the M already-normalized? OK = redo all · Cancel
+    = pending only."
+
+### Server changes
+
+- `server/src/ai/normalize-service.ts` — `mode` param on
+  `NormalizePendingOptions` + `fetchPendingTransactions`;
+  new `countByNormalizationStatus(tenantId, accountId?)`
+  export. UPDATE WHERE changed from `status = 'pending'`
+  to `status <> 'manual'` so the 'all' mode actually
+  rewrites normalized rows.
+- `server/src/routes/normalize.ts` — quota check before
+  work; new `GET /api/normalize/counts` route; `mode`
+  validation on POST.
+
+### Web changes
+
+- `web/src/api.ts` — `mode` parameter on `api.normalize()`;
+  new `api.normalizeCounts()`.
+- `web/src/pages/TransactionsPage.tsx` — pre-run counts
+  fetch + 4-way decision tree → `window.confirm()` prompts
+  for the redo cases; `mode` plumbed through the chunked
+  loop.
+
+### Tests
+
+All 743 server + 6 web tests still pass. One pre-existing
+normalize test (`normalizes pending transactions after an
+import`) caught an SQL-precedence regression in my first
+draft of the mode-aware SELECT — explicit parens around the
+two mode branches fixed it. Worth calling out: AND > OR
+binding *is* the SQL standard, but with two parameterized
+type casts (`$4::text =`) in adjacent branches, explicit
+parens are clearer and safer.
 
 ---
 

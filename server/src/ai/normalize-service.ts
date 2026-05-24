@@ -30,6 +30,15 @@ export interface NormalizePendingOptions {
   accountId?: string;
   /** Cap on transactions per call. Defaults to 500, max 2000. */
   limit?: number;
+  /**
+   * 0.17.5 — which rows to consider. Default 'pending' = legacy
+   * behavior (only fresh transactions). 'all' includes
+   * already-normalized rows so the user can re-run AI against
+   * everything (e.g. after switching AI providers or to pick up
+   * improved categorization). 'manual' rows are NEVER touched —
+   * those are user choices.
+   */
+  mode?: 'pending' | 'all';
 }
 
 const DEFAULT_LIMIT = 500;
@@ -55,7 +64,13 @@ export async function normalizePending(
     MAX_LIMIT,
   );
 
-  const pending = await fetchPendingTransactions(opts.tenantId, opts.accountId, limit);
+  const mode = opts.mode ?? 'pending';
+  const pending = await fetchPendingTransactions(
+    opts.tenantId,
+    opts.accountId,
+    limit,
+    mode,
+  );
   if (pending.length === 0) {
     return { provider: normalizer.id, processed: 0, normalized: 0, errors: 0 };
   }
@@ -87,6 +102,11 @@ export async function normalizePending(
     const categoryId =
       catByName.get(result.category.toLowerCase()) ?? uncategorizedId;
     try {
+      // 0.17.5 — in 'all' mode allow updating already-normalized
+      // rows too. 'manual' is still off-limits (user choice). The
+      // SELECT only returned rows matching the mode filter, so this
+      // WHERE just guards against rows that turned 'manual' between
+      // SELECT and UPDATE (race-safe).
       const updated = await pool.query(
         `UPDATE transactions
             SET normalized_merchant = $1,
@@ -95,7 +115,7 @@ export async function normalizePending(
                 normalization_note = $3,
                 suggested_category_name = $4
           WHERE id = $5
-            AND normalization_status = 'pending'`,
+            AND normalization_status <> 'manual'`,
         [
           result.merchant,
           categoryId,
@@ -159,10 +179,39 @@ export async function countPendingTransactions(
   return Number(r.rows[0]?.n ?? 0);
 }
 
+/**
+ * 0.17.5 — count by status, in one round-trip. Powers the
+ * "Re-normalize already-normalized too?" prompt: the client
+ * needs to know both how many are pending and how many are
+ * already done before deciding whether to ask.
+ */
+export async function countByNormalizationStatus(
+  tenantId: string,
+  accountId?: string,
+): Promise<{ pending: number; normalized: number; manual: number }> {
+  const r = await pool.query<{ status: string; n: string }>(
+    `SELECT t.normalization_status AS status, COUNT(*)::text AS n
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+      WHERE a.tenant_id = $1
+        AND ($2::uuid IS NULL OR t.account_id = $2)
+      GROUP BY t.normalization_status`,
+    [tenantId, accountId ?? null],
+  );
+  const out = { pending: 0, normalized: 0, manual: 0 };
+  for (const row of r.rows) {
+    if (row.status === 'pending') out.pending = Number(row.n);
+    else if (row.status === 'normalized') out.normalized = Number(row.n);
+    else if (row.status === 'manual') out.manual = Number(row.n);
+  }
+  return out;
+}
+
 async function fetchPendingTransactions(
   tenantId: string,
   accountId: string | undefined,
   limit: number,
+  mode: 'pending' | 'all' = 'pending',
 ): Promise<NormalizationInput[]> {
   const result = await pool.query<{
     id: string;
@@ -175,11 +224,15 @@ async function fetchPendingTransactions(
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
       WHERE a.tenant_id = $1
-        AND t.normalization_status = 'pending'
+        AND (
+          ($4::text = 'all'     AND t.normalization_status IN ('pending', 'normalized'))
+          OR
+          ($4::text = 'pending' AND t.normalization_status = 'pending')
+        )
         AND ($2::uuid IS NULL OR t.account_id = $2)
       ORDER BY t.txn_date DESC, t.created_at DESC
       LIMIT $3`,
-    [tenantId, accountId ?? null, limit],
+    [tenantId, accountId ?? null, limit, mode],
   );
   return result.rows.map((row) => ({
     id: row.id,

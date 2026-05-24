@@ -107,45 +107,73 @@ export function TransactionsPage() {
 
   /**
    * 0.17.4 — chunked normalization with live progress.
+   * 0.17.5 — re-normalize prompt when already-normalized rows
+   * exist, plus mode plumbing so the user can include them on
+   * demand. Default is still "pending only" so an accidental
+   * Normalize click never burns AI quota redoing finished work.
    *
-   * The server's POST /api/normalize already accepts a `limit`
-   * param, so we get progress feedback by simply calling it
-   * repeatedly with a small batch size and updating UI state
-   * between calls. Each batch returns its own summary; we
-   * accumulate totals into `normalizeProgress` and stop when
-   * either the server reports `processed === 0` (no more
-   * pending) or the user clicks Stop.
+   * Decision tree on click:
+   *   • pending > 0, normalized = 0 → run pending-only (silent)
+   *   • pending = 0, normalized = 0 → "nothing to do" banner, no run
+   *   • pending > 0, normalized > 0 → ask: "redo the N already-
+   *       normalized too?" → user picks pending-only or all
+   *   • pending = 0, normalized > 0 → ask: "nothing pending; redo
+   *       the N already-normalized?" → run all or cancel
+   *
+   * The server's POST /api/normalize accepts `limit` + `mode`,
+   * so we get progress feedback by simply calling it repeatedly
+   * with a small batch size and accumulating between calls.
    */
   async function runNormalize() {
     cancelNormalizeRef.current = false;
-    setNormalizing(true);
-    setNormalizeResult(null);
     setError(null);
 
-    let total = 0;
+    // Fetch counts BEFORE flipping the busy state, so the
+    // confirm dialog doesn't fire under a disabled button /
+    // active progress bar.
+    let counts: { pending: number; normalized: number; manual: number };
     try {
-      total = await api.normalizePendingCount(accountId || undefined);
+      counts = await api.normalizeCounts(accountId || undefined);
     } catch (e) {
-      // If the count call fails, fall back to running without a
-      // denominator — the loop still works, we just can't show
-      // "X of Y", only "X processed".
-      total = 0;
-    }
-    if (total === 0) {
-      // Nothing to do — still run one call so the user sees a
-      // result banner ("processed 0") rather than silence.
-      try {
-        const summary = await api.normalize(accountId ? { accountId } : {});
-        setNormalizeResult(summary);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Normalization failed');
-      } finally {
-        setNormalizing(false);
-        setNormalizeProgress(null);
-      }
+      setError(e instanceof Error ? e.message : 'Failed to read counts');
       return;
     }
 
+    // Decide what to run.
+    let mode: 'pending' | 'all';
+    let total: number;
+    if (counts.pending === 0 && counts.normalized === 0) {
+      setError(null);
+      setNormalizeResult({
+        provider: provider || '',
+        processed: 0,
+        normalized: 0,
+        errors: 0,
+      });
+      return;
+    } else if (counts.pending > 0 && counts.normalized === 0) {
+      mode = 'pending';
+      total = counts.pending;
+    } else if (counts.pending === 0 && counts.normalized > 0) {
+      const ok = window.confirm(
+        `No transactions are pending normalization. Re-run AI on the ${counts.normalized.toLocaleString()} already-normalized transaction${counts.normalized === 1 ? '' : 's'}? This will count against your monthly AI quota.`,
+      );
+      if (!ok) return;
+      mode = 'all';
+      total = counts.normalized;
+    } else {
+      // pending > 0 AND normalized > 0
+      const redoAll = window.confirm(
+        `${counts.pending.toLocaleString()} transaction${counts.pending === 1 ? '' : 's'} pending normalization.\n\n` +
+          `Also re-run AI on the ${counts.normalized.toLocaleString()} already-normalized transaction${counts.normalized === 1 ? '' : 's'}?\n\n` +
+          `OK = redo all  ·  Cancel = pending only (default)`,
+      );
+      mode = redoAll ? 'all' : 'pending';
+      total = redoAll ? counts.pending + counts.normalized : counts.pending;
+    }
+
+    setNormalizing(true);
+    setNormalizeResult(null);
     setNormalizeProgress({
       processed: 0,
       normalized: 0,
@@ -168,6 +196,7 @@ export function TransactionsPage() {
         const batch = await api.normalize({
           ...(accountId ? { accountId } : {}),
           limit: NORMALIZE_CHUNK,
+          mode,
         });
         if (batch.processed === 0) break;
         cumulative = {
