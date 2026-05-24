@@ -2,11 +2,22 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { makeSuperAdminCookie, makeTestApp, pool, resetDb } from '../setup/test-db.js';
 
+async function defaultTenantId(): Promise<string> {
+  const t = await pool.query<{ id: string }>(
+    `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+  );
+  return t.rows[0]!.id;
+}
+
 async function seedVehicle(name: string): Promise<string> {
+  // 0.14.4: vehicles + commute_routes + route_vehicle_assignments
+  // are tenant-scoped. Direct INSERTs need the Default tenant id so
+  // the routes can find them.
+  const tenantId = await defaultTenantId();
   const r = await pool.query<{ id: string }>(
-    `INSERT INTO vehicles (name, fuel_type, mpg, weekly_avg_miles)
-     VALUES ($1, 'regular', 30, 0) RETURNING id`,
-    [name],
+    `INSERT INTO vehicles (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+     VALUES ($1, $2, 'regular', 30, 0) RETURNING id`,
+    [tenantId, name],
   );
   return r.rows[0]!.id;
 }
@@ -140,19 +151,23 @@ describe('Budget wizard with route-driven fuel + misc + savings', () => {
   it('route-assigned vehicle uses derived miles, not weekly_avg_miles', async () => {
     // Vehicle has weekly_avg_miles=999 but assignment says 100 miles/week.
     // Derived must win.
+    const tenantId = await defaultTenantId();
     const v = await pool.query<{ id: string }>(
-      `INSERT INTO vehicles (name, fuel_type, mpg, weekly_avg_miles)
-       VALUES ('Civic', 'regular', 30, 999) RETURNING id`,
+      `INSERT INTO vehicles (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ($1, 'Civic', 'regular', 30, 999) RETURNING id`,
+      [tenantId],
     );
     await pool.query(`INSERT INTO fuel_prices (fuel_type, price_cents_per_gallon, source) VALUES ('regular', 300, 'manual')`);
     const route = await pool.query<{ id: string }>(
-      `INSERT INTO commute_routes (name, distance_miles) VALUES ('Commute', 50) RETURNING id`,
+      `INSERT INTO commute_routes (tenant_id, name, distance_miles)
+       VALUES ($1, 'Commute', 50) RETURNING id`,
+      [tenantId],
     );
     // 2 crossings/wk × 50 mi = 100 mi/wk.
     await pool.query(
-      `INSERT INTO route_vehicle_assignments (route_id, vehicle_id, crossings_per_week)
-       VALUES ($1, $2, 2)`,
-      [route.rows[0]!.id, v.rows[0]!.id],
+      `INSERT INTO route_vehicle_assignments (tenant_id, route_id, vehicle_id, crossings_per_week)
+       VALUES ($1, $2, $3, 2)`,
+      [tenantId, route.rows[0]!.id, v.rows[0]!.id],
     );
     const r = await app.inject({
       method: 'POST',
@@ -166,9 +181,11 @@ describe('Budget wizard with route-driven fuel + misc + savings', () => {
 
   it('vehicle without assignments falls back to weekly_avg_miles', async () => {
     // No routes, no assignments — weekly_avg_miles is the only signal.
+    const tenantId = await defaultTenantId();
     await pool.query(
-      `INSERT INTO vehicles (name, fuel_type, mpg, weekly_avg_miles)
-       VALUES ('Civic', 'regular', 30, 90)`,
+      `INSERT INTO vehicles (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ($1, 'Civic', 'regular', 30, 90)`,
+      [tenantId],
     );
     await pool.query(`INSERT INTO fuel_prices (fuel_type, price_cents_per_gallon, source) VALUES ('regular', 300, 'manual')`);
     const r = await app.inject({

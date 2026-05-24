@@ -20,7 +20,13 @@ export interface NormalizationSummary {
 }
 
 export interface NormalizePendingOptions {
-  /** Restrict to one account; defaults to all accounts. */
+  /**
+   * Tenant scope — REQUIRED. Pre-0.14.4 the service walked every
+   * tenant's transactions; the route now passes the caller's tenantId
+   * so the SELECT joins through accounts and the UPDATE is gated.
+   */
+  tenantId: string;
+  /** Restrict to one account; defaults to all caller-tenant accounts. */
   accountId?: string;
   /** Cap on transactions per call. Defaults to 500, max 2000. */
   limit?: number;
@@ -34,8 +40,11 @@ const MAX_LIMIT = 2000;
  * 'manual' rows are left alone — they represent user choices.
  */
 export async function normalizePending(
-  opts: NormalizePendingOptions = {},
+  opts: NormalizePendingOptions,
 ): Promise<NormalizationSummary> {
+  if (!opts.tenantId) {
+    throw new Error('normalizePending requires a tenantId');
+  }
   const normalizer = getNormalizer();
   if (!normalizer) {
     return { provider: 'none', processed: 0, normalized: 0, errors: 0 };
@@ -46,7 +55,7 @@ export async function normalizePending(
     MAX_LIMIT,
   );
 
-  const pending = await fetchPendingTransactions(opts.accountId, limit);
+  const pending = await fetchPendingTransactions(opts.tenantId, opts.accountId, limit);
   if (pending.length === 0) {
     return { provider: normalizer.id, processed: 0, normalized: 0, errors: 0 };
   }
@@ -127,6 +136,7 @@ export async function normalizePending(
 }
 
 async function fetchPendingTransactions(
+  tenantId: string,
   accountId: string | undefined,
   limit: number,
 ): Promise<NormalizationInput[]> {
@@ -137,13 +147,15 @@ async function fetchPendingTransactions(
     source_category: string | null;
     source_type: string | null;
   }>(
-    `SELECT id, raw_description, amount_cents, source_category, source_type
-       FROM transactions
-      WHERE normalization_status = 'pending'
-        AND ($1::uuid IS NULL OR account_id = $1)
-      ORDER BY txn_date DESC, created_at DESC
-      LIMIT $2`,
-    [accountId ?? null, limit],
+    `SELECT t.id, t.raw_description, t.amount_cents, t.source_category, t.source_type
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+      WHERE a.tenant_id = $1
+        AND t.normalization_status = 'pending'
+        AND ($2::uuid IS NULL OR t.account_id = $2)
+      ORDER BY t.txn_date DESC, t.created_at DESC
+      LIMIT $3`,
+    [tenantId, accountId ?? null, limit],
   );
   return result.rows.map((row) => ({
     id: row.id,

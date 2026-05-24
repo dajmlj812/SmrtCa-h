@@ -1088,6 +1088,182 @@ describe('Tenant isolation — accounts + transactions + holdings (0.14.0)', () 
     expect(adminResp.statusCode).toBe(200);
   });
 
+  // ── Vehicles + commute-routes (0.14.4) ──────────────────────
+
+  it('GET /api/vehicles returns only caller-tenant rows', async () => {
+    await pool.query(
+      `INSERT INTO vehicles (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ($1, 'A-Car', 'regular', 25, 200),
+              ($2, 'B-Car', 'regular', 30, 100)`,
+      [A.id, B.id],
+    );
+    const r = await asA({ method: 'GET', url: '/api/vehicles' });
+    expect(r.statusCode).toBe(200);
+    const names = (r.json().vehicles as Array<{ name: string }>).map((v) => v.name);
+    expect(names).toEqual(['A-Car']);
+  });
+
+  it('PATCH/DELETE /api/vehicles/:id 404 a cross-tenant vehicle', async () => {
+    const r = await pool.query<{ id: string }>(
+      `INSERT INTO vehicles (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ($1, 'B-Car', 'regular', 30, 100) RETURNING id`,
+      [B.id],
+    );
+    const id = r.rows[0]!.id;
+    const patch = await asA({
+      method: 'PATCH',
+      url: `/api/vehicles/${id}`,
+      payload: { name: 'HACKED' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(patch.statusCode).toBe(404);
+    const del = await asA({ method: 'DELETE', url: `/api/vehicles/${id}` });
+    expect(del.statusCode).toBe(404);
+    const still = await pool.query<{ name: string }>(
+      `SELECT name FROM vehicles WHERE id = $1`,
+      [id],
+    );
+    expect(still.rows[0]!.name).toBe('B-Car');
+  });
+
+  it("POST /api/commute-routes rejects a cross-tenant vehicleId in assignments", async () => {
+    const bVehicle = await pool.query<{ id: string }>(
+      `INSERT INTO vehicles (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ($1, 'B-Car', 'regular', 30, 100) RETURNING id`,
+      [B.id],
+    );
+    const r = await asA({
+      method: 'POST',
+      url: '/api/commute-routes',
+      payload: {
+        name: 'A-Route',
+        distanceMiles: 20,
+        assignments: [
+          { vehicleId: bVehicle.rows[0]!.id, crossingsPerWeek: 5 },
+        ],
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(400);
+    // No route row created.
+    const routes = await pool.query<{ id: string }>(
+      `SELECT id FROM commute_routes WHERE tenant_id = $1`,
+      [A.id],
+    );
+    expect(routes.rowCount).toBe(0);
+  });
+
+  it('PUT /api/commute-routes/:id/assignments 404 a cross-tenant route', async () => {
+    const bRoute = await pool.query<{ id: string }>(
+      `INSERT INTO commute_routes (tenant_id, name, distance_miles)
+       VALUES ($1, 'B-Route', 10) RETURNING id`,
+      [B.id],
+    );
+    const r = await asA({
+      method: 'PUT',
+      url: `/api/commute-routes/${bRoute.rows[0]!.id}/assignments`,
+      payload: { assignments: [] },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  // ── Normalize (0.14.4) ──────────────────────────────────────
+
+  it('POST /api/normalize never touches cross-tenant pending transactions', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    await pool.query(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash,
+          normalization_status)
+       VALUES ($1, '2026-05-01', -1000, 'B-PURCHASE', $2, 'pending')`,
+      [bAcct, randomUUID()],
+    );
+    const r = await asA({
+      method: 'POST',
+      url: '/api/normalize',
+      payload: {},
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(200);
+    // Pending count for A is 0 → processed 0.
+    expect(r.json().summary.processed).toBe(0);
+    // B's row still pending.
+    const still = await pool.query<{ normalization_status: string }>(
+      `SELECT normalization_status FROM transactions
+        WHERE raw_description = 'B-PURCHASE'`,
+    );
+    expect(still.rows[0]!.normalization_status).toBe('pending');
+  });
+
+  it('POST /api/normalize 404s a cross-tenant accountId', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const r = await asA({
+      method: 'POST',
+      url: '/api/normalize',
+      payload: { accountId: bAcct },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  // ── Projections NULL-hatch (0.14.4) ─────────────────────────
+
+  it('PATCH /api/projections/:id 404s a NULL-tenant template (no mutation)', async () => {
+    const tpl = await pool.query<{ id: string }>(
+      `INSERT INTO retirement_projections
+         (tenant_id, name, starting_balance_cents, monthly_contribution_cents,
+          annual_return_pct, annual_inflation_pct, horizon_years)
+       VALUES (NULL, 'Shared Template', 100000, 5000, 7, 2, 30) RETURNING id`,
+    );
+    const r = await asA({
+      method: 'PATCH',
+      url: `/api/projections/${tpl.rows[0]!.id}`,
+      payload: { name: 'Hacked Template' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(404);
+    const after = await pool.query<{ name: string }>(
+      `SELECT name FROM retirement_projections WHERE id = $1`,
+      [tpl.rows[0]!.id],
+    );
+    expect(after.rows[0]!.name).toBe('Shared Template');
+  });
+
+  it('DELETE /api/projections/:id 404s a NULL-tenant template (no deletion)', async () => {
+    const tpl = await pool.query<{ id: string }>(
+      `INSERT INTO retirement_projections
+         (tenant_id, name, starting_balance_cents, monthly_contribution_cents,
+          annual_return_pct, annual_inflation_pct, horizon_years)
+       VALUES (NULL, 'Keep Me', 100000, 5000, 7, 2, 30) RETURNING id`,
+    );
+    const r = await asA({
+      method: 'DELETE',
+      url: `/api/projections/${tpl.rows[0]!.id}`,
+    });
+    expect(r.statusCode).toBe(404);
+    const still = await pool.query(
+      `SELECT 1 FROM retirement_projections WHERE id = $1`,
+      [tpl.rows[0]!.id],
+    );
+    expect(still.rowCount).toBe(1);
+  });
+
+  it('GET /api/projections still shows NULL-tenant templates (read OK)', async () => {
+    await pool.query(
+      `INSERT INTO retirement_projections
+         (tenant_id, name, starting_balance_cents, monthly_contribution_cents,
+          annual_return_pct, annual_inflation_pct, horizon_years)
+       VALUES (NULL, 'Shared Template', 100000, 5000, 7, 2, 30)`,
+    );
+    const r = await asA({ method: 'GET', url: '/api/projections' });
+    expect(r.statusCode).toBe(200);
+    const names = (r.json().projections as Array<{ name: string }>).map(
+      (p) => p.name,
+    );
+    expect(names).toContain('Shared Template');
+  });
+
   it('POST /api/holdings/refresh-prices/crypto never touches other tenants', async () => {
     const aAcct = await seedAccountFor(A.id, 'A-Inv', 'investment');
     const bAcct = await seedAccountFor(B.id, 'B-Inv', 'investment');

@@ -22,6 +22,15 @@ describe('Normalization pipeline (functional)', () => {
     await resetDb();
   });
 
+  // 0.14.4: normalizePending now requires a tenantId. Tests use the
+  // seeded Default tenant.
+  async function defaultTenantId(): Promise<string> {
+    const t = await pool.query<{ id: string }>(
+      `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+    );
+    return t.rows[0]!.id;
+  }
+
   it('normalizes every pending row from an import', async () => {
     const accountId = await seedAccount({ type: 'credit_card' });
     await commitImport(
@@ -30,7 +39,7 @@ describe('Normalization pipeline (functional)', () => {
       fixtureBuffer('chase-credit-card.csv'),
     );
 
-    const summary = await normalizePending({ accountId });
+    const summary = await normalizePending({ tenantId: await defaultTenantId(), accountId });
     expect(summary.processed).toBe(8);
     expect(summary.normalized).toBe(8);
     expect(summary.errors).toBe(0);
@@ -79,7 +88,7 @@ describe('Normalization pipeline (functional)', () => {
       payload: { categoryId: incomeId },
     });
 
-    const summary = await normalizePending({ accountId });
+    const summary = await normalizePending({ tenantId: await defaultTenantId(), accountId });
     // Only 7 left pending — the manual one is preserved.
     expect(summary.processed).toBe(7);
 

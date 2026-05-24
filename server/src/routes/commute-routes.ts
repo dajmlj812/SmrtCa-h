@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { pool, query, withTransaction } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { requireTenant } from '../auth/rbac.js';
 
 const ROUTE_COLUMNS = `id, name, distance_miles::float8 AS distance_miles,
   toll_per_crossing_cents, active, created_at`;
@@ -36,17 +37,40 @@ function parseAssignments(raw: unknown): AssignmentInput[] | null {
 }
 
 /**
- * Commute routes (Phase 7.3). Each route has a distance and an optional
- * per-crossing toll. Assignments link a route to a vehicle with a weekly
- * crossings count; the budget wizard uses (route × assignments) for both
- * fuel and toll math. Vehicles with no assignments fall back to the
- * `vehicles.weekly_avg_miles` field.
+ * Verify every vehicleId in an assignments array belongs to the
+ * caller's tenant. One bulk SELECT, returns true if all match.
+ */
+async function vehiclesAllInTenant(
+  tenantId: string,
+  vehicleIds: string[],
+): Promise<boolean> {
+  if (vehicleIds.length === 0) return true;
+  const r = await pool.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM vehicles
+      WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+    [tenantId, vehicleIds],
+  );
+  return Number(r.rows[0]!.count) === new Set(vehicleIds).size;
+}
+
+/**
+ * Commute routes (Phase 7.3).
+ *
+ * 0.14.4 — every route is tenant-scoped. The list joins through
+ * `vehicles.tenant_id` on assignments so a route in Tenant A can't
+ * surface a vehicle name from Tenant B. POST/PUT verify all
+ * supplied `vehicleId`s belong to the caller. INSERTs write
+ * `tenant_id` on `commute_routes` AND `route_vehicle_assignments`.
  */
 export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/commute-routes', async () => {
+  app.get('/api/commute-routes', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const routes = await query(
       `SELECT ${ROUTE_COLUMNS} FROM commute_routes
+        WHERE tenant_id = $1
         ORDER BY active DESC, name`,
+      [tenantId],
     );
     const assignments = await query<{
       route_id: string;
@@ -59,7 +83,10 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
               a.crossings_per_week::float8 AS crossings_per_week,
               v.name AS vehicle_name
          FROM route_vehicle_assignments a
-         JOIN vehicles v ON v.id = a.vehicle_id`,
+         JOIN vehicles v ON v.id = a.vehicle_id
+         JOIN commute_routes r ON r.id = a.route_id
+        WHERE r.tenant_id = $1 AND v.tenant_id = $1`,
+      [tenantId],
     );
     const byRoute = new Map<string, typeof assignments.rows>();
     for (const a of assignments.rows) {
@@ -76,6 +103,8 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/commute-routes', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const name = asString(body.name);
     if (name === '') return reply.code(400).send({ error: 'name is required' });
@@ -98,19 +127,29 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
         .code(400)
         .send({ error: 'assignments must be an array of { vehicleId, crossingsPerWeek }' });
     }
+    if (
+      assignments.length > 0 &&
+      !(await vehiclesAllInTenant(
+        tenantId,
+        assignments.map((a) => a.vehicleId),
+      ))
+    ) {
+      return reply.code(400).send({ error: 'One or more vehicleIds not found' });
+    }
 
     const route = await withTransaction(async (client) => {
       const ins = await client.query(
-        `INSERT INTO commute_routes (name, distance_miles, toll_per_crossing_cents)
-         VALUES ($1, $2, $3) RETURNING ${ROUTE_COLUMNS}`,
-        [name, distance, toll],
+        `INSERT INTO commute_routes (tenant_id, name, distance_miles, toll_per_crossing_cents)
+         VALUES ($1, $2, $3, $4) RETURNING ${ROUTE_COLUMNS}`,
+        [tenantId, name, distance, toll],
       );
       const id = (ins.rows[0] as { id: string }).id;
       for (const a of assignments) {
         await client.query(
-          `INSERT INTO route_vehicle_assignments (route_id, vehicle_id, crossings_per_week)
-           VALUES ($1, $2, $3)`,
-          [id, a.vehicleId, a.crossingsPerWeek],
+          `INSERT INTO route_vehicle_assignments
+             (tenant_id, route_id, vehicle_id, crossings_per_week)
+           VALUES ($1, $2, $3, $4)`,
+          [tenantId, id, a.vehicleId, a.crossingsPerWeek],
         );
       }
       return ins.rows[0];
@@ -122,6 +161,8 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/commute-routes/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid id' });
       }
@@ -164,8 +205,12 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'No updates' });
       }
       params.push(req.params.id);
+      const idIdx = params.length;
+      params.push(tenantId);
+      const tenantIdx = params.length;
       const r = await query(
-        `UPDATE commute_routes SET ${sets.join(', ')} WHERE id = $${params.length}
+        `UPDATE commute_routes SET ${sets.join(', ')}
+          WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
        RETURNING ${ROUTE_COLUMNS}`,
         params,
       );
@@ -179,6 +224,8 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string } }>(
     '/api/commute-routes/:id/assignments',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid id' });
       }
@@ -189,13 +236,23 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
           .code(400)
           .send({ error: 'assignments must be [{ vehicleId, crossingsPerWeek }]' });
       }
-      // Verify route exists.
+      // Verify route exists IN THIS TENANT.
       const route = await pool.query(
-        `SELECT id FROM commute_routes WHERE id = $1`,
-        [req.params.id],
+        `SELECT id FROM commute_routes WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, tenantId],
       );
       if (route.rowCount === 0) {
         return reply.code(404).send({ error: 'Route not found' });
+      }
+      // Every vehicleId in the assignments must also be in this tenant.
+      if (
+        assignments.length > 0 &&
+        !(await vehiclesAllInTenant(
+          tenantId,
+          assignments.map((a) => a.vehicleId),
+        ))
+      ) {
+        return reply.code(400).send({ error: 'One or more vehicleIds not found' });
       }
       await withTransaction(async (client) => {
         await client.query(
@@ -204,9 +261,10 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
         );
         for (const a of assignments) {
           await client.query(
-            `INSERT INTO route_vehicle_assignments (route_id, vehicle_id, crossings_per_week)
-             VALUES ($1, $2, $3)`,
-            [req.params.id, a.vehicleId, a.crossingsPerWeek],
+            `INSERT INTO route_vehicle_assignments
+               (tenant_id, route_id, vehicle_id, crossings_per_week)
+             VALUES ($1, $2, $3, $4)`,
+            [tenantId, req.params.id, a.vehicleId, a.crossingsPerWeek],
           );
         }
       });
@@ -217,12 +275,15 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/commute-routes/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid id' });
       }
-      const r = await query('DELETE FROM commute_routes WHERE id = $1', [
-        req.params.id,
-      ]);
+      const r = await query(
+        'DELETE FROM commute_routes WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, tenantId],
+      );
       if (r.rowCount === 0) {
         return reply.code(404).send({ error: 'Route not found' });
       }

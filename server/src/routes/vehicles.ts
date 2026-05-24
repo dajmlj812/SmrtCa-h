@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { requireTenant } from '../auth/rbac.js';
 
 const COLUMNS = `id, name, fuel_type,
   mpg::float8 AS mpg,
@@ -57,26 +58,39 @@ function validateNew(body: VehicleBody): { ok: true } | { ok: false; error: stri
   return { ok: true };
 }
 
+/**
+ * 0.14.4 — vehicles is tenant-scoped end-to-end. INSERT writes
+ * `tenant_id`; PATCH/DELETE filter the WHERE on `tenant_id` so
+ * cross-tenant ids 404 identically to unknown ids.
+ */
 export async function vehicleRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/vehicles', async () => {
+  app.get('/api/vehicles', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const r = await query(
-      `SELECT ${COLUMNS} FROM vehicles ORDER BY active DESC, name`,
+      `SELECT ${COLUMNS} FROM vehicles
+        WHERE tenant_id = $1
+        ORDER BY active DESC, name`,
+      [tenantId],
     );
     return { vehicles: r.rows };
   });
 
   app.post('/api/vehicles', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as VehicleBody;
     const check = validateNew(body);
     if (!check.ok) return reply.code(400).send({ error: check.error });
     const isEv = body.fuelType === 'electric';
     const r = await query(
       `INSERT INTO vehicles
-         (name, fuel_type, mpg, kwh_per_mile, electricity_rate_cents_per_kwh,
-          weekly_avg_miles)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (tenant_id, name, fuel_type, mpg, kwh_per_mile,
+          electricity_rate_cents_per_kwh, weekly_avg_miles)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${COLUMNS}`,
       [
+        tenantId,
         asString(body.name),
         body.fuelType,
         isEv ? null : asPositive(body.mpg),
@@ -91,6 +105,8 @@ export async function vehicleRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/vehicles/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid vehicle id' });
       }
@@ -136,8 +152,12 @@ export async function vehicleRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'No updates' });
       }
       params.push(req.params.id);
+      const idIdx = params.length;
+      params.push(tenantId);
+      const tenantIdx = params.length;
       const r = await query(
-        `UPDATE vehicles SET ${sets.join(', ')} WHERE id = $${params.length}
+        `UPDATE vehicles SET ${sets.join(', ')}
+          WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
        RETURNING ${COLUMNS}`,
         params,
       );
@@ -151,10 +171,15 @@ export async function vehicleRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/vehicles/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid vehicle id' });
       }
-      const r = await query('DELETE FROM vehicles WHERE id = $1', [req.params.id]);
+      const r = await query(
+        'DELETE FROM vehicles WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, tenantId],
+      );
       if (r.rowCount === 0) {
         return reply.code(404).send({ error: 'Vehicle not found' });
       }

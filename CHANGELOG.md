@@ -9,9 +9,143 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.6 + 0.14.0–0.14.3 shipped. One slice remains:
-0.14.4 (vehicles, commute-routes, fuel-prices, normalize,
-projections NULL hatch)._
+_0.13.0–0.13.6 + **0.14.0–0.14.4 shipped — multi-tenant isolation
+hardening pass COMPLETE**. Every route surfaced in the original
+audit punch list is now scoped end-to-end and verified by 72
+cross-tenant tests in `tests/security/tenant-isolation.test.ts`._
+
+---
+
+## [0.14.4] — 2026-05-23 — Tenant isolation hardening, slice 5 (closes pass): vehicles + commute-routes + fuel-prices + normalize + projections
+
+Final slice. Closes the multi-tenant isolation hardening pass
+that started at 0.14.0.
+
+### Scope
+
+- `routes/vehicles.ts` (4 handlers)
+- `routes/commute-routes.ts` (5 handlers — including the
+  cross-table assignments path that joins vehicles + routes)
+- `routes/fuel-prices.ts` (3 handlers — kept as global reference
+  data; role-gated)
+- `routes/normalize.ts` + `ai/normalize-service.ts`
+  (route + service signature both updated)
+- `routes/projections.ts` — closed the NULL-tenant write hatch
+
+### Server — vehicles + commute-routes
+
+- All `vehicles` handlers scoped; INSERT writes `tenant_id`;
+  PATCH/DELETE filter on `tenant_id` → cross-tenant ids 404.
+- All `commute_routes` + `route_vehicle_assignments` ops scoped;
+  POST/PUT-assignments verify every supplied `vehicleId` belongs
+  to the caller via a single bulk SELECT (`vehiclesAllInTenant`);
+  list endpoint joins through `vehicles.tenant_id` so a route
+  can't surface a vehicle name from another tenant; INSERTs write
+  `tenant_id` on both tables.
+
+### Server — fuel-prices (design note)
+
+`fuel_prices.fuel_type` is the PRIMARY KEY → only ONE row per
+grade across the whole database. These are global reference
+values (US national average from EIA), exactly like
+`exchange_rates`. The Phase-8 `tenant_id` column on the table
+is effectively unused. Decision: keep as global reference data,
+just gate writes:
+
+- All three handlers now require an active tenant
+  (`requireTenant`) for consistency with the rest of the pass —
+  super-admin sessions get 403.
+- POST manual override + POST refresh-from-EIA gated on
+  `requireFinancialMutation` so children can't change shared
+  prices that affect every household's budget wizard.
+
+### Server — normalize
+
+- `routes/normalize.ts`: `requireTenant` + verifies any
+  supplied `accountId` belongs to the caller.
+- `ai/normalize-service.ts`: `NormalizePendingOptions.tenantId`
+  is now **required** (throws if omitted). `fetchPendingTransactions`
+  joins `transactions → accounts` filtering `tenant_id`, so the
+  AI normalizer can no longer see other tenants' pending rows.
+- Test caller in `tests/functional/normalize-pipeline.test.ts`
+  updated to seed Default tenant id.
+
+### Server — projections (NULL hatch closed)
+
+The pre-fix `WHERE tenant_id = $1 OR tenant_id IS NULL` clause
+applied to **every** path (read AND write). That let a NULL-tenant
+"shared template" be PATCH'd and DELETE'd by any tenant. Fix:
+
+- GET list and GET series **still** accept `tenant_id IS NULL`
+  (shared templates remain readable across tenants).
+- PATCH and DELETE now require `tenant_id = $1` exactly →
+  a NULL-tenant template is read-only.
+
+### Tests (+9 cross-tenant isolation tests)
+
+- Vehicles: GET list filtered; PATCH and DELETE 404 cross-tenant
+  with no mutation/deletion.
+- Commute-routes: POST rejects cross-tenant `vehicleId` in
+  assignments and creates no row; PUT-assignments 404s a cross-
+  tenant route.
+- Normalize: POST never touches cross-tenant pending rows;
+  cross-tenant `accountId` 404s.
+- Projections NULL hatch: PATCH and DELETE on a NULL-tenant
+  template both 404 and leave the row intact; GET still includes
+  the template.
+
+Test-helper updates: `tests/integration/commute-routes.test.ts`
+direct INSERTs into `vehicles`/`commute_routes`/`route_vehicle_assignments`
+now include `tenant_id`.
+
+Total: **72 tenant-isolation tests** (63 from 0.14.0-3 + 9 new).
+**Every one of them would have failed against pre-0.14.x code.**
+
+- Total: **627 tests** (621 server + 6 web). Same 6 pre-existing
+  portability tar failures unchanged.
+
+### Files
+
+```
+server/src/routes/vehicles.ts                        (rewrote)
+server/src/routes/commute-routes.ts                  (rewrote)
+server/src/routes/fuel-prices.ts                     (gated)
+server/src/routes/normalize.ts                       (rewrote)
+server/src/routes/projections.ts                     (NULL-hatch on writes)
+server/src/ai/normalize-service.ts                   (tenantId required)
+server/tests/functional/normalize-pipeline.test.ts   (tenantId in call)
+server/tests/integration/commute-routes.test.ts      (tenant_id in seeds)
+server/tests/security/tenant-isolation.test.ts       (+9 tests)
+package.json + server/package.json + web/package.json (0.14.3 → 0.14.4)
+```
+
+### What the full pass closed
+
+- **17 unscoped route files** flagged by the audit, plus 4
+  additional helpers (`assertAccountInTenant`,
+  `assertTransactionInTenant`, `assertHoldingInTenant`,
+  `assertCategoryUsableByTenant`, `assertAttachmentInTenant`)
+  and one cross-slice helper (`requireTenant` extracted from
+  three duplicate definitions).
+- **3 domain modules** retrofitted to require tenantId
+  (`domain/reports.ts`, `domain/transfers.ts`,
+  `ai/normalize-service.ts`).
+- **2 architectural ambiguities** resolved: the categories table's
+  nullable `tenant_id` is now treated correctly by every route
+  (`assertCategoryUsableByTenant`); `retirement_projections`'
+  NULL-tenant hatch is read-only.
+- **1 file-disclosure bug** closed (`/api/attachments/:id` no
+  longer decrypts cross-tenant attachments).
+- **72 cross-tenant tests** in
+  `tests/security/tenant-isolation.test.ts` covering accounts,
+  transactions, holdings, budgets, bills, recurring-income,
+  goals, recurring suggestions, subscriptions, cash-flow,
+  insights, reports, transfers, attachments, splits,
+  category-suggestions, members-list, vehicles, commute-routes,
+  normalize, and the projections NULL hatch. Each one would have
+  failed against pre-0.14.x code.
+
+The original `0.14.x` plan is fully delivered.
 
 ---
 
