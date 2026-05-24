@@ -135,6 +135,30 @@ export async function normalizePending(
   };
 }
 
+/**
+ * 0.17.4 — count how many transactions are still pending
+ * normalization for this tenant (optionally scoped to an account).
+ * Powers the progress bar on the Transactions page: the client
+ * fetches this once before starting, then loops `/api/normalize`
+ * with a small `limit` until exhausted, updating progress between
+ * batches against this denominator.
+ */
+export async function countPendingTransactions(
+  tenantId: string,
+  accountId?: string,
+): Promise<number> {
+  const r = await pool.query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+      WHERE a.tenant_id = $1
+        AND t.normalization_status = 'pending'
+        AND ($2::uuid IS NULL OR t.account_id = $2)`,
+    [tenantId, accountId ?? null],
+  );
+  return Number(r.rows[0]?.n ?? 0);
+}
+
 async function fetchPendingTransactions(
   tenantId: string,
   accountId: string | undefined,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   api,
   type Account,
@@ -13,8 +13,26 @@ import { SplitsModal } from '../components/SplitsModal';
 import { SplitTransactionModal } from '../components/SplitTransactionModal';
 
 const PAGE_SIZE = 100;
+/**
+ * 0.17.4 — normalize in chunks of this size so the UI gets to
+ * update between batches. 10 ≈ 10–20s per chunk against the
+ * Claude API (about a second per transaction), short enough to
+ * feel responsive, large enough to amortize HTTP overhead.
+ */
+const NORMALIZE_CHUNK = 10;
 
 type StatusFilter = 'all' | 'pending' | 'normalized' | 'manual';
+
+interface NormalizeProgress {
+  /** Cumulative across all chunks in this run. */
+  processed: number;
+  normalized: number;
+  errors: number;
+  /** Total pending at run start; the denominator. */
+  total: number;
+  /** Latest provider id from the server (same across chunks but echoed for the success banner). */
+  provider: string;
+}
 
 export function TransactionsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -28,8 +46,16 @@ export function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [normalizing, setNormalizing] = useState(false);
+  const [normalizeProgress, setNormalizeProgress] =
+    useState<NormalizeProgress | null>(null);
   const [normalizeResult, setNormalizeResult] =
     useState<NormalizationSummary | null>(null);
+  /**
+   * 0.17.4 — set to true when the user clicks "Stop" mid-run.
+   * The chunked loop checks this between batches and bails
+   * cleanly without losing progress already committed.
+   */
+  const cancelNormalizeRef = useRef(false);
   const [provider, setProvider] = useState<string>('');
   const [attachmentsFor, setAttachmentsFor] = useState<Transaction | null>(
     null,
@@ -79,21 +105,101 @@ export function TransactionsPage() {
     void load({ accountId, search, offset: 0 });
   }
 
+  /**
+   * 0.17.4 — chunked normalization with live progress.
+   *
+   * The server's POST /api/normalize already accepts a `limit`
+   * param, so we get progress feedback by simply calling it
+   * repeatedly with a small batch size and updating UI state
+   * between calls. Each batch returns its own summary; we
+   * accumulate totals into `normalizeProgress` and stop when
+   * either the server reports `processed === 0` (no more
+   * pending) or the user clicks Stop.
+   */
   async function runNormalize() {
+    cancelNormalizeRef.current = false;
     setNormalizing(true);
     setNormalizeResult(null);
     setError(null);
+
+    let total = 0;
     try {
-      const summary = await api.normalize(
-        accountId ? { accountId } : {},
-      );
-      setNormalizeResult(summary);
+      total = await api.normalizePendingCount(accountId || undefined);
+    } catch (e) {
+      // If the count call fails, fall back to running without a
+      // denominator — the loop still works, we just can't show
+      // "X of Y", only "X processed".
+      total = 0;
+    }
+    if (total === 0) {
+      // Nothing to do — still run one call so the user sees a
+      // result banner ("processed 0") rather than silence.
+      try {
+        const summary = await api.normalize(accountId ? { accountId } : {});
+        setNormalizeResult(summary);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Normalization failed');
+      } finally {
+        setNormalizing(false);
+        setNormalizeProgress(null);
+      }
+      return;
+    }
+
+    setNormalizeProgress({
+      processed: 0,
+      normalized: 0,
+      errors: 0,
+      total,
+      provider: '',
+    });
+
+    let cumulative: NormalizeProgress = {
+      processed: 0,
+      normalized: 0,
+      errors: 0,
+      total,
+      provider: '',
+    };
+    let safetyValve = Math.ceil((total / NORMALIZE_CHUNK) * 2) + 4;
+
+    try {
+      while (!cancelNormalizeRef.current && safetyValve-- > 0) {
+        const batch = await api.normalize({
+          ...(accountId ? { accountId } : {}),
+          limit: NORMALIZE_CHUNK,
+        });
+        if (batch.processed === 0) break;
+        cumulative = {
+          processed: cumulative.processed + batch.processed,
+          normalized: cumulative.normalized + batch.normalized,
+          errors: cumulative.errors + batch.errors,
+          total,
+          provider: batch.provider,
+        };
+        setNormalizeProgress(cumulative);
+      }
+      // Build a final summary in the same shape the old (single-
+      // call) flow produced so the success banner code below
+      // still renders correctly.
+      setNormalizeResult({
+        provider: cumulative.provider,
+        processed: cumulative.processed,
+        normalized: cumulative.normalized,
+        errors: cumulative.errors,
+      });
       await load({ accountId, search, offset });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Normalization failed');
     } finally {
       setNormalizing(false);
+      setNormalizeProgress(null);
+      cancelNormalizeRef.current = false;
     }
+  }
+
+  function stopNormalize() {
+    cancelNormalizeRef.current = true;
   }
 
   async function onTxnUpdate(
@@ -155,19 +261,70 @@ export function TransactionsPage() {
             )}
           </div>
         </div>
-        <button
-          className="btn"
-          disabled={normalizing || provider === 'none'}
-          onClick={runNormalize}
-          title={
-            provider === 'none'
-              ? 'Set AI_PROVIDER in .env to enable normalization'
-              : 'Run AI normalization on pending transactions'
-          }
-        >
-          {normalizing ? 'Normalizing…' : 'Normalize'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn"
+            disabled={normalizing || provider === 'none'}
+            onClick={runNormalize}
+            title={
+              provider === 'none'
+                ? 'Set AI_PROVIDER in .env to enable normalization'
+                : 'Run AI normalization on pending transactions'
+            }
+          >
+            {normalizing ? 'Normalizing…' : 'Normalize'}
+          </button>
+          {normalizing && (
+            <button className="btn secondary" onClick={stopNormalize}>
+              Stop
+            </button>
+          )}
+        </div>
       </div>
+
+      {/*
+        * 0.17.4 — live progress while the chunked loop runs.
+        * Total comes from the pending-count call at run start;
+        * "processed" updates between every chunk. We render a
+        * thin progress bar + text counter so a long run feels
+        * responsive instead of looking frozen.
+        */}
+      {normalizing && normalizeProgress && normalizeProgress.total > 0 && (
+        <div className="banner info" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span>
+              Normalizing… <strong>{normalizeProgress.processed}</strong> of{' '}
+              <strong>{normalizeProgress.total}</strong>
+              {normalizeProgress.errors > 0
+                ? ` (${normalizeProgress.errors} error${normalizeProgress.errors === 1 ? '' : 's'})`
+                : ''}
+            </span>
+            <span className="muted small">
+              {Math.round(
+                (normalizeProgress.processed / normalizeProgress.total) * 100,
+              )}
+              %
+            </span>
+          </div>
+          <div
+            style={{
+              height: 6,
+              background: 'var(--surface-3)',
+              borderRadius: 3,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${(normalizeProgress.processed / normalizeProgress.total) * 100}%`,
+                background: 'var(--accent)',
+                transition: 'width 200ms ease',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {error && <div className="banner error">{error}</div>}
 

@@ -161,10 +161,75 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.3 shipped. 0.17.3 closes a verification-gate bug
-that locked out users created via paths that already proved
-email ownership (invitation accept, OIDC first-login,
-super-admin-creates-super-admin).</em></p>
+<p><em>0.17.0–0.17.4 shipped. 0.17.4 adds a live progress indicator
+to the AI normalize flow — long runs now show &quot;X of Y&quot; with a
+progress bar instead of a silent &quot;Normalizing…&quot; button.</em></p>
+<hr>
+<h2 id="0174-2026-05-24-normalize-progress-indicator">[0.17.4] — 2026-05-24 — Normalize progress indicator<a class="heading-anchor" href="#0174-2026-05-24-normalize-progress-indicator">#</a></h2>
+<p>Surfaced during the smrtcash-test deploy when running AI
+normalization across a hundred-ish imported transactions:
+the old &quot;Normalizing…&quot; button gave zero feedback for the
+duration of the run, and on the Claude provider that&#39;s
+~1 second per transaction. A 500-row import = 8 minutes of
+silence.</p>
+<h3 id="what39s-new">What&#39;s new<a class="heading-anchor" href="#what39s-new">#</a></h3>
+<ul>
+<li><strong>Live progress bar + counter</strong> on <code>/transactions</code> while
+normalization runs. Shows <code>X of Y</code> with a percentage and a
+thin horizontal bar that updates between batches.</li>
+<li><strong>&quot;Stop&quot; button</strong> lets the user halt mid-run without
+losing committed progress. The chunked loop checks a
+cancel ref between batches; the next batch never starts
+after Stop is clicked.</li>
+</ul>
+<h3 id="approach">Approach<a class="heading-anchor" href="#approach">#</a></h3>
+<p>No streaming/SSE plumbing, no jobs table. The existing
+<code>POST /api/normalize</code> route already accepts a <code>limit</code>
+parameter, so the client gets progress feedback simply by
+calling it repeatedly with a small chunk size and
+accumulating totals between calls. New denominator endpoint
+returns the pending-count once at run start.</p>
+<p>Trade-off vs SSE: more HTTP round-trips (one per batch of
+10 transactions). For real workloads (≤ a few hundred
+pending after an import) the overhead is negligible
+compared to AI-call latency, and the implementation is
+~30 lines instead of ~300.</p>
+<h3 id="files-changed">Files changed<a class="heading-anchor" href="#files-changed">#</a></h3>
+<ul>
+<li><strong><code>server/src/ai/normalize-service.ts</code></strong> — new
+<code>countPendingTransactions(tenantId, accountId?)</code>
+exported helper.</li>
+<li><strong><code>server/src/routes/normalize.ts</code></strong> — new
+<code>GET /api/normalize/pending-count</code>, tenant-scoped, same
+optional <code>accountId</code> filter as the existing POST.</li>
+<li><strong><code>web/src/api.ts</code></strong> — new <code>api.normalizePendingCount()</code>.</li>
+<li><strong><code>web/src/pages/TransactionsPage.tsx</code></strong> — chunked loop in
+<code>runNormalize()</code> (10 per chunk via <code>NORMALIZE_CHUNK</code>),
+cumulative totals tracked in new
+<code>NormalizeProgress</code> state, Stop button via cancel ref,
+inline progress banner with bar + counter. A safety-valve
+iteration cap (2× expected + 4) protects against pathological
+loops where the server reports nonzero <code>processed</code> but
+never reduces the pending count.</li>
+</ul>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>743 server + 6 web all still pass. No new tests for the
+chunked loop itself — it&#39;s UI state management; the
+underlying <code>/api/normalize</code> is the same well-tested route,
+and the new pending-count endpoint is a one-line query
+that mirrors the existing <code>fetchPendingTransactions</code> SELECT.</p>
+<h3 id="operator-notes">Operator notes<a class="heading-anchor" href="#operator-notes">#</a></h3>
+<ul>
+<li>Chunk size 10 is hard-coded as <code>NORMALIZE_CHUNK</code> in
+<code>TransactionsPage.tsx</code>. Higher numbers reduce HTTP
+round-trips at the cost of slower progress updates; lower
+numbers feel more responsive. 10 ≈ 10–20s per chunk
+against Claude, which is the right cadence.</li>
+<li>&quot;Stop&quot; doesn&#39;t roll back. Whatever was processed in the
+most recent in-flight batch stays processed. The next
+Normalize click picks up from where Stop left off
+(because the route only selects <code>status = &#39;pending&#39;</code>).</li>
+</ul>
 <hr>
 <h2 id="0173-2026-05-24-fix-auto-verify-on-proven-ownership-paths">[0.17.3] — 2026-05-24 — Fix: auto-verify on proven-ownership paths<a class="heading-anchor" href="#0173-2026-05-24-fix-auto-verify-on-proven-ownership-paths">#</a></h2>
 <p><strong>Bug.</strong> The 0.16.0 login gate refuses any user whose
@@ -5449,7 +5514,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 18:39:48 UTC · commit ed22f2a</span>
+  <span>Generated 2026-05-24 19:07:35 UTC · commit a438742</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

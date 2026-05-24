@@ -1204,6 +1204,16 @@ export const api = {
       body: JSON.stringify(opts),
     }).then((r) => r.summary),
 
+  // 0.17.4 — denominator for the progress bar on the
+  // Transactions page; the client calls this once before
+  // looping `normalize()` in chunks.
+  normalizePendingCount: (accountId?: string) => {
+    const q = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
+    return http<{ pending: number }>(`/api/normalize/pending-count${q}`).then(
+      (r) => r.pending,
+    );
+  },
+
   aiStatus: () => http<AiStatus>('/api/ai/status'),
 
   listSuggestions: (status: string = 'pending') =>

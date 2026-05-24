@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { getProviderId } from '../ai/factory.js';
-import { normalizePending } from '../ai/normalize-service.js';
+import { countPendingTransactions, normalizePending } from '../ai/normalize-service.js';
 import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
 import { FEATURES, requireFeature } from '../auth/entitlements.js';
 import { isUuid } from '../util.js';
@@ -15,6 +15,28 @@ import { isUuid } from '../util.js';
  */
 export async function normalizeRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/ai/status', async () => ({ provider: getProviderId() }));
+
+  // 0.17.4 — pending count for the progress-bar denominator.
+  // Same tenant-scoping + optional accountId filter as the
+  // normalize route itself.
+  app.get<{ Querystring: { accountId?: string } }>(
+    '/api/normalize/pending-count',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      let accountId: string | undefined;
+      if (req.query.accountId !== undefined && req.query.accountId !== '') {
+        if (!isUuid(req.query.accountId)) {
+          return reply.code(400).send({ error: 'Invalid accountId' });
+        }
+        const ok = await assertAccountInTenant(tenantId, req.query.accountId);
+        if (!ok) return reply.code(404).send({ error: 'Account not found' });
+        accountId = req.query.accountId;
+      }
+      const count = await countPendingTransactions(tenantId, accountId);
+      return { pending: count };
+    },
+  );
 
   app.post('/api/normalize', async (req, reply) => {
     const tenantId = requireTenant(req, reply);

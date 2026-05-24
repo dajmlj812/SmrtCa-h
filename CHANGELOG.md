@@ -9,10 +9,83 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.3 shipped. 0.17.3 closes a verification-gate bug
-that locked out users created via paths that already proved
-email ownership (invitation accept, OIDC first-login,
-super-admin-creates-super-admin)._
+_0.17.0–0.17.4 shipped. 0.17.4 adds a live progress indicator
+to the AI normalize flow — long runs now show "X of Y" with a
+progress bar instead of a silent "Normalizing…" button._
+
+---
+
+## [0.17.4] — 2026-05-24 — Normalize progress indicator
+
+Surfaced during the smrtcash-test deploy when running AI
+normalization across a hundred-ish imported transactions:
+the old "Normalizing…" button gave zero feedback for the
+duration of the run, and on the Claude provider that's
+~1 second per transaction. A 500-row import = 8 minutes of
+silence.
+
+### What's new
+
+- **Live progress bar + counter** on `/transactions` while
+  normalization runs. Shows `X of Y` with a percentage and a
+  thin horizontal bar that updates between batches.
+- **"Stop" button** lets the user halt mid-run without
+  losing committed progress. The chunked loop checks a
+  cancel ref between batches; the next batch never starts
+  after Stop is clicked.
+
+### Approach
+
+No streaming/SSE plumbing, no jobs table. The existing
+`POST /api/normalize` route already accepts a `limit`
+parameter, so the client gets progress feedback simply by
+calling it repeatedly with a small chunk size and
+accumulating totals between calls. New denominator endpoint
+returns the pending-count once at run start.
+
+Trade-off vs SSE: more HTTP round-trips (one per batch of
+10 transactions). For real workloads (≤ a few hundred
+pending after an import) the overhead is negligible
+compared to AI-call latency, and the implementation is
+~30 lines instead of ~300.
+
+### Files changed
+
+- **`server/src/ai/normalize-service.ts`** — new
+  `countPendingTransactions(tenantId, accountId?)`
+  exported helper.
+- **`server/src/routes/normalize.ts`** — new
+  `GET /api/normalize/pending-count`, tenant-scoped, same
+  optional `accountId` filter as the existing POST.
+- **`web/src/api.ts`** — new `api.normalizePendingCount()`.
+- **`web/src/pages/TransactionsPage.tsx`** — chunked loop in
+  `runNormalize()` (10 per chunk via `NORMALIZE_CHUNK`),
+  cumulative totals tracked in new
+  `NormalizeProgress` state, Stop button via cancel ref,
+  inline progress banner with bar + counter. A safety-valve
+  iteration cap (2× expected + 4) protects against pathological
+  loops where the server reports nonzero `processed` but
+  never reduces the pending count.
+
+### Tests
+
+743 server + 6 web all still pass. No new tests for the
+chunked loop itself — it's UI state management; the
+underlying `/api/normalize` is the same well-tested route,
+and the new pending-count endpoint is a one-line query
+that mirrors the existing `fetchPendingTransactions` SELECT.
+
+### Operator notes
+
+- Chunk size 10 is hard-coded as `NORMALIZE_CHUNK` in
+  `TransactionsPage.tsx`. Higher numbers reduce HTTP
+  round-trips at the cost of slower progress updates; lower
+  numbers feel more responsive. 10 ≈ 10–20s per chunk
+  against Claude, which is the right cadence.
+- "Stop" doesn't roll back. Whatever was processed in the
+  most recent in-flight batch stays processed. The next
+  Normalize click picks up from where Stop left off
+  (because the route only selects `status = 'pending'`).
 
 ---
 
