@@ -95,11 +95,15 @@ export function LoginPage({ onAuthenticated, signupEnabled }: Props) {
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
-        {signupEnabled && (
-          <p className="muted small" style={{ marginTop: 16 }}>
-            New to SmrtCash? <Link to="/signup">Create an account</Link>
-          </p>
-        )}
+        <p className="muted small" style={{ marginTop: 16 }}>
+          <Link to="/forgot-password">Forgot password?</Link>
+          {signupEnabled && (
+            <>
+              {' · '}
+              New to SmrtCash? <Link to="/signup">Create an account</Link>
+            </>
+          )}
+        </p>
       </form>
     </div>
   );

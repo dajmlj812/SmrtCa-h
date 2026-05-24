@@ -12,6 +12,8 @@ import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
 import { SignupPage } from './pages/SignupPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { BudgetsPage } from './pages/BudgetsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
@@ -55,6 +57,9 @@ export function App() {
   // 0.16.0 — /signup and /verify-email are also public.
   const isSignupRoute = location.pathname === '/signup';
   const isVerifyRoute = location.pathname.startsWith('/verify-email');
+  // 0.16.2 — /forgot-password and /reset-password are public.
+  const isForgotPasswordRoute = location.pathname === '/forgot-password';
+  const isResetPasswordRoute = location.pathname.startsWith('/reset-password');
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -105,6 +110,16 @@ export function App() {
   }
   if (isSignupRoute) {
     return <SignupPage />;
+  }
+  if (isForgotPasswordRoute) {
+    return <ForgotPasswordPage />;
+  }
+  if (isResetPasswordRoute) {
+    return (
+      <Routes>
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+      </Routes>
+    );
   }
   if (authState === 'loading') {
     return (
@@ -253,7 +268,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.16.1
+          SmrtCash · v0.16.2
           <button
             className="btn secondary logout-btn"
             type="button"

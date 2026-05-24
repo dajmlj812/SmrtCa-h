@@ -170,6 +170,48 @@ export function renderDunningEmail(opts: {
 }
 
 /**
+ * 0.16.2 — password reset email. Sent from
+ * /api/auth/password-reset-request when the email matches a real
+ * user. Links land on /reset-password?token=... which calls
+ * /api/auth/password-reset-confirm with the new password.
+ *
+ * Body intentionally calls out that "you can ignore this if you
+ * didn't request it" — anti-phishing copy that also pre-empts
+ * support questions about unexpected reset emails (a
+ * not-so-rare side effect of typo'd email addresses on signup).
+ */
+export function renderPasswordResetEmail(opts: {
+  resetUrl: string;
+  expiresAt: string;
+}): { subject: string; text: string; html: string } {
+  const subject = `Reset your SmrtCash password`;
+  const text = [
+    `We received a request to reset your SmrtCash password.`,
+    ``,
+    `Click the link below to choose a new password:`,
+    ``,
+    opts.resetUrl,
+    ``,
+    `The link expires ${opts.expiresAt}. If you didn't request a`,
+    `password reset you can safely ignore this email — your`,
+    `password won't change unless someone with this link sets a`,
+    `new one.`,
+  ].join('\n');
+  const html = [
+    `<p>We received a request to reset your SmrtCash password.</p>`,
+    `<p>Click the button below to choose a new password:</p>`,
+    `<p><a href="${escapeAttr(opts.resetUrl)}"`,
+    `style="display:inline-block;padding:10px 18px;background:#6366f1;`,
+    `color:#fff;border-radius:4px;text-decoration:none">Reset password</a></p>`,
+    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
+    `<code>${escapeHtml(opts.resetUrl)}</code></p>`,
+    `<p style="color:#6b7280;font-size:0.85em">Link expires ${escapeHtml(opts.expiresAt)}.`,
+    `If you didn't request a reset, ignore this email — your password won't change.</p>`,
+  ].join(' ');
+  return { subject, text, html };
+}
+
+/**
  * 0.16.0 — verification email for new public signups. Sent from
  * /api/auth/signup; the user clicks the link to land on
  * /verify-email?token=... which calls /api/auth/verify-email.

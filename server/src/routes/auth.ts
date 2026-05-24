@@ -10,6 +10,7 @@ import {
 import {
   SESSION_COOKIE,
   createSession,
+  deleteAllSessionsForUser,
   deleteSession,
   pruneExpiredSessions,
 } from '../auth/sessions.js';
@@ -20,7 +21,11 @@ import {
 } from '../auth/providers/registry.js';
 import { resolveIdentity } from '../auth/identities.js';
 import { recordAudit } from '../domain/audit.js';
-import { renderVerificationEmail, tryMail } from '../domain/mailer.js';
+import {
+  renderPasswordResetEmail,
+  renderVerificationEmail,
+  tryMail,
+} from '../domain/mailer.js';
 
 const OIDC_STATE_COOKIE = 'smrtcash_oidc_state';
 
@@ -78,6 +83,14 @@ function newVerificationToken(): string {
 }
 
 const VERIFICATION_TTL_HOURS = 24;
+/**
+ * 0.16.2 — password-reset token TTL. Tighter than the 24h
+ * verification TTL because resets are higher-risk: a stolen
+ * link is a full account takeover. One hour matches industry
+ * defaults (Stripe, GitHub) and is long enough for a user to
+ * click through email but short enough to limit blast radius.
+ */
+const PASSWORD_RESET_TTL_MINUTES = 60;
 const SIGNUP_BASE_URL_ENV = 'STRIPE_PUBLIC_BASE_URL'; // reuse the same env
 
 function publicBaseUrl(): string {
@@ -433,6 +446,141 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
       tenantId: result.tenantId,
     };
+  });
+
+  // ── 0.16.2: password reset — request a link ───────────────
+  //
+  // Public. Takes { email }. Always returns 202 — we don't
+  // reveal whether the address is registered. When the address
+  // DOES match a real user we mint a token and send it via email
+  // (or log it for the operator when SMTP is unconfigured —
+  // same fallback as the signup verification flow). Available
+  // regardless of PUBLIC_SIGNUP_ENABLED: existing users on a
+  // self-host deployment still need a way to recover their own
+  // password.
+  app.post('/api/auth/password-reset-request', async (req, reply) => {
+    const body = (req.body ?? {}) as { email?: unknown };
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (email === '' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      // Even with a malformed address we 202 to keep the enumeration
+      // surface flat (a 400 here distinguishes "not a real email" from
+      // "real email, doesn't match a user").
+      return reply.code(202).send({ status: 'reset_sent' });
+    }
+
+    const u = await pool.query<{ id: string }>(
+      `SELECT id FROM users WHERE lower(email) = lower($1)`,
+      [email],
+    );
+    if (u.rowCount && u.rowCount > 0) {
+      const userId = u.rows[0]!.id;
+      const token = newVerificationToken(); // same generator; opaque url-safe random
+      const expiresAt = new Date(
+        Date.now() + PASSWORD_RESET_TTL_MINUTES * 60_000,
+      );
+      await pool.query(
+        `INSERT INTO password_resets (user_id, token, expires_at)
+         VALUES ($1, $2, $3)`,
+        [userId, token, expiresAt],
+      );
+      // Best-effort email; failures don't change the response.
+      const resetUrl = `${publicBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+      const rendered = renderPasswordResetEmail({
+        resetUrl,
+        expiresAt: expiresAt.toISOString(),
+      });
+      try {
+        const r = await tryMail({ to: email, ...rendered });
+        if (!r.sent) {
+          req.log.warn(
+            { reason: r.reason, resetUrl },
+            'Password reset email NOT sent (SMTP unconfigured); operator must hand the link to the user manually',
+          );
+        }
+      } catch (err) {
+        req.log.warn({ err, resetUrl }, 'Password reset email send failed');
+      }
+      // Audit the request itself (not the consumption) so an
+      // operator can spot brute-force enumeration attempts.
+      await recordAudit({
+        actorUserId: userId,
+        actorKind: 'tenant_user',
+        action: 'user.password_reset_requested',
+      });
+    }
+    return reply.code(202).send({ status: 'reset_sent' });
+  });
+
+  // ── 0.16.2: password reset — confirm + set new password ────
+  //
+  // Public. Consumes the token, validates the new password
+  // against the same policy as signup, swaps in the hash, and
+  // invalidates every other session for the user. Caller is NOT
+  // signed in by this endpoint — they go through the login flow
+  // after reset, which gives them a fresh session bound to the
+  // new password.
+  app.post('/api/auth/password-reset-confirm', async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      token?: unknown;
+      password?: unknown;
+    };
+    const token = typeof body.token === 'string' ? body.token : '';
+    if (token === '') {
+      return reply.code(400).send({ error: 'Token is required' });
+    }
+    try {
+      validatePassword(body.password);
+    } catch (err) {
+      if (err instanceof PasswordPolicyError) {
+        return reply.code(400).send({ error: err.message });
+      }
+      throw err;
+    }
+
+    const tokenRow = await pool.query<{
+      id: string;
+      user_id: string;
+      expires_at: string;
+      consumed_at: string | null;
+    }>(
+      `SELECT id, user_id, expires_at::text AS expires_at,
+              consumed_at::text AS consumed_at
+         FROM password_resets WHERE token = $1`,
+      [token],
+    );
+    if (tokenRow.rowCount === 0) {
+      return reply.code(400).send({ error: 'Invalid reset token' });
+    }
+    const row = tokenRow.rows[0]!;
+    if (row.consumed_at !== null) {
+      return reply.code(400).send({ error: 'This reset link has already been used' });
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      return reply.code(400).send({ error: 'This reset link has expired — request a new one' });
+    }
+
+    const hash = await hashPassword(body.password as string);
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE users SET password_hash = $1 WHERE id = $2`,
+        [hash, row.user_id],
+      );
+      await client.query(
+        `UPDATE password_resets SET consumed_at = now() WHERE id = $1`,
+        [row.id],
+      );
+    });
+    // Kill every other browser session for this user. Defense
+    // against an attacker who had stolen credentials — the moment
+    // the real owner resets, the attacker's session dies.
+    const killed = await deleteAllSessionsForUser(row.user_id);
+    await recordAudit({
+      actorUserId: row.user_id,
+      actorKind: 'tenant_user',
+      action: 'user.password_reset_completed',
+      details: { sessions_invalidated: killed },
+    });
+    return reply.send({ reset: true });
   });
 
   // Local password login. The frontend sends { email, password }. The

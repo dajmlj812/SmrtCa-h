@@ -1302,6 +1302,26 @@ export const api = {
       body: JSON.stringify({ token }),
     }),
 
+  // 0.16.2 — request a password reset link. Always returns 202
+  // regardless of whether the email is registered, so the client
+  // can't enumerate accounts. Caller shows a generic "if the
+  // address is on file you'll receive a link" message.
+  authPasswordResetRequest: (email: string) =>
+    http<{ status: 'reset_sent' }>('/api/auth/password-reset-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }),
+
+  // 0.16.2 — complete a password reset. Does NOT sign the user
+  // in; they go through /login afterward with the new password.
+  authPasswordResetConfirm: (input: { token: string; password: string }) =>
+    http<{ reset: true }>('/api/auth/password-reset-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
   authProviders: () =>
     http<{ providers: AuthProviderDescriptor[] }>('/api/auth/providers').then(
       (r) => r.providers,

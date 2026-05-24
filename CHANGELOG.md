@@ -9,11 +9,98 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.16.0–0.16.1 shipped. New customers can self-serve from
-/signup; super admins now have a /system/subscriptions console
-that backs the runbook's courtesy-grant / Stripe-sync / force-
-cancel flows from the UI instead of the CLI. Per-tenant
-attachment-encryption rotation slides to 0.16.2._
+_0.16.0–0.16.2 shipped. Public signup, super-admin subscriptions
+console, and password reset all landed. Next on v0.16: per-tenant
+attachment-encryption rotation (0.16.3)._
+
+---
+
+## [0.16.2] — 2026-05-24 — Self-service password reset
+
+Closes a glaring SaaS UX gap that opened the moment 0.16.0
+shipped public signup: a customer who forgets their password can
+now reset it themselves without emailing support.
+
+### Schema (migration 032)
+
+- `password_resets` table — same shape as `email_verifications`
+  (UNIQUE token, expires_at, consumed_at kept for audit). Two
+  separate tables because the TTLs and concerns differ:
+  password resets are 1-hour, email verifications are 24-hour;
+  separation keeps audit reads + cleanup jobs clean.
+
+### Backend
+
+- **`POST /api/auth/password-reset-request`** — public.
+  Accepts `{ email }`, always returns 202
+  `{ status: 'reset_sent' }` regardless of whether the email
+  matches a real user (anti-enumeration). When the address IS
+  registered, mints a token (1-hour TTL) and sends the reset
+  link via `tryMail()`. Logs `user.password_reset_requested`
+  in audit so spikes are visible — a brute-force enumeration
+  attempt would show up there.
+- **`POST /api/auth/password-reset-confirm`** — accepts
+  `{ token, password }`. Validates the token (not consumed,
+  not expired), runs the new password through the same
+  `validatePassword()` policy as signup, swaps in the hash,
+  marks the token consumed. Then **invalidates every session
+  for the user** via the new
+  `deleteAllSessionsForUser()` helper — defense against an
+  attacker whose stolen credentials get reset by the real
+  owner. Audit logs `user.password_reset_completed` with
+  `sessions_invalidated` count.
+- Both routes are publicly reachable (no session required,
+  not gated by `PUBLIC_SIGNUP_ENABLED` — self-host users
+  still need to recover passwords).
+- `renderPasswordResetEmail()` in `domain/mailer.ts` with
+  anti-phishing copy ("ignore this if you didn't request it").
+
+### Web
+
+- **`ForgotPasswordPage`** at `/forgot-password` — single
+  email field; always shows the same "if it's a real address
+  you'll get a link" confirmation so the UX matches the
+  enumeration-safe server behavior.
+- **`ResetPasswordPage`** at `/reset-password?token=…` —
+  collects new password + confirm, calls confirm endpoint,
+  bounces to `/login` after a short pause (we don't auto-
+  sign-in because the server just killed every session
+  including any we might've tried to create).
+- **LoginPage** gains a "Forgot password?" link (always
+  visible) next to the "Create an account" link (signup-gated).
+- App routes both paths as public alongside `/signup`,
+  `/verify-email`, and `/invite/:token`.
+
+### Tests
+
+`server/tests/integration/auth.test.ts` — 7 new cases under
+the "password reset (0.16.2)" describe:
+
+- request always returns 202 (unknown email + malformed email)
+- request mints a token for a real user
+- confirm rejects an invalid token
+- confirm rejects an expired token
+- confirm validates the new password policy
+- confirm swaps the password (old login 401s, new login 200s)
+  and consumes the token (replay 400s)
+- confirm invalidates every other active session for the user
+
+Full suite: 736 server + 6 web tests green.
+
+### Operator notes
+
+- Token TTL is 1 hour (`PASSWORD_RESET_TTL_MINUTES = 60`).
+  Matches Stripe + GitHub defaults; tight enough to limit
+  blast radius of a stolen link, loose enough that users
+  reading email asynchronously don't get locked out.
+- SMTP is still best-effort. When unconfigured the server
+  logs the reset URL at `warn` level so the operator can
+  hand-deliver during early launch.
+- Reset doesn't re-verify the user's email_verified_at —
+  a user with NULL `email_verified_at` (didn't finish the
+  signup verification dance) can still reset their password,
+  but they'll get the "confirm your email" gate on the next
+  login attempt. Two separate flows on purpose.
 
 ---
 

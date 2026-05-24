@@ -86,6 +86,12 @@ const PUBLIC_PATHS = new Set<string>([
   // safe on self-host deployments.
   '/api/auth/signup',
   '/api/auth/verify-email',
+  // 0.16.2: password reset request + confirm. Public — a
+  // locked-out user has no session by definition. NOT gated by
+  // PUBLIC_SIGNUP_ENABLED because self-host users still need to
+  // recover their own passwords.
+  '/api/auth/password-reset-request',
+  '/api/auth/password-reset-confirm',
   // 0.15.1: Stripe webhook posts here. No session cookie; auth is
   // via Stripe-signature header which the route handler verifies.
   '/api/billing/webhook',

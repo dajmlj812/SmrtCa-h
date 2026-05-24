@@ -440,4 +440,239 @@ describe('Auth API', () => {
       expect(r.json().signupEnabled).toBe(true);
     });
   });
+
+  // ── 0.16.2: password reset ─────────────────────────────────
+
+  describe('password reset (0.16.2)', () => {
+    beforeEach(async () => {
+      await resetDb({ skipAuth: true });
+      // Seed the operator + a regular user we'll reset.
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/setup',
+        payload: { email: 'op@local', password: 'correct-horse-battery-staple' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      process.env.PUBLIC_SIGNUP_ENABLED = 'true';
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/signup',
+        payload: { email: 'reset-me@example.com', password: 'old-password-12345' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      const tok = await pool.query<{ token: string }>(
+        `SELECT token FROM email_verifications WHERE user_id =
+           (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
+      );
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-email',
+        payload: { token: tok.rows[0]!.token },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      delete process.env.PUBLIC_SIGNUP_ENABLED;
+    });
+
+    it('reset-request always returns 202 (even for unknown email)', async () => {
+      const unknown = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-request',
+        payload: { email: 'nobody@example.com' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(unknown.statusCode).toBe(202);
+      expect(unknown.json()).toEqual({ status: 'reset_sent' });
+
+      const malformed = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-request',
+        payload: { email: 'not-an-email' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(malformed.statusCode).toBe(202);
+    });
+
+    it('reset-request mints a token for a real user', async () => {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-request',
+        payload: { email: 'reset-me@example.com' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(r.statusCode).toBe(202);
+      const tok = await pool.query<{ token: string }>(
+        `SELECT token FROM password_resets
+           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')
+             AND consumed_at IS NULL`,
+      );
+      expect(tok.rowCount).toBe(1);
+      expect(tok.rows[0]!.token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+    });
+
+    it('reset-confirm rejects an invalid token', async () => {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-confirm',
+        payload: { token: 'bogus-token-not-in-db', password: 'new-password-67890' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error).toMatch(/invalid reset token/i);
+    });
+
+    it('reset-confirm rejects an expired token', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-request',
+        payload: { email: 'reset-me@example.com' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      await pool.query(
+        `UPDATE password_resets SET expires_at = now() - interval '1 hour'
+          WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
+      );
+      const tok = await pool.query<{ token: string }>(
+        `SELECT token FROM password_resets
+           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
+      );
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-confirm',
+        payload: { token: tok.rows[0]!.token, password: 'new-password-67890' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error).toMatch(/expired/i);
+    });
+
+    it('reset-confirm validates the new password against policy', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-request',
+        payload: { email: 'reset-me@example.com' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      const tok = await pool.query<{ token: string }>(
+        `SELECT token FROM password_resets
+           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
+      );
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-confirm',
+        payload: { token: tok.rows[0]!.token, password: 'short' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error).toMatch(/at least/i);
+    });
+
+    it('reset-confirm swaps the password, consumes the token, and login works with the new one', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-request',
+        payload: { email: 'reset-me@example.com' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      const tok = await pool.query<{ token: string }>(
+        `SELECT token FROM password_resets
+           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
+      );
+      const confirm = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-confirm',
+        payload: { token: tok.rows[0]!.token, password: 'brand-new-password-99' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(confirm.statusCode).toBe(200);
+      expect(confirm.json()).toEqual({ reset: true });
+
+      // Token is consumed; replay must fail.
+      const replay = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-confirm',
+        payload: { token: tok.rows[0]!.token, password: 'another-new-pw-00' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(replay.statusCode).toBe(400);
+      expect(replay.json().error).toMatch(/already been used/i);
+
+      // Old password should fail.
+      const oldLogin = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'reset-me@example.com', password: 'old-password-12345' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(oldLogin.statusCode).toBe(401);
+
+      // New password works.
+      const newLogin = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'reset-me@example.com', password: 'brand-new-password-99' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(newLogin.statusCode).toBe(200);
+    });
+
+    it('reset-confirm invalidates every other active session for the user', async () => {
+      // Sign in with the old password to get a session.
+      const login = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'reset-me@example.com', password: 'old-password-12345' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(login.statusCode).toBe(200);
+      const sessionsBefore = await pool.query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM sessions
+           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
+      );
+      expect(Number(sessionsBefore.rows[0]!.n)).toBeGreaterThanOrEqual(1);
+
+      // Request + confirm reset.
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-request',
+        payload: { email: 'reset-me@example.com' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      const tok = await pool.query<{ token: string }>(
+        `SELECT token FROM password_resets
+           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')
+             AND consumed_at IS NULL`,
+      );
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/password-reset-confirm',
+        payload: { token: tok.rows[0]!.token, password: 'fresh-pw-after-reset-1' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+
+      const sessionsAfter = await pool.query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM sessions
+           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
+      );
+      expect(Number(sessionsAfter.rows[0]!.n)).toBe(0);
+    });
+  });
 });

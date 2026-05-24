@@ -80,6 +80,17 @@ export async function deleteSession(id: string): Promise<void> {
   await query(`DELETE FROM sessions WHERE id = $1`, [id]);
 }
 
+/**
+ * 0.16.2 — invalidate every session for a user. Called from
+ * /api/auth/password-reset-confirm so that a successful reset
+ * logs out any other browsers / devices that were authenticated
+ * as that user. Standard anti-takeover hygiene.
+ */
+export async function deleteAllSessionsForUser(userId: string): Promise<number> {
+  const r = await query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
+  return r.rowCount ?? 0;
+}
+
 /** Best-effort prune of expired rows. Called occasionally from /api/auth/login. */
 export async function pruneExpiredSessions(): Promise<void> {
   await query(`DELETE FROM sessions WHERE expires_at < now()`);
