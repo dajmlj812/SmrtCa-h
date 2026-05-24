@@ -64,6 +64,14 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
+      # Fuel prices (Phase 7.1) — optional EIA key for auto-refresh.
+      EIA_API_KEY: ${EIA_API_KEY:-}
+      # Stripe (0.15.x — SaaS billing). All optional at boot;
+      # billing routes 503 until set. See docs/STRIPE_SETUP.md.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PUBLIC_BASE_URL: ${STRIPE_PUBLIC_BASE_URL:-http://localhost:4000}
     ports:
       - "${APP_PORT:-4000}:4000"
     volumes:
