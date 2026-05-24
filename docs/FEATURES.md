@@ -133,6 +133,7 @@ for phase detail and the [Changelog](../CHANGELOG.md) for per-release notes.
 | Per-account read / read-write permission tuning | ✅ |
 | Invitations & memberships (SMTP-deliverable) | ✅ |
 | Super-admin audit log of every mutation | ✅ |
+| **Cross-tenant data isolation verified end-to-end** (72 dedicated tests, 0.14.x) | ✅ |
 
 ## Data Integrity & Security
 
@@ -141,7 +142,7 @@ for phase detail and the [Changelog](../CHANGELOG.md) for per-release notes.
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| ~560-test automated suite (unit → e2e) | ✅ |
+| ~630-test automated suite (unit → e2e) | ✅ |
 | Live health dashboard (gauges, charts, CPU/mem/req-rate/DB-latency) | ✅ |
 | GUI-managed backups (schedule + manual + retention) | ✅ |
 | GUI-managed runtime settings (no .env edits for live config) | ✅ |
@@ -150,6 +151,7 @@ for phase detail and the [Changelog](../CHANGELOG.md) for per-release notes.
 | Encryption at rest (attachments & connection secrets AES-256-GCM; DB via host volume) | ✅ |
 | Hardened Docker container | ✅ |
 | Non-AI rules engine for auto-categorization (runs on import) | ✅ |
+| Multi-tenant isolation — every read + write scoped to caller's tenant | ✅ |
 
 ---
 

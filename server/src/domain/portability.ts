@@ -269,9 +269,17 @@ export async function exportTenantData(
   );
 
   // Bundle as tar.gz. The image ships `tar` because backup-runner
-  // already uses it.
+  // already uses it. `--force-local` tells GNU tar not to interpret
+  // a Windows path's drive-letter colon (`C:\...`) as an SSH-style
+  // host:path — without it, dev runs on Windows fail with
+  // "Cannot execute remote shell". Safe on Linux (no-op when no
+  // colon is present).
   const archivePath = `${workDir}.tar.gz`;
-  await exec('tar', ['-czf', archivePath, '-C', dirname(workDir), basename(workDir)]);
+  await exec('tar', [
+    '--force-local',
+    '-czf', archivePath,
+    '-C', dirname(workDir), basename(workDir),
+  ]);
   const archiveStat = await stat(archivePath);
 
   return {

@@ -9,10 +9,69 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.6 + **0.14.0–0.14.4 shipped — multi-tenant isolation
-hardening pass COMPLETE**. Every route surfaced in the original
-audit punch list is now scoped end-to-end and verified by 72
-cross-tenant tests in `tests/security/tenant-isolation.test.ts`._
+_0.13.0–0.13.6 + 0.14.0–0.14.5 shipped. Multi-tenant isolation
+pass complete and the test suite is fully green for the first
+time in this iteration. No outstanding KI items aside from the
+documented exceljs/XLSX ones (KI-02, KI-06)._
+
+---
+
+## [0.14.5] — 2026-05-23 — Tar `--force-local` + docs refresh
+
+Small but real: closes the 6 pre-existing portability test
+failures and brings README / FEATURES / KNOWN_ISSUES up to date
+with the 0.14.x hardening reality.
+
+### Fix — Windows-dev tar shell-out
+
+`exec('tar', ['-czf', archive, ...])` failed on Windows dev with
+"Cannot execute remote shell" because GNU tar interprets the
+drive-letter colon in `C:\Users\...` as an SSH-style `host:path`.
+Fix: pass `--force-local` to every tar invocation. Safe on Linux
+(no-op when no colon is present in arguments).
+
+- `server/src/domain/portability.ts:274` — `tar -czf` archive
+  creation.
+- `server/src/domain/backup-runner.ts:124` — `tar -czf`
+  attachments archive on backup.
+- `server/src/domain/backup-runner.ts:301` — `tar -xzf`
+  attachments archive on restore.
+- `server/tests/integration/portability.test.ts:47, 248` —
+  matching `tar -xzf` calls in the verification helper.
+
+Result: the 6 previously-red portability tests now pass.
+
+### Docs
+
+- `docs/KNOWN_ISSUES.md` — header date refreshed (Phase 5 →
+  0.14.4); KI-07 ("single-user / single-household assumption")
+  moved to a new "Resolved" section with a pointer to the 72
+  cross-tenant isolation tests; the tar-on-Windows bug also
+  recorded as resolved.
+- `README.md` Status section adds the 0.14.x hardening line;
+  Testing section bumps ~560 → ~630 and notes the 72 dedicated
+  cross-tenant tests + that the suite passes cleanly.
+- `docs/FEATURES.md` — test-count bumped; new row under
+  Households & Sharing for cross-tenant isolation; new row
+  under Data Integrity & Security for multi-tenant isolation
+  scoping.
+
+### Tests
+
+**628/628 server tests pass.** First fully-green run in this
+session.
+
+### Files
+
+```
+server/src/domain/portability.ts                     (--force-local)
+server/src/domain/backup-runner.ts                   (--force-local x2)
+server/tests/integration/portability.test.ts         (--force-local x2)
+README.md                                            (status + test count)
+docs/FEATURES.md                                     (tenant-isolation rows + test count)
+docs/KNOWN_ISSUES.md                                 (KI-07 resolved + header)
+package.json + server/package.json + web/package.json (0.14.4 → 0.14.5)
+```
 
 ---
 

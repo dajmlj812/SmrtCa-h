@@ -121,7 +121,7 @@ export async function runBackup(input: RunBackupInput): Promise<BackupRecord> {
       const parent = dirname(attachmentsDir);
       const base = attachmentsDir.slice(parent.length + 1);
       try {
-        await exec('tar', ['-czf', archive, '-C', parent, base]);
+        await exec('tar', ['--force-local', '-czf', archive, '-C', parent, base]);
         attachmentsBytes = (await stat(archive)).size;
       } catch {
         // tar may not exist on Windows dev — record dbBytes only, don't fail
@@ -298,7 +298,7 @@ export async function restoreFromBackup(
       await rm(attachmentsDir, { recursive: true, force: true });
       const parent = dirname(attachmentsDir);
       await mkdir(parent, { recursive: true });
-      await exec('tar', ['-xzf', archive, '-C', parent]);
+      await exec('tar', ['--force-local', '-xzf', archive, '-C', parent]);
     } catch (err) {
       warnings.push(
         'attachments restore failed: ' +

@@ -7,8 +7,10 @@ your own container, with your data staying on your machine.
 
 ## Status
 
-**Phases 1 through 9 — complete.** Original backlog also complete (versions
-`0.13.0` → `0.13.5`); only native mobile is deferred (the PWA covers it).
+**Phases 1 through 9 — complete.** Original backlog also complete
+(`0.13.0` → `0.13.6`); only native mobile is deferred (the PWA covers it).
+**`0.14.0` → `0.14.4` — multi-tenant isolation hardening pass** verified
+end-to-end by 72 dedicated cross-tenant tests.
 
 What ships today:
 
@@ -38,7 +40,8 @@ What ships today:
   install prompt.
 - **Households & sharing** — multi-tenant with admin/spouse/child
   roles, **per-account read/read-write permission tuning**, **bill-
-  splitting** with net-balance settlement.
+  splitting** with net-balance settlement, **cross-tenant isolation
+  verified** by a dedicated security test suite.
 - **Ops** — single-container Docker stack, Argon2id auth, super-admin
   audit log, GUI-managed backups + runtime settings, live health
   dashboard, SMTP for alerts.
@@ -101,8 +104,10 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-~560 automated tests spanning unit, integration, functional, security, smoke,
-performance, and end-to-end layers. With PostgreSQL running:
+~630 automated tests spanning unit, integration, functional, security
+(incl. **72 cross-tenant isolation tests**), smoke, performance, and
+end-to-end layers — full server suite passes cleanly. With PostgreSQL
+running:
 
 ```sh
 npm test            # server + web tests

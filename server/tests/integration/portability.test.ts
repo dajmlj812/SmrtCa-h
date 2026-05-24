@@ -44,7 +44,9 @@ async function untarAndReadManifest(
   archivePath: string,
 ): Promise<{ manifest: Manifest; bundle: Record<string, unknown> }> {
   const extractDir = await mkdtemp(join(tmpdir(), 'smrtcash-test-extract-'));
-  await exec('tar', ['-xzf', archivePath, '-C', extractDir]);
+  // --force-local: don't treat the Windows drive-letter colon as a
+  // remote-shell host:path (matches the production tar call sites).
+  await exec('tar', ['--force-local', '-xzf', archivePath, '-C', extractDir]);
   const inner = (await import('node:fs/promises'))
     .readdir(extractDir)
     .then((entries) => entries[0]);
@@ -243,7 +245,7 @@ describe('Data portability export (0.13.0)', () => {
       expect(result.counts.attachments).toBe(1);
       // Untar and verify the file is present.
       const extractDir = await mkdtemp(join(tmpdir(), 'smrtcash-test-att-'));
-      await exec('tar', ['-xzf', result.archivePath, '-C', extractDir]);
+      await exec('tar', ['--force-local', '-xzf', result.archivePath, '-C', extractDir]);
       const { readdir } = await import('node:fs/promises');
       const inner = (await readdir(extractDir))[0]!;
       const attsDir = join(extractDir, inner, 'attachments');

@@ -1,6 +1,6 @@
 # SmrtCash — Known Issues
 
-This page tracks current limitations as of **Phase 5 (2026-05-22)**.
+This page tracks current limitations as of **0.14.4 (2026-05-23)**.
 Each item lists its impact, a workaround if any, and the planned resolution.
 
 Severity: 🔴 high · 🟡 medium · 🟢 low / cosmetic
@@ -56,19 +56,6 @@ committing. Import CSV when available.
 
 ---
 
-## KI-07 — Single-user / single-household assumption 🟢
-
-**Description:** There is no concept of multiple users or per-user data
-separation.
-
-**Impact:** Everyone using the instance shares one dataset.
-
-**Workaround:** Run separate instances for separate people if needed.
-
-**Planned resolution:** Backlog — optional multi-user / household mode.
-
----
-
 ## KI-08 — Project folder name contains `$` 🟢
 
 **Description:** The working directory is `SmrtCa$h`. The `$` character is
@@ -82,6 +69,26 @@ project name (`-p smrtcash`) and by quoting paths. The package/internal name is
 rename the folder to `smrtcash`.
 
 **Planned resolution:** None required; documented convention.
+
+---
+
+## Resolved
+
+### ~~KI-07 — Single-user / single-household assumption~~ ✅ resolved in Phase 8 / 0.14.x
+
+Multi-tenant with admin / spouse / child roles shipped in Phase 8 (0.11.0).
+Per-account permission tuning landed in 0.13.4. **Cross-tenant isolation was
+audited and hardened in 0.14.0 → 0.14.4** — 72 dedicated cross-tenant tests in
+`tests/security/tenant-isolation.test.ts` verify that no route, no domain
+function, and no aggregation leaks data across tenants. Each test would have
+failed against pre-0.14.x code.
+
+### ~~Portability tests fail on Windows-dev (tar shell-out)~~ ✅ resolved in 0.14.5
+
+The three tar shell-outs in `domain/portability.ts`, `domain/backup-runner.ts`,
+and the portability test now pass `--force-local` so GNU tar doesn't interpret
+a Windows drive-letter colon (`C:\...`) as an SSH-style `host:path`. Safe on
+Linux (no-op when no colon is present in arguments).
 
 ---
 
