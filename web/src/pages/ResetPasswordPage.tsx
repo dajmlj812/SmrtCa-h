@@ -15,7 +15,12 @@ import { api } from '../api';
 
 const MIN_PASSWORD = 8;
 
-export function ResetPasswordPage() {
+interface Props {
+  /** 0.16.3 — operator-configured support URL. */
+  supportUrl?: string | null;
+}
+
+export function ResetPasswordPage({ supportUrl }: Props = {}) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const token = params.get('token') ?? '';
@@ -130,6 +135,15 @@ export function ResetPasswordPage() {
         <p className="muted small" style={{ marginTop: 16 }}>
           <Link to="/login">← Back to sign in</Link>
         </p>
+        {supportUrl && (
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Trouble resetting?{' '}
+            <a href={supportUrl} target="_blank" rel="noreferrer">
+              Visit support
+            </a>{' '}
+            — feature requests welcome too.
+          </p>
+        )}
       </form>
     </div>
   );

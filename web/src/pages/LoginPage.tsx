@@ -7,9 +7,11 @@ interface Props {
   onAuthenticated: () => void;
   /** 0.16.0 — show the "Create account" link when the server allows signup. */
   signupEnabled?: boolean;
+  /** 0.16.3 — server-configured support / feature-request URL. */
+  supportUrl?: string | null;
 }
 
-export function LoginPage({ onAuthenticated, signupEnabled }: Props) {
+export function LoginPage({ onAuthenticated, signupEnabled, supportUrl }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -104,6 +106,15 @@ export function LoginPage({ onAuthenticated, signupEnabled }: Props) {
             </>
           )}
         </p>
+        {supportUrl && (
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Need help?{' '}
+            <a href={supportUrl} target="_blank" rel="noreferrer">
+              Visit support
+            </a>{' '}
+            — feature requests welcome too.
+          </p>
+        )}
       </form>
     </div>
   );

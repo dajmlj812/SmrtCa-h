@@ -18,7 +18,12 @@ import { api } from '../api';
 
 const MIN_PASSWORD = 8;
 
-export function SignupPage() {
+interface Props {
+  /** 0.16.3 — operator-configured support URL. */
+  supportUrl?: string | null;
+}
+
+export function SignupPage({ supportUrl }: Props = {}) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -152,6 +157,15 @@ export function SignupPage() {
         <p className="muted small" style={{ marginTop: 16 }}>
           Already have an account? <Link to="/login">Sign in</Link>
         </p>
+        {supportUrl && (
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Questions?{' '}
+            <a href={supportUrl} target="_blank" rel="noreferrer">
+              Visit support
+            </a>{' '}
+            — feature requests welcome too.
+          </p>
+        )}
       </form>
     </div>
   );

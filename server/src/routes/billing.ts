@@ -11,6 +11,7 @@ import {
   type Plan,
 } from '../auth/entitlements.js';
 import { automaticTaxEnabled, getStripe, isStripeConfigured } from '../billing/stripe.js';
+import { getEffectiveValue } from '../domain/settings.js';
 import { isKnownLookupKey } from '../billing/plans.js';
 import {
   handleSubscriptionUpsert,
@@ -31,8 +32,14 @@ import {
 
 const TRIAL_PERIOD_DAYS = 14;
 
-function publicBaseUrl(): string {
-  return (process.env.STRIPE_PUBLIC_BASE_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
+/**
+ * 0.16.3 — base URL for Stripe Checkout success/cancel + portal
+ * return. Sourced through getEffectiveValue so the operator can
+ * change it from /settings; defaults to localhost for dev.
+ */
+async function publicBaseUrl(): Promise<string> {
+  const v = (await getEffectiveValue('STRIPE_PUBLIC_BASE_URL')).trim();
+  return (v || 'http://localhost:4000').replace(/\/+$/, '');
 }
 
 /**
@@ -179,12 +186,13 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
       // Mirror tenant_id on the Checkout session itself so the
       // success page can verify ownership before showing receipt.
       metadata: { tenant_id: tenantId },
-      success_url: `${publicBaseUrl()}/billing?status=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${publicBaseUrl()}/billing?status=canceled`,
-      // 0.15.5 — env-driven via automaticTaxEnabled(). See
-      // billing/stripe.ts for the rule + docs/OPERATOR_RUNBOOK.md
-      // for the "before flipping this on" prerequisites.
-      automatic_tax: { enabled: automaticTaxEnabled() },
+      success_url: `${await publicBaseUrl()}/billing?status=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${await publicBaseUrl()}/billing?status=canceled`,
+      // 0.15.5 — toggle via automaticTaxEnabled(). 0.16.3 reads
+      // from DB-or-env; see billing/stripe.ts and
+      // docs/OPERATOR_RUNBOOK.md for "before flipping this on"
+      // prerequisites.
+      automatic_tax: { enabled: await automaticTaxEnabled() },
     };
     if (existing?.stripeCustomerId) {
       sessionParams.customer = existing.stripeCustomerId;
@@ -311,7 +319,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
     try {
       const session = await getStripe().billingPortal.sessions.create({
         customer: sub.stripeCustomerId,
-        return_url: `${publicBaseUrl()}/billing`,
+        return_url: `${await publicBaseUrl()}/billing`,
       });
       return { url: session.url };
     } catch (err) {

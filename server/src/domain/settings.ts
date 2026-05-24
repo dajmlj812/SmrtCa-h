@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { pool, query } from '../db/pool.js';
+import { _resetStripeClientForTests } from '../billing/stripe.js';
 
 /**
  * Runtime-editable settings layer. Read priority is:
@@ -94,7 +95,39 @@ export const KNOWN_SETTINGS = [
   { key: 'PLAID_CLIENT_ID', isSecret: false, restartRequired: false, superOnly: true, label: 'Plaid — client_id' },
   { key: 'PLAID_SECRET', isSecret: true, restartRequired: false, superOnly: true, label: 'Plaid — secret' },
   { key: 'PLAID_ENV', isSecret: false, restartRequired: false, superOnly: true, label: 'Plaid — environment (sandbox/production)' },
+  // Stripe + SaaS toggles (0.16.3) — super-admin only.
+  //
+  // STRIPE_SECRET_KEY changes invalidate the cached Stripe SDK
+  // client (see applyToConfig below) so a rotation takes effect
+  // on the next API call without a restart. STRIPE_WEBHOOK_SECRET
+  // is read at signature-verify time so no caching issue there.
+  //
+  // PUBLIC_SIGNUP_ENABLED and STRIPE_AUTOMATIC_TAX are simple
+  // boolean toggles previously read from process.env; flipping
+  // them in the DB now takes effect on the next request.
+  { key: 'STRIPE_SECRET_KEY', isSecret: true, restartRequired: false, superOnly: true, label: 'Stripe — secret key (sk_…)' },
+  { key: 'STRIPE_WEBHOOK_SECRET', isSecret: true, restartRequired: false, superOnly: true, label: 'Stripe — webhook signing secret (whsec_…)' },
+  { key: 'STRIPE_PUBLIC_BASE_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'Public base URL (Stripe + verification + reset email links)' },
+  { key: 'STRIPE_AUTOMATIC_TAX', isSecret: false, restartRequired: false, superOnly: true, label: 'Stripe — automatic tax (true/false)' },
+  { key: 'PUBLIC_SIGNUP_ENABLED', isSecret: false, restartRequired: false, superOnly: true, label: 'Public signup at /signup (true/false)' },
+  // Support / feedback URL (0.16.3). Surfaced in sidebar footers
+  // and on login/signup pages so users always know where to ask
+  // for help and file feature requests. Defaults to the BITS
+  // hosted support page; operators self-hosting on their own
+  // domain can repoint at their own help system.
+  { key: 'SUPPORT_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'Support / feature-request URL' },
 ] as const;
+
+/**
+ * 0.16.3 — default values applied when neither the DB nor the
+ * environment has a setting. Right now only SUPPORT_URL has a
+ * meaningful default (the public BITS support portal); every
+ * other key falls back to empty / off, which is the safe choice
+ * for self-host deployments that may not want that surface.
+ */
+export const SETTING_DEFAULTS: Partial<Record<SettingKey, string>> = {
+  SUPPORT_URL: 'https://support.builditsmrt.com/',
+};
 
 export type SettingKey = (typeof KNOWN_SETTINGS)[number]['key'];
 
@@ -124,11 +157,18 @@ export async function getDbValue(key: SettingKey): Promise<string | null> {
   return r.rows[0]!.value;
 }
 
-/** DB value with env fallback. Returns empty string if neither is set. */
+/**
+ * DB value with env fallback, then default. Returns empty string
+ * if none of the three are set. Default tier added 0.16.3 so
+ * keys like SUPPORT_URL ship with a sensible value out of the
+ * box without forcing every install to set an env var.
+ */
 export async function getEffectiveValue(key: SettingKey): Promise<string> {
   const db = await getDbValue(key);
   if (db !== null && db !== '') return db;
-  return process.env[key] ?? '';
+  const env = process.env[key];
+  if (env !== undefined && env !== '') return env;
+  return SETTING_DEFAULTS[key] ?? '';
 }
 
 export async function setDbValue(
@@ -255,6 +295,27 @@ export function applyToConfig(key: SettingKey, value: string): void {
       } catch {
         /* tolerate parse failure; restart will fix */
       }
+      break;
+    case 'STRIPE_SECRET_KEY':
+      // 0.16.3 — Stripe SDK client caches the key on first use; an
+      // operator rotating from test to live (or rotating after a
+      // leak) needs the cache to drop so the next call rebuilds
+      // with the new key. Mirror the value into process.env too so
+      // anything still reading raw `process.env.STRIPE_SECRET_KEY`
+      // sees the update.
+      process.env.STRIPE_SECRET_KEY = value;
+      _resetStripeClientForTests();
+      break;
+    case 'STRIPE_WEBHOOK_SECRET':
+    case 'STRIPE_PUBLIC_BASE_URL':
+    case 'STRIPE_AUTOMATIC_TAX':
+    case 'PUBLIC_SIGNUP_ENABLED':
+    case 'SUPPORT_URL':
+      // Read fresh from getEffectiveValue() each request; no
+      // caching, so a DB write takes effect immediately. We still
+      // mirror to process.env for any third-party code that might
+      // be looking there.
+      process.env[key] = value;
       break;
   }
 }

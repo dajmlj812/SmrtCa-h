@@ -43,23 +43,25 @@ describe('billing/stripe config helpers (0.15.5)', () => {
   });
 
   describe('automaticTaxEnabled()', () => {
-    it('defaults to false when STRIPE_AUTOMATIC_TAX is unset', () => {
+    // 0.16.3 — automaticTaxEnabled() is async now (reads via
+    // getEffectiveValue so the operator can flip from /settings).
+    it('defaults to false when STRIPE_AUTOMATIC_TAX is unset', async () => {
       delete process.env.STRIPE_AUTOMATIC_TAX;
-      expect(automaticTaxEnabled()).toBe(false);
+      expect(await automaticTaxEnabled()).toBe(false);
     });
-    it('is true when STRIPE_AUTOMATIC_TAX is "true" (case-insensitive)', () => {
+    it('is true when STRIPE_AUTOMATIC_TAX is "true" (case-insensitive)', async () => {
       for (const v of ['true', 'TRUE', 'True', 'tRuE']) {
         process.env.STRIPE_AUTOMATIC_TAX = v;
-        expect(automaticTaxEnabled()).toBe(true);
+        expect(await automaticTaxEnabled()).toBe(true);
       }
     });
-    it('is false for any other value (including "1", "yes")', () => {
+    it('is false for any other value (including "1", "yes")', async () => {
       // Deliberately strict — only the literal string "true" enables.
       // "1" / "yes" are not honored to keep the contract single-pivot
       // and avoid surprise enables from sloppy automation.
       for (const v of ['1', 'yes', 'on', 'false', 'no', 'off', '']) {
         process.env.STRIPE_AUTOMATIC_TAX = v;
-        expect(automaticTaxEnabled()).toBe(false);
+        expect(await automaticTaxEnabled()).toBe(false);
       }
     });
   });

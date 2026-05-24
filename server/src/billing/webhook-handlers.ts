@@ -2,6 +2,7 @@ import type Stripe from 'stripe';
 import { pool } from '../db/pool.js';
 import type { Plan, SubscriptionStatus } from '../auth/entitlements.js';
 import { renderDunningEmail, tryMail } from '../domain/mailer.js';
+import { getEffectiveValue } from '../domain/settings.js';
 import { getStripe } from './stripe.js';
 
 /**
@@ -193,7 +194,7 @@ export async function handleInvoiceEvent(
     return { applied: false, reason: 'customer has no email on file' };
   }
 
-  const baseUrl = (process.env.STRIPE_PUBLIC_BASE_URL ?? 'http://localhost:4000')
+  const baseUrl = ((await getEffectiveValue('STRIPE_PUBLIC_BASE_URL')) || 'http://localhost:4000')
     .replace(/\/+$/, '');
   const rendered = renderDunningEmail({
     customerName,

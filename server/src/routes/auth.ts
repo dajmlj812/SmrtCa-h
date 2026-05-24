@@ -26,6 +26,7 @@ import {
   renderVerificationEmail,
   tryMail,
 } from '../domain/mailer.js';
+import { getEffectiveValue } from '../domain/settings.js';
 
 const OIDC_STATE_COOKIE = 'smrtcash_oidc_state';
 
@@ -68,9 +69,13 @@ async function isInstanceSetup(): Promise<boolean> {
  * required for /api/auth/signup to function. Default off so
  * existing self-host deployments don't accept random signups
  * just by upgrading; SaaS operators set this in production.
+ *
+ * 0.16.3 — reads via getEffectiveValue so the toggle can be
+ * flipped from /settings in addition to the env var.
  */
-function publicSignupEnabled(): boolean {
-  return (process.env.PUBLIC_SIGNUP_ENABLED ?? '').toLowerCase() === 'true';
+async function publicSignupEnabled(): Promise<boolean> {
+  const v = (await getEffectiveValue('PUBLIC_SIGNUP_ENABLED')).trim().toLowerCase();
+  return v === 'true';
 }
 
 /**
@@ -91,10 +96,17 @@ const VERIFICATION_TTL_HOURS = 24;
  * click through email but short enough to limit blast radius.
  */
 const PASSWORD_RESET_TTL_MINUTES = 60;
-const SIGNUP_BASE_URL_ENV = 'STRIPE_PUBLIC_BASE_URL'; // reuse the same env
 
-function publicBaseUrl(): string {
-  return (process.env[SIGNUP_BASE_URL_ENV] ?? 'http://localhost:4000').replace(/\/+$/, '');
+/**
+ * 0.16.3 — base URL for outgoing email links (verification,
+ * reset) and Stripe Checkout success/cancel. Sourced through
+ * getEffectiveValue so the operator can change it from
+ * /settings without touching the env file. Falls back to the
+ * dev default when nothing is configured.
+ */
+async function publicBaseUrl(): Promise<string> {
+  const v = (await getEffectiveValue('STRIPE_PUBLIC_BASE_URL')).trim();
+  return (v || 'http://localhost:4000').replace(/\/+$/, '');
 }
 
 /**
@@ -122,7 +134,7 @@ async function sendVerificationEmail(
   token: string,
   expiresAt: Date,
 ): Promise<void> {
-  const verifyUrl = `${publicBaseUrl()}/verify-email?token=${encodeURIComponent(token)}`;
+  const verifyUrl = `${await publicBaseUrl()}/verify-email?token=${encodeURIComponent(token)}`;
   const rendered = renderVerificationEmail({
     verifyUrl,
     expiresAt: expiresAt.toISOString(),
@@ -149,7 +161,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       authenticated: req.user !== undefined,
       // 0.16.0 — drives whether the LoginPage shows a "Create
       // an account" link. Default false; SaaS operators flip on.
-      signupEnabled: publicSignupEnabled(),
+      signupEnabled: await publicSignupEnabled(),
+      // 0.16.3 — surface the support / feature-request URL so
+      // unauthenticated pages (login/signup/forgot) can render
+      // it. Default points at the BITS hosted support portal;
+      // operators can repoint via /settings.
+      supportUrl: (await getEffectiveValue('SUPPORT_URL')).trim() || null,
     };
   });
 
@@ -250,7 +267,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // endpoint 404s so an unconfigured deployment doesn't even
   // advertise its existence to scanners.
   app.post('/api/auth/signup', async (req, reply) => {
-    if (!publicSignupEnabled()) {
+    if (!(await publicSignupEnabled())) {
       return reply.code(404).send({ error: 'Not found' });
     }
     const body = (req.body ?? {}) as {
@@ -339,7 +356,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   // ── 0.16.0: verify the email + provision tenant ───────────
   app.post('/api/auth/verify-email', async (req, reply) => {
-    if (!publicSignupEnabled()) {
+    if (!(await publicSignupEnabled())) {
       return reply.code(404).send({ error: 'Not found' });
     }
     const body = (req.body ?? {}) as { token?: unknown };
@@ -484,7 +501,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         [userId, token, expiresAt],
       );
       // Best-effort email; failures don't change the response.
-      const resetUrl = `${publicBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+      const resetUrl = `${await publicBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
       const rendered = renderPasswordResetEmail({
         resetUrl,
         expiresAt: expiresAt.toISOString(),

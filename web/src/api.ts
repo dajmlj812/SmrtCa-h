@@ -1262,6 +1262,10 @@ export const api = {
       // server. LoginPage shows the "Create account" link only
       // when this is true.
       signupEnabled: boolean;
+      // 0.16.3 — support / feature-request URL. Surfaced in the
+      // sidebar footer + login/signup pages. null when the
+      // operator has cleared it.
+      supportUrl: string | null;
     }>('/api/auth/status'),
 
   authSetup: (input: { email: string; name?: string; password: string }) =>

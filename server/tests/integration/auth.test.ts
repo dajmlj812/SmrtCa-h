@@ -29,6 +29,7 @@ describe('Auth API', () => {
         isSetup: false,
         authenticated: false,
         signupEnabled: false,
+        supportUrl: 'https://support.builditsmrt.com/',
       });
     });
 
@@ -61,6 +62,7 @@ describe('Auth API', () => {
         isSetup: true,
         authenticated: true,
         signupEnabled: false,
+        supportUrl: 'https://support.builditsmrt.com/',
       });
     });
 
@@ -438,6 +440,79 @@ describe('Auth API', () => {
         skipAuth: true,
       } as any);
       expect(r.json().signupEnabled).toBe(true);
+    });
+
+    // ── 0.16.3: settings overrides env ─────────────────────
+
+    it('PUBLIC_SIGNUP_ENABLED in app_settings DB overrides env', async () => {
+      // Env says off; DB says on. DB must win.
+      delete process.env.PUBLIC_SIGNUP_ENABLED;
+      await pool.query(
+        `INSERT INTO app_settings (key, value, is_secret) VALUES ('PUBLIC_SIGNUP_ENABLED', 'true', false)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      );
+      try {
+        const status = await app.inject({
+          method: 'GET',
+          url: '/api/auth/status',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          skipAuth: true,
+        } as any);
+        expect(status.json().signupEnabled).toBe(true);
+
+        // Signup endpoint should now be reachable (returns 202 not 404).
+        const r = await app.inject({
+          method: 'POST',
+          url: '/api/auth/signup',
+          payload: { email: 'db-override@example.com', password: 'correct-horse-battery-staple' },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          skipAuth: true,
+        } as any);
+        expect(r.statusCode).toBe(202);
+      } finally {
+        await pool.query(`DELETE FROM app_settings WHERE key = 'PUBLIC_SIGNUP_ENABLED'`);
+      }
+    });
+  });
+
+  // ── 0.16.3: SUPPORT_URL is surfaced + overridable ─────────
+
+  describe('SUPPORT_URL (0.16.3)', () => {
+    beforeEach(async () => {
+      await resetDb({ skipAuth: true });
+    });
+
+    it('defaults to the BITS support portal when nothing is set', async () => {
+      // Make sure no env override is in play.
+      delete process.env.SUPPORT_URL;
+      await pool.query(`DELETE FROM app_settings WHERE key = 'SUPPORT_URL'`);
+      const r = await app.inject({
+        method: 'GET',
+        url: '/api/auth/status',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        skipAuth: true,
+      } as any);
+      expect(r.json().supportUrl).toBe('https://support.builditsmrt.com/');
+    });
+
+    it('honors the DB override over the default + env', async () => {
+      process.env.SUPPORT_URL = 'https://env.example/';
+      await pool.query(
+        `INSERT INTO app_settings (key, value, is_secret) VALUES ('SUPPORT_URL', 'https://db.example/', false)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      );
+      try {
+        const r = await app.inject({
+          method: 'GET',
+          url: '/api/auth/status',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          skipAuth: true,
+        } as any);
+        expect(r.json().supportUrl).toBe('https://db.example/');
+      } finally {
+        delete process.env.SUPPORT_URL;
+        await pool.query(`DELETE FROM app_settings WHERE key = 'SUPPORT_URL'`);
+      }
     });
   });
 

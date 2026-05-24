@@ -12,7 +12,12 @@ import { api } from '../api';
  * mirrors that behavior so the UX matches the security model.
  */
 
-export function ForgotPasswordPage() {
+interface Props {
+  /** 0.16.3 — operator-configured support URL. */
+  supportUrl?: string | null;
+}
+
+export function ForgotPasswordPage({ supportUrl }: Props = {}) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +97,15 @@ export function ForgotPasswordPage() {
         <p className="muted small" style={{ marginTop: 16 }}>
           <Link to="/login">← Back to sign in</Link>
         </p>
+        {supportUrl && (
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Locked out?{' '}
+            <a href={supportUrl} target="_blank" rel="noreferrer">
+              Visit support
+            </a>{' '}
+            — feature requests welcome too.
+          </p>
+        )}
       </form>
     </div>
   );

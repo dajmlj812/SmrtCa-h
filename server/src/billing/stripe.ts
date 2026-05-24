@@ -41,8 +41,13 @@ export function isStripeConfigured(): boolean {
 
 /**
  * 0.15.5 — Stripe automatic tax toggle for Checkout. Read at session-
- * creation time (not cached) so the operator can flip the env var
- * and restart without code changes.
+ * creation time (not cached) so the operator can flip the value and
+ * have it take effect on the next request.
+ *
+ * 0.16.3 — sourced through getEffectiveValue so the toggle can be
+ * flipped from the /settings page in addition to the env var. The
+ * old sync version is gone; the only caller is an async route
+ * handler so the change is transparent.
  *
  * Default off: a Stripe account without a tax origin address
  * configured returns errors when automatic_tax is enabled, which
@@ -50,6 +55,8 @@ export function isStripeConfigured(): boolean {
  * STRIPE_AUTOMATIC_TAX=true once your Stripe Tax → Settings is
  * configured (see docs/OPERATOR_RUNBOOK.md).
  */
-export function automaticTaxEnabled(): boolean {
-  return (process.env.STRIPE_AUTOMATIC_TAX ?? '').toLowerCase() === 'true';
+export async function automaticTaxEnabled(): Promise<boolean> {
+  const { getEffectiveValue } = await import('../domain/settings.js');
+  const v = (await getEffectiveValue('STRIPE_AUTOMATIC_TAX')).trim().toLowerCase();
+  return v === 'true';
 }

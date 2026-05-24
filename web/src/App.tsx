@@ -51,6 +51,7 @@ type AuthState =
 export function App() {
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [signupEnabled, setSignupEnabled] = useState(false);
+  const [supportUrl, setSupportUrl] = useState<string | null>(null);
   const location = useLocation();
   // /invite/:token is a public landing — skip the auth gate entirely.
   const isInviteRoute = location.pathname.startsWith('/invite/');
@@ -65,6 +66,7 @@ export function App() {
     try {
       const status = await api.authStatus();
       setSignupEnabled(status.signupEnabled);
+      setSupportUrl(status.supportUrl);
       if (!status.isSetup) {
         setAuthState('needs-setup');
         return;
@@ -109,15 +111,18 @@ export function App() {
     );
   }
   if (isSignupRoute) {
-    return <SignupPage />;
+    return <SignupPage supportUrl={supportUrl} />;
   }
   if (isForgotPasswordRoute) {
-    return <ForgotPasswordPage />;
+    return <ForgotPasswordPage supportUrl={supportUrl} />;
   }
   if (isResetPasswordRoute) {
     return (
       <Routes>
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route
+          path="/reset-password"
+          element={<ResetPasswordPage supportUrl={supportUrl} />}
+        />
       </Routes>
     );
   }
@@ -132,15 +137,27 @@ export function App() {
     return <SetupPage onAuthenticated={refreshAuth} />;
   }
   if (authState === 'needs-login') {
-    return <LoginPage onAuthenticated={refreshAuth} signupEnabled={signupEnabled} />;
+    return (
+      <LoginPage
+        onAuthenticated={refreshAuth}
+        signupEnabled={signupEnabled}
+        supportUrl={supportUrl}
+      />
+    );
   }
   if (authState === 'authenticated-super') {
-    return <SuperAdminApp onSignedOut={refreshAuth} />;
+    return <SuperAdminApp onSignedOut={refreshAuth} supportUrl={supportUrl} />;
   }
-  return <AuthenticatedApp onSignedOut={refreshAuth} />;
+  return <AuthenticatedApp onSignedOut={refreshAuth} supportUrl={supportUrl} />;
 }
 
-function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
+function SuperAdminApp({
+  onSignedOut,
+  supportUrl,
+}: {
+  onSignedOut: () => void;
+  supportUrl: string | null;
+}) {
   const { open, setOpen } = useMobileDrawer();
   async function logout() {
     try {
@@ -173,6 +190,7 @@ function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
         <div className="sidebar-footer">
           <ThemeToggle />
           Platform operator
+          <SupportLink supportUrl={supportUrl} />
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -203,7 +221,13 @@ function SuperAdminApp({ onSignedOut }: { onSignedOut: () => void }) {
   );
 }
 
-function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
+function AuthenticatedApp({
+  onSignedOut,
+  supportUrl,
+}: {
+  onSignedOut: () => void;
+  supportUrl: string | null;
+}) {
   const { open, setOpen } = useMobileDrawer();
   async function logout() {
     try {
@@ -268,7 +292,8 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.16.2
+          SmrtCash · v0.16.3
+          <SupportLink supportUrl={supportUrl} />
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -310,6 +335,26 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
       <SidebarBackdrop open={open} onClose={() => setOpen(false)} />
       <InstallPrompt />
       <OfflineIndicator />
+    </div>
+  );
+}
+
+/**
+ * 0.16.3 — small footer block linking out to the operator-
+ * configured support / feature-request URL. Renders nothing
+ * when the operator has cleared SUPPORT_URL. The "Feature
+ * requests welcome too" copy on the unauthenticated pages is
+ * deliberate: most help portals are perceived as bug-only
+ * channels, so we spell out that we want the wishlist input
+ * as well.
+ */
+function SupportLink({ supportUrl }: { supportUrl: string | null }) {
+  if (!supportUrl) return null;
+  return (
+    <div className="muted small" style={{ marginTop: 6 }}>
+      <a href={supportUrl} target="_blank" rel="noreferrer">
+        Help & feature requests
+      </a>
     </div>
   );
 }

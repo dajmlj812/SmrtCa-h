@@ -9,9 +9,105 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.16.0–0.16.2 shipped. Public signup, super-admin subscriptions
-console, and password reset all landed. Next on v0.16: per-tenant
-attachment-encryption rotation (0.16.3)._
+_0.16.0–0.16.3 shipped. Every Stripe + SaaS env var is now
+editable from /settings without touching the .env file, and every
+page in the app surfaces the operator-configured support /
+feature-request URL. Per-tenant attachment-encryption rotation
+slides to 0.16.4._
+
+---
+
+## [0.16.3] — 2026-05-24 — Operator settings unification + support visibility
+
+Two related operator-experience improvements that turn what used
+to be "edit .env and restart" tasks into "flip a setting in the
+UI."
+
+### Settings — Stripe + SaaS toggles now DB-editable
+
+Six new keys added to `KNOWN_SETTINGS` (all super-admin only,
+restart-not-required, sourced via the existing
+`getEffectiveValue()` precedence: DB > env > default):
+
+- **STRIPE_SECRET_KEY** (secret) — rotating live invalidates the
+  cached Stripe SDK client via `applyToConfig()` so the next
+  API call rebuilds with the new key. No restart needed.
+- **STRIPE_WEBHOOK_SECRET** (secret)
+- **STRIPE_PUBLIC_BASE_URL** — base URL for Stripe Checkout
+  success/cancel + verification + password-reset email links.
+  Replaces the bare `process.env.STRIPE_PUBLIC_BASE_URL` reads
+  in `auth.ts`, `billing.ts`, and `webhook-handlers.ts`.
+- **STRIPE_AUTOMATIC_TAX** — was a boolean env toggle in 0.15.5.
+- **PUBLIC_SIGNUP_ENABLED** — was a boolean env toggle in 0.16.0.
+- **SUPPORT_URL** — see next section.
+
+The signup gate, automatic-tax flag, and base-URL helper that
+used to read `process.env.*` directly were converted to
+`async` functions that read via `getEffectiveValue()`. All
+caller awaits added (auth.ts + billing.ts).
+
+### Bootstrap-only env vars NOT exposed
+
+For safety / correctness, these stay env-only and DO NOT
+appear in /settings:
+
+- `DATABASE_URL`, `PORT`, `NODE_ENV`, `COOKIE_SECURE`,
+  `STATIC_DIR`, `ATTACHMENTS_DIR`,
+  `ATTACHMENTS_MAX_REQUEST_BYTES` — captured at process boot
+  or by Fastify plugins; changing them live would either be
+  a no-op or break the running server.
+
+### `SETTING_DEFAULTS` tier
+
+`getEffectiveValue()` gains a third fallback layer (after DB
+and env): a per-key default in `SETTING_DEFAULTS`. Currently
+only `SUPPORT_URL` ships with a default
+(`https://support.builditsmrt.com/`) so the support link
+appears out of the box on fresh installs without forcing
+every operator to set an env var.
+
+### Support / feature-request link surfaced everywhere
+
+- `/api/auth/status` gains a `supportUrl` field so the
+  unauthenticated `LoginPage`, `SignupPage`,
+  `ForgotPasswordPage`, and `ResetPasswordPage` can render
+  the link in their footers.
+- New `SupportLink` component in `App.tsx` shown in both
+  sidebar footers (`SuperAdminApp` + `AuthenticatedApp`) as
+  "Help & feature requests".
+- Unauth-page footer copy is deliberate: "Visit support —
+  feature requests welcome too." Most users perceive a
+  support portal as bug-only; we spell out that we want the
+  wishlist.
+
+### Tests
+
+- 2 new tests in `auth.test.ts` covering the 0.16.3 plumbing:
+  `PUBLIC_SIGNUP_ENABLED` DB row beats env (signup endpoint
+  becomes reachable), `SUPPORT_URL` default + DB override
+  precedence.
+- Existing `automaticTaxEnabled()` unit tests updated for the
+  new async signature.
+- Status-endpoint tests updated for the new `supportUrl`
+  field.
+
+Full suite green: 739 server + 6 web tests.
+
+### Operator notes
+
+- The /settings page already lists every key in
+  `KNOWN_SETTINGS`, so the six new keys appear automatically.
+- Rotating `STRIPE_SECRET_KEY` from the UI takes effect on
+  the very next API call — no restart, no container bounce.
+- Rotating `SESSION_SECRET` or `ATTACHMENT_ENCRYPTION_KEY`
+  still requires a restart (they're captured at boot by
+  Fastify / file storage); the API response carries
+  `restart_required: true` so the UI surfaces the prompt.
+- Clearing `SUPPORT_URL` (DELETE on the row, no value in env)
+  hides the link everywhere. The default
+  `https://support.builditsmrt.com/` only kicks in when
+  *nothing* is set — clearing the env var alone is not
+  enough if a DB row exists.
 
 ---
 
