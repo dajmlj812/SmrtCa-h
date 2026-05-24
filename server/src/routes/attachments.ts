@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import {
+  assertAttachmentInTenant,
+  assertTransactionInTenant,
+  requireTenant,
+} from '../auth/rbac.js';
+import {
   AttachmentValidationError,
   type EncryptionVersion,
   MAX_REQUEST_BYTES,
@@ -40,13 +45,31 @@ const PUBLIC_COLUMNS = `id, transaction_id, filename, mime_type, byte_size,
   created_at, extracted_amount_cents, extracted_date, extracted_merchant,
   ocr_provider, ocr_status, ocr_note`;
 
+/**
+ * 0.14.3 — attachments hardening.
+ *
+ * Pre-0.14.3 the download/preview routes loaded + DECRYPTED any
+ * attachment by id with zero ownership check — a single id-guess
+ * could exfiltrate any tenant's receipts. Now every read and write
+ * verifies the attached transaction (and through it, the account)
+ * belongs to the caller's tenant. Cross-tenant ids return 404 with
+ * the same shape as a stale/unknown id.
+ *
+ * The list endpoint also adds the txn-ownership gate so a tenant
+ * can't enumerate another tenant's attachment ids via a known
+ * transaction id.
+ */
 export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>(
     '/api/transactions/:id/attachments',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid transaction id' });
       }
+      const ok = await assertTransactionInTenant(tenantId, req.params.id);
+      if (!ok) return reply.code(404).send({ error: 'Transaction not found' });
       const result = await query<AttachmentRow>(
         `SELECT ${PUBLIC_COLUMNS}
            FROM attachments
@@ -61,16 +84,16 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>(
     '/api/transactions/:id/attachments',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid transaction id' });
       }
-      // Verify the transaction exists before accepting any files.
-      const txn = await query('SELECT id FROM transactions WHERE id = $1', [
-        req.params.id,
-      ]);
-      if (txn.rowCount === 0) {
-        return reply.code(404).send({ error: 'Transaction not found' });
-      }
+      // Verify the transaction exists AND belongs to this tenant
+      // before accepting any files. 0.14.3 closes the pre-fix gap
+      // where the existence check ignored tenant ownership.
+      const ok = await assertTransactionInTenant(tenantId, req.params.id);
+      if (!ok) return reply.code(404).send({ error: 'Transaction not found' });
 
       const errors: string[] = [];
       interface StagedPart {
@@ -116,8 +139,10 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // Phase 2 — write to disk and DB. Order matches the original
-      // single-pass code so the OCR background hand-off is unchanged.
+      // Phase 2 — write to disk and DB. INSERT now writes `tenant_id`
+      // so per-tenant tooling can rely on it without a transaction
+      // join. Phase 8 added the column nullable; pre-0.14.3 nothing
+      // populated it.
       const created: AttachmentRow[] = [];
       const pendingOcr: Array<{
         id: string;
@@ -136,12 +161,13 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
           );
         const insert = await query<AttachmentRow>(
           `INSERT INTO attachments
-             (id, transaction_id, filename, mime_type, byte_size,
+             (id, tenant_id, transaction_id, filename, mime_type, byte_size,
               storage_path, encryption_version)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING ${PUBLIC_COLUMNS}`,
           [
             attachmentId,
+            tenantId,
             req.params.id,
             safeFilename,
             item.mimeType,
@@ -161,9 +187,6 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
 
       const ocrProvider = getOcrProvider();
       if (ocrProvider) {
-        // Fire-and-forget — the upload response returns immediately with
-        // status='pending', and the UI polls the list endpoint to pick up
-        // the extracted fields when OCR completes.
         for (const item of pendingOcr) {
           void runOcrExtraction(
             item.id,
@@ -179,8 +202,6 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
           });
         }
       } else {
-        // No vision provider — mark every row 'skipped' synchronously so
-        // the response reflects the final state (no UI polling needed).
         for (const item of pendingOcr) {
           await markOcrSkipped(item.id);
         }
@@ -197,14 +218,15 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Download (forces attachment disposition so the browser saves the file).
-  // Reads the full file into memory rather than streaming because the v1
-  // ciphertext is a single GCM frame that can only be verified after the
-  // last byte. File sizes are already capped at 25 MB.
+  // Download — every read of attachment bytes requires the attachment
+  // belong to this tenant. Pre-0.14.3 this route decrypted any
+  // attachment by id, leaking receipt PDFs cross-tenant.
   app.get<{ Params: { id: string } }>(
     '/api/attachments/:id',
     async (req, reply) => {
-      const row = await loadAttachment(req.params.id);
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      const row = await loadScopedAttachment(req.params.id, tenantId);
       if (row === 'invalid') {
         return reply.code(400).send({ error: 'Invalid attachment id' });
       }
@@ -224,11 +246,13 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Inline preview (browser renders directly — for <img src=…> and PDF embeds).
+  // Inline preview — same scope check as download.
   app.get<{ Params: { id: string } }>(
     '/api/attachments/:id/preview',
     async (req, reply) => {
-      const row = await loadAttachment(req.params.id);
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      const row = await loadScopedAttachment(req.params.id, tenantId);
       if (row === 'invalid') {
         return reply.code(400).send({ error: 'Invalid attachment id' });
       }
@@ -251,9 +275,15 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/attachments/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid attachment id' });
       }
+      // Ownership check via assertAttachmentInTenant before deleting
+      // ensures the cross-tenant path returns 404 with no file removed.
+      const ok = await assertAttachmentInTenant(tenantId, req.params.id);
+      if (!ok) return reply.code(404).send({ error: 'Attachment not found' });
       const result = await query<{ storage_path: string }>(
         `DELETE FROM attachments WHERE id = $1 RETURNING storage_path`,
         [req.params.id],
@@ -261,7 +291,6 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       if (result.rowCount === 0) {
         return reply.code(404).send({ error: 'Attachment not found' });
       }
-      // Best-effort filesystem cleanup — the DB row is the source of truth.
       try {
         await deleteAttachmentFile(result.rows[0]!.storage_path);
       } catch (err) {
@@ -280,14 +309,30 @@ type LoadResult =
   | null
   | 'invalid';
 
-async function loadAttachment(id: string): Promise<LoadResult> {
+/**
+ * Load an attachment row with its on-disk path + encryption version,
+ * but only if the attachment's parent transaction belongs to the
+ * given tenant. Returns `'invalid'` for malformed ids, `null` for
+ * "not found OR belongs to another tenant" (deliberately the same
+ * shape so cross-tenant probes can't enumerate by status code).
+ */
+async function loadScopedAttachment(
+  id: string,
+  tenantId: string,
+): Promise<LoadResult> {
   if (!isUuid(id)) return 'invalid';
   const result = await query<
     AttachmentRow & { storage_path: string; encryption_version: number }
   >(
-    `SELECT ${PUBLIC_COLUMNS}, storage_path, encryption_version
-       FROM attachments WHERE id = $1`,
-    [id],
+    `SELECT att.id, att.transaction_id, att.filename, att.mime_type, att.byte_size,
+            att.created_at, att.extracted_amount_cents, att.extracted_date,
+            att.extracted_merchant, att.ocr_provider, att.ocr_status, att.ocr_note,
+            att.storage_path, att.encryption_version
+       FROM attachments att
+       JOIN transactions t ON t.id = att.transaction_id
+       JOIN accounts a ON a.id = t.account_id
+      WHERE att.id = $1 AND a.tenant_id = $2`,
+    [id, tenantId],
   );
   return result.rows[0] ?? null;
 }

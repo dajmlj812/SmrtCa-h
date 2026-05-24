@@ -9,9 +9,114 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.6 + 0.14.0–0.14.2 shipped. Multi-tenant isolation
-hardening continues — slices 0.14.3 (attachments/splits/suggestions)
-and 0.14.4 (vehicles/commute/fuel/normalize) still pending._
+_0.13.0–0.13.6 + 0.14.0–0.14.3 shipped. One slice remains:
+0.14.4 (vehicles, commute-routes, fuel-prices, normalize,
+projections NULL hatch)._
+
+---
+
+## [0.14.3] — 2026-05-23 — Tenant isolation hardening, slice 4: attachments + splits + suggestions + members-list
+
+Slice 4 of the hardening pass. Closes the **file-disclosure bug**
+on `/api/attachments/:id` (pre-fix the route loaded and DECRYPTED
+any attachment by id — a single id-guess could exfiltrate any
+tenant's receipts), plus three smaller surface areas.
+
+### Scope
+
+- `routes/attachments.ts` (HIGH — file disclosure)
+- `routes/splits.ts`
+- `routes/suggestions.ts` (HIGH — also relinked transactions globally)
+- `routes/tenants.ts` member-list (MED — admin-only tighten)
+
+### Server — new helper
+
+- `auth/rbac.ts`: `assertAttachmentInTenant(tenantId, attachmentId)`
+  joins `attachments → transactions → accounts` so cross-tenant
+  ids are invisible.
+
+### Server — `routes/attachments.ts`
+
+- All 5 handlers gated by `requireTenant` and verify ownership
+  via `assertTransactionInTenant` / `assertAttachmentInTenant`.
+- `POST /api/transactions/:id/attachments` now INSERTs `tenant_id`
+  on the new row (Phase 8 column was never populated by this
+  route).
+- `GET /api/attachments/:id` (download) and `/preview` use a
+  new `loadScopedAttachment(id, tenantId)` helper that joins
+  through the parent transaction; cross-tenant ids return 404
+  identical to unknown ids.
+- `DELETE` verifies tenant before removing the row + on-disk file.
+
+### Server — `routes/splits.ts`
+
+- GET / PUT / DELETE all verify the parent transaction belongs to
+  the caller's tenant.
+- PUT validates each split's `categoryId` via
+  `assertCategoryUsableByTenant` — a tenant can't smuggle another
+  tenant's category onto a split.
+- PUT writes `transaction_splits.tenant_id` (Phase 8 column was
+  never populated by this route).
+
+### Server — `routes/suggestions.ts`
+
+- All 4 handlers scoped by `tenant_id`.
+- `loadPendingSuggestion(id, tenantId)` looks up only this
+  tenant's pending row.
+- Approve INSERTs the new category with `tenant_id = caller` so
+  it doesn't appear as a global category visible to every other
+  tenant.
+- Approve / merge / reject UPDATE on transactions joins through
+  accounts so only THIS tenant's matching rows get relinked /
+  cleared. Pre-fix these UPDATEs were global — rejecting a
+  suggestion on Tenant A also cleared the same `suggested_category_name`
+  tag on every other tenant's transactions.
+- Merge validates the target `categoryId` against the tenant.
+
+### Server — `routes/tenants.ts`
+
+- `GET /api/tenants/:id/members` now admin-only. Pre-fix any
+  member (including child) could list every other member's email
+  + last-login timestamp.
+
+### Tests (+11 cross-tenant isolation tests)
+
+- Attachments: list/download/preview/delete all 404 for cross-
+  tenant ids; deletion leaves the file in place.
+- Splits: GET/PUT/DELETE 404 for cross-tenant transactions; PUT
+  rejects cross-tenant per-split categoryId.
+- Suggestions: list filtered by tenant; approve 404s cross-
+  tenant; reject only clears caller-tenant transactions
+  (verifies the previously-global UPDATE is now scoped).
+- Members: child role on Tenant B gets 403 on the members list;
+  admin gets 200 on their own tenant.
+
+`tests/integration/suggestions.test.ts` test helper updated to
+seed `category_suggestions.tenant_id` (one direct INSERT).
+
+Total: **54 tenant-isolation tests** (43 from 0.14.0-2 + 11
+new). Each new one would have failed against pre-0.14.3 code.
+
+- Total: **618 tests** (612 server + 6 web). Same 6 pre-existing
+  portability tar failures unchanged.
+
+### Files
+
+```
+server/src/auth/rbac.ts                              (+assertAttachmentInTenant)
+server/src/routes/attachments.ts                     (rewrote)
+server/src/routes/splits.ts                          (rewrote)
+server/src/routes/suggestions.ts                     (rewrote)
+server/src/routes/tenants.ts                         (members list admin-only)
+server/tests/integration/suggestions.test.ts         (tenant_id in test seed)
+server/tests/security/tenant-isolation.test.ts       (+11 tests)
+package.json + server/package.json + web/package.json (0.14.2 → 0.14.3)
+```
+
+### Coming next
+
+- **0.14.4** — vehicles, commute-routes, fuel-prices, normalize,
+  projections NULL hatch
 
 ---
 

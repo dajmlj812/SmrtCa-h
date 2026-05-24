@@ -866,6 +866,228 @@ describe('Tenant isolation — accounts + transactions + holdings (0.14.0)', () 
     expect(Number(still.rows[0]!.count)).toBe(2);
   });
 
+  // ── Attachments (0.14.3) ────────────────────────────────────
+
+  async function seedAttachmentFor(
+    tenantId: string,
+    accountId: string,
+  ): Promise<{ attachmentId: string; txnId: string }> {
+    const txnId = await seedTxnFor({
+      accountId, date: '2026-05-01', amountCents: -1000, raw: 'X',
+    });
+    const att = await pool.query<{ id: string }>(
+      `INSERT INTO attachments
+         (tenant_id, transaction_id, filename, mime_type, byte_size,
+          storage_path, encryption_version)
+       VALUES ($1, $2, 'receipt.pdf', 'application/pdf', 100, '/tmp/fake', 0)
+       RETURNING id`,
+      [tenantId, txnId],
+    );
+    return { attachmentId: att.rows[0]!.id, txnId };
+  }
+
+  it('GET /api/transactions/:id/attachments 404s a cross-tenant txn', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const { txnId } = await seedAttachmentFor(B.id, bAcct);
+    const r = await asA({
+      method: 'GET',
+      url: `/api/transactions/${txnId}/attachments`,
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('GET /api/attachments/:id (download) 404s a cross-tenant attachment', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const { attachmentId } = await seedAttachmentFor(B.id, bAcct);
+    const r = await asA({ method: 'GET', url: `/api/attachments/${attachmentId}` });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('GET /api/attachments/:id/preview 404s a cross-tenant attachment', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const { attachmentId } = await seedAttachmentFor(B.id, bAcct);
+    const r = await asA({
+      method: 'GET',
+      url: `/api/attachments/${attachmentId}/preview`,
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('DELETE /api/attachments/:id 404s a cross-tenant attachment (no deletion)', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const { attachmentId } = await seedAttachmentFor(B.id, bAcct);
+    const r = await asA({ method: 'DELETE', url: `/api/attachments/${attachmentId}` });
+    expect(r.statusCode).toBe(404);
+    const still = await pool.query(`SELECT 1 FROM attachments WHERE id = $1`, [attachmentId]);
+    expect(still.rowCount).toBe(1);
+  });
+
+  // ── Splits (0.14.3) ─────────────────────────────────────────
+
+  it('GET /api/transactions/:id/splits 404s a cross-tenant txn', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const bTxn = await seedTxnFor({
+      accountId: bAcct, date: '2026-05-01', amountCents: -1000, raw: 'B',
+    });
+    const r = await asA({
+      method: 'GET',
+      url: `/api/transactions/${bTxn}/splits`,
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('PUT /api/transactions/:id/splits 404s a cross-tenant txn (no mutation)', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const bTxn = await seedTxnFor({
+      accountId: bAcct, date: '2026-05-01', amountCents: -10000, raw: 'B',
+    });
+    const cat = await pool.query<{ id: string }>(
+      `SELECT id FROM categories WHERE name = 'Groceries' LIMIT 1`,
+    );
+    const r = await asA({
+      method: 'PUT',
+      url: `/api/transactions/${bTxn}/splits`,
+      payload: {
+        splits: [{ categoryId: cat.rows[0]!.id, amountCents: -10000 }],
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(404);
+    const noSplits = await pool.query(
+      `SELECT 1 FROM transaction_splits WHERE transaction_id = $1`,
+      [bTxn],
+    );
+    expect(noSplits.rowCount).toBe(0);
+  });
+
+  it("PUT /api/transactions/:id/splits rejects a cross-tenant categoryId per split", async () => {
+    const aAcct = await seedAccountFor(A.id, 'A');
+    const aTxn = await seedTxnFor({
+      accountId: aAcct, date: '2026-05-01', amountCents: -10000, raw: 'A',
+    });
+    const bCat = await pool.query<{ id: string }>(
+      `INSERT INTO categories (tenant_id, name) VALUES ($1, 'B-Cat') RETURNING id`,
+      [B.id],
+    );
+    const r = await asA({
+      method: 'PUT',
+      url: `/api/transactions/${aTxn}/splits`,
+      payload: {
+        splits: [{ categoryId: bCat.rows[0]!.id, amountCents: -10000 }],
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(400);
+  });
+
+  // ── Suggestions (0.14.3) ────────────────────────────────────
+
+  it('GET /api/suggestions returns only caller-tenant rows', async () => {
+    await pool.query(
+      `INSERT INTO category_suggestions (tenant_id, suggested_name)
+       VALUES ($1, 'A-Suggestion'), ($2, 'B-Suggestion')`,
+      [A.id, B.id],
+    );
+    const r = await asA({ method: 'GET', url: '/api/suggestions?status=pending' });
+    expect(r.statusCode).toBe(200);
+    const names = (r.json().suggestions as Array<{ suggested_name: string }>).map(
+      (s) => s.suggested_name,
+    );
+    expect(names).toEqual(['A-Suggestion']);
+  });
+
+  it("POST /api/suggestions/:id/approve 404s a cross-tenant suggestion", async () => {
+    const r = await pool.query<{ id: string }>(
+      `INSERT INTO category_suggestions (tenant_id, suggested_name)
+       VALUES ($1, 'B-Sug') RETURNING id`,
+      [B.id],
+    );
+    const approve = await asA({
+      method: 'POST',
+      url: `/api/suggestions/${r.rows[0]!.id}/approve`,
+      payload: {},
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(approve.statusCode).toBe(404);
+  });
+
+  it("POST /api/suggestions/:id/reject only clears caller-tenant transactions", async () => {
+    // Both tenants have a transaction tagged with the same
+    // suggested_category_name. Rejecting on Tenant A must NOT clear
+    // the tag on Tenant B's row (pre-fix this UPDATE was global).
+    const aAcct = await seedAccountFor(A.id, 'A');
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const sugName = 'SharedSuggestion';
+    await pool.query(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash,
+          suggested_category_name, normalization_status)
+       VALUES ($1, '2026-05-01', -100, 'A', $3, $5, 'normalized'),
+              ($2, '2026-05-01', -100, 'B', $4, $5, 'normalized')`,
+      [aAcct, bAcct, randomUUID(), randomUUID(), sugName],
+    );
+    // Create matching suggestion rows for BOTH tenants.
+    const aSug = await pool.query<{ id: string }>(
+      `INSERT INTO category_suggestions (tenant_id, suggested_name)
+       VALUES ($1, $2) RETURNING id`,
+      [A.id, sugName],
+    );
+    const r = await asA({
+      method: 'POST',
+      url: `/api/suggestions/${aSug.rows[0]!.id}/reject`,
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().transactionsCleared).toBe(1);
+    // A's tag cleared, B's preserved.
+    const remaining = await pool.query<{ account_id: string; suggested_category_name: string | null }>(
+      `SELECT account_id, suggested_category_name FROM transactions
+        WHERE account_id IN ($1, $2) ORDER BY account_id`,
+      [aAcct, bAcct],
+    );
+    const byAcct = new Map(
+      remaining.rows.map((row) => [row.account_id, row.suggested_category_name]),
+    );
+    expect(byAcct.get(aAcct)).toBeNull();
+    expect(byAcct.get(bAcct)).toBe(sugName);
+  });
+
+  // ── Tenants member-list (0.14.3 admin tighten) ──────────────
+
+  it('GET /api/tenants/:id/members is now admin-only', async () => {
+    // Tenant A admin (A.cookie) gets in. A child of Tenant B does NOT.
+    const childUser = await pool.query<{ id: string }>(
+      `INSERT INTO users (email, name, password_hash)
+       VALUES ('child-b@local', 'Child', 'x') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO memberships (tenant_id, user_id, role)
+       VALUES ($1, $2, 'child')`,
+      [B.id, childUser.rows[0]!.id],
+    );
+    const childSession = `iso-test-child-${childUser.rows[0]!.id.slice(0, 8)}`;
+    await pool.query(
+      `INSERT INTO sessions (id, user_id, expires_at, active_tenant_id)
+       VALUES ($1, $2, now() + interval '1 day', $3)`,
+      [childSession, childUser.rows[0]!.id, B.id],
+    );
+    const childCookie = `smrtcash_session=${app.signCookie(childSession)}`;
+
+    const childResp = await (app as unknown as { inject: (o: { method: string; url: string; headers: { cookie: string }; skipAuth?: boolean }) => Promise<{ statusCode: number }> }).inject({
+      method: 'GET',
+      url: `/api/tenants/${B.id}/members`,
+      headers: { cookie: childCookie },
+      skipAuth: true,
+    });
+    expect(childResp.statusCode).toBe(403);
+
+    // Admin succeeds.
+    const adminResp = await asA({
+      method: 'GET',
+      url: `/api/tenants/${A.id}/members`,
+    });
+    expect(adminResp.statusCode).toBe(200);
+  });
+
   it('POST /api/holdings/refresh-prices/crypto never touches other tenants', async () => {
     const aAcct = await seedAccountFor(A.id, 'A-Inv', 'investment');
     const bAcct = await seedAccountFor(B.id, 'B-Inv', 'investment');

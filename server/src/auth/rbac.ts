@@ -318,3 +318,24 @@ export async function assertCategoryUsableByTenant(
   );
   return (r.rowCount ?? 0) > 0;
 }
+
+/**
+ * 0.14.3 — file-disclosure protection. Attachments are sensitive (PDFs
+ * of credit-card statements, receipts with PII) so the download +
+ * preview routes MUST refuse cross-tenant ids. Ownership is via the
+ * attached transaction → account → tenant chain.
+ */
+export async function assertAttachmentInTenant(
+  tenantId: string,
+  attachmentId: string,
+): Promise<boolean> {
+  const r = await pool.query(
+    `SELECT 1
+       FROM attachments att
+       JOIN transactions t ON t.id = att.transaction_id
+       JOIN accounts a ON a.id = t.account_id
+      WHERE att.id = $1 AND a.tenant_id = $2`,
+    [attachmentId, tenantId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}

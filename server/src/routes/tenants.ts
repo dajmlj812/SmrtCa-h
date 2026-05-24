@@ -93,6 +93,10 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── Members ───────────────────────────────────────────────
+  // 0.14.3: admin-only. Pre-fix any member (including child) could
+  // list every other member's email + last_login. Admin-only matches
+  // the spec ("admin can manage members") and the parallel
+  // invitations endpoint.
   app.get<{ Params: { id: string } }>(
     '/api/tenants/:id/members',
     async (req, reply) => {
@@ -100,7 +104,7 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid tenant id' });
       const role = await roleOf(req.user.id, req.params.id);
-      if (!role) return reply.code(403).send({ error: 'Forbidden' });
+      if (!isAdmin(role)) return reply.code(403).send({ error: 'Forbidden' });
       const r = await query<{
         user_id: string;
         email: string | null;

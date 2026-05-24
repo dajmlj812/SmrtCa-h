@@ -4,10 +4,15 @@ import type { FastifyInstance } from 'fastify';
 import { makeTestApp, pool, resetDb, seedAccount } from '../setup/test-db.js';
 
 async function seedPendingSuggestion(name: string): Promise<string> {
+  // 0.14.3: category_suggestions is tenant-scoped. Direct INSERTs in
+  // tests must seed the Default tenant id so the route can find it.
+  const t = await pool.query<{ id: string }>(
+    `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+  );
   const r = await pool.query<{ id: string }>(
-    `INSERT INTO category_suggestions (suggested_name) VALUES ($1)
-     RETURNING id`,
-    [name],
+    `INSERT INTO category_suggestions (tenant_id, suggested_name)
+     VALUES ($1, $2) RETURNING id`,
+    [t.rows[0]!.id, name],
   );
   return r.rows[0]!.id;
 }
