@@ -36,6 +36,33 @@ const SECTIONS: Array<{ title: string; subtitle: string; keys: string[] }> = [
       'APP_BASE_URL',
     ],
   },
+  // 0.16.3 — Stripe + SaaS toggles. STRIPE_SECRET_KEY rotates
+  // live; PUBLIC_SIGNUP_ENABLED + STRIPE_AUTOMATIC_TAX are simple
+  // boolean flags. STRIPE_PUBLIC_BASE_URL is the base for Stripe
+  // Checkout success/cancel + every transactional email link.
+  {
+    title: 'Stripe + SaaS',
+    subtitle:
+      'Stripe API keys (rotate live — the SDK client rebuilds on the next call), public-signup toggle, automatic-tax toggle, and the base URL used for Checkout redirects + email links.',
+    keys: [
+      'STRIPE_SECRET_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+      'STRIPE_PUBLIC_BASE_URL',
+      'STRIPE_AUTOMATIC_TAX',
+      'PUBLIC_SIGNUP_ENABLED',
+    ],
+  },
+  // 0.16.3 — Support link surfaced in sidebar footers + on
+  // every unauthenticated page (login, signup, forgot/reset).
+  // Defaults to https://support.builditsmrt.com/ when nothing
+  // is set; operators self-hosting on their own domain can
+  // repoint at their own help system.
+  {
+    title: 'Support & feedback',
+    subtitle:
+      'Operator-configured help destination — surfaced as "Help & feature requests" in the sidebar and on every unauthenticated page. Clear it to hide the link everywhere.',
+    keys: ['SUPPORT_URL'],
+  },
   {
     title: 'Security — restart required',
     subtitle:

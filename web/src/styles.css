@@ -47,6 +47,17 @@
   --bg: var(--surface-1);
   --card: var(--surface-2);
   --accent-dark: var(--accent-hover);
+  /* 0.16.3 — additional legacy aliases. Without these, a handful
+   * of rules (settings inline <code>, auth-shell background,
+   * .auth-card, progress-track, every "card-border" rule) fell
+   * back to hard-coded light-mode hex values, which in dark mode
+   * produced near-white text on a near-white background — most
+   * visibly on the /settings page "set via GUI / from .env"
+   * value chips. Mapping the legacy names to the theme-aware
+   * surfaces fixes contrast in both themes. */
+  --app-bg: var(--surface-1);
+  --card-bg: var(--surface-2);
+  --card-border: var(--border);
   --sidebar: #0b1020;
   --sidebar-muted: #9aa3b8;
 }
@@ -1048,7 +1059,10 @@ select:focus {
   font-variant-numeric: tabular-nums;
 }
 .progress-track {
-  background: var(--app-bg, #f1f5f9);
+  /* Inset surface — use surface-3 so the track sits visibly
+   * darker than the card around it in light mode and visibly
+   * lighter in dark mode. */
+  background: var(--surface-3, #f1f5f9);
   border-radius: 4px;
   height: 8px;
   overflow: hidden;
@@ -1441,7 +1455,12 @@ tr.selected {
   gap: 2px;
 }
 .settings-display-value code {
-  background: var(--app-bg, #f1f5f9);
+  /* 0.16.3 — was var(--app-bg) which fell through to a hard-coded
+   * light hex; in dark mode the (light) --text color rendered on
+   * that light background was unreadable. surface-3 gives an
+   * inset chip in both themes. */
+  background: var(--surface-3, #f1f5f9);
+  color: var(--text);
   padding: 2px 6px;
   border-radius: 4px;
 }
