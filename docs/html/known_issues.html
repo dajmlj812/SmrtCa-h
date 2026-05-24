@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Known Issues# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-known-issues">SmrtCash — Known Issues<a class="heading-anchor" href="#smrtcash-known-issues">#</a></h1>
+<p>This page tracks current limitations as of <strong>0.16.4 (2026-05-24)</strong>.</p>
+<p><strong>No open issues at the moment.</strong> The original KI-02 / KI-05 / KI-06 / KI-07 /
+KI-08 list has been retired in full — see the Resolved section below. The
+0.15.x SaaS pivot and 0.16.x SaaS launch readiness work introduced no new
+open issues; every gap surfaced during those slices was closed within the
+slice that introduced it.</p>
+<p>Severity: 🔴 high · 🟡 medium · 🟢 low / cosmetic. Add new findings as they
+surface.</p>
+<hr>
+<h2 id="resolved">Resolved<a class="heading-anchor" href="#resolved">#</a></h2>
+<h3 id="ki-02-moderate-npm-vulnerabilities-in-exceljs-dependencies-resolved-in-0147"><del>KI-02 — Moderate npm vulnerabilities in <code>exceljs</code> dependencies</del> ✅ resolved in 0.14.7<a class="heading-anchor" href="#ki-02-moderate-npm-vulnerabilities-in-exceljs-dependencies-resolved-in-0147">#</a></h3>
+<p>Both moderate-severity advisories traced to <code>uuid &lt;11.1.1</code> used transitively
+by exceljs. Resolved by an npm <code>overrides</code> block in <code>server/package.json</code>
+forcing <code>uuid</code> to <code>^11.1.1</code>. <code>npm audit</code> now reports <strong>0 vulnerabilities</strong>.</p>
+<h3 id="ki-05-duplicate-detection-is-heuristic-resolved-in-0147"><del>KI-05 — Duplicate detection is heuristic</del> ✅ resolved in 0.14.7<a class="heading-anchor" href="#ki-05-duplicate-detection-is-heuristic-resolved-in-0147">#</a></h3>
+<p>The dedup hash now uses the <strong>bank-provided reference</strong> (<code>FITID</code> for OFX,
+<code>transaction_id</code> for Plaid) as the canonical identity when present, falling
+back to the <code>(date, amount, description)</code> heuristic only for sources that
+don&#39;t provide one (CSV, XLSX, QIF). Re-importing the same OFX file or syncing
+an overlapping Plaid window is now deterministically idempotent EVEN if the
+bank later rewrites the description (merchant-name cleanup post-settlement,
+correction postings, etc.). Covered by 4 new unit tests in
+<code>tests/unit/dedup.test.ts</code>.</p>
+<p><strong>Note for existing imports:</strong> if you previously imported the same OFX file
+under the heuristic logic, re-importing it post-fix will skip rows whose
+FITID-based hash matches a new row but produce duplicates for any rows that
+already existed under the old hash. In practice this is negligible — most
+re-imports happen between fix-and-prod within the same session — but a bulk-
+delete on the duplicates closes any residual.</p>
+<h3 id="ki-06-xlsx-date-cells-may-need-verification-resolved-in-0147"><del>KI-06 — XLSX date cells may need verification</del> ✅ resolved in 0.14.7<a class="heading-anchor" href="#ki-06-xlsx-date-cells-may-need-verification-resolved-in-0147">#</a></h3>
+<p>The XLSX parser&#39;s <code>cellToString</code> already extracted dates via <code>getUTC*</code>
+methods (correct since 0.11.0), but the behavior was never pinned by a
+test. Added <code>tests/unit/xlsx-date-parsing.test.ts</code> covering year-start,
+year-end, month boundaries, and a leap day. Round-trips through exceljs
+without committing a binary fixture. All 5 dates parse verbatim.</p>
+<h3 id="ki-07-single-user-single-household-assumption-resolved-in-phase-8-014x"><del>KI-07 — Single-user / single-household assumption</del> ✅ resolved in Phase 8 / 0.14.x<a class="heading-anchor" href="#ki-07-single-user-single-household-assumption-resolved-in-phase-8-014x">#</a></h3>
+<p>Multi-tenant with admin / spouse / child roles shipped in Phase 8 (0.11.0).
+Per-account permission tuning landed in 0.13.4. <strong>Cross-tenant isolation was
+audited and hardened in 0.14.0 → 0.14.4</strong> — 72 dedicated cross-tenant tests
+in <code>tests/security/tenant-isolation.test.ts</code> verify that no route, no domain
+function, and no aggregation leaks data across tenants. Each test would have
+failed against pre-0.14.x code.</p>
+<h3 id="ki-08-project-folder-name-contains-retired-as-accepted-by-design-in-0147"><del>KI-08 — Project folder name contains <code>$</code></del> ✅ retired as accepted-by-design in 0.14.7<a class="heading-anchor" href="#ki-08-project-folder-name-contains-retired-as-accepted-by-design-in-0147">#</a></h3>
+<p>The working directory <code>SmrtCa$h</code> is handled by always passing
+<code>-p smrtcash</code> to docker compose and by quoting paths. Internal package /
+container names are <code>smrtcash</code>. No code change required; treating this as
+a documented convention rather than an outstanding issue.</p>
+<h3 id="portability-tests-fail-on-windows-dev-tar-shell-out-resolved-in-0145"><del>Portability tests fail on Windows-dev (tar shell-out)</del> ✅ resolved in 0.14.5<a class="heading-anchor" href="#portability-tests-fail-on-windows-dev-tar-shell-out-resolved-in-0145">#</a></h3>
+<p>Three tar shell-outs in <code>domain/portability.ts</code>, <code>domain/backup-runner.ts</code>,
+and the portability test now pass <code>--force-local</code> so GNU tar doesn&#39;t
+interpret a Windows drive-letter colon (<code>C:\...</code>) as an SSH-style <code>host:path</code>.
+Safe on Linux (no-op when no colon is present in arguments).</p>
+<hr>
+<p><em>Found something not listed here? It belongs in this file — keep it updated
+as the project evolves.</em></p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

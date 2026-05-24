@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Development Process# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-development-process">SmrtCash — Development Process<a class="heading-anchor" href="#smrtcash-development-process">#</a></h1>
+<p>The playbook for going from &quot;I want this feature&quot; to &quot;shipped, tagged,
+documented.&quot; Optimized for a small team (currently a solo developer plus AI
+assistance) — but the conventions scale to more.</p>
+<p>Goals: <strong>working software at every step</strong>, no scary surprises at release time,
+and a history that makes the next feature easier than the last.</p>
+<blockquote>
+<p>Where to start: the <a href="#quick-reference-cheatsheet">Quick reference</a> at the
+bottom is enough to drive a routine feature. The full document explains
+<em>why</em> each step exists.</p>
+</blockquote>
+<hr>
+<h2 id="1-overview">1. Overview<a class="heading-anchor" href="#1-overview">#</a></h2>
+<p>The lifecycle has <strong>16 stages</strong> grouped into five tracks:</p>
+<table>
+<thead>
+<tr>
+<th>Track</th>
+<th>Stages</th>
+<th>What it produces</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>A — Decide</strong></td>
+<td>1–3</td>
+<td>A clear, ready-to-build feature definition</td>
+</tr>
+<tr>
+<td><strong>B — Build</strong></td>
+<td>4–7</td>
+<td>Working, tested code on a feature branch</td>
+</tr>
+<tr>
+<td><strong>C — Review</strong></td>
+<td>8–11</td>
+<td>A reviewed, changelog&#39;d, mergeable PR</td>
+</tr>
+<tr>
+<td><strong>D — Release</strong></td>
+<td>12–16</td>
+<td>A tagged, pushed, released version</td>
+</tr>
+<tr>
+<td><strong>E — Reflect</strong></td>
+<td>post-merge</td>
+<td>Updated docs &amp; lessons captured</td>
+</tr>
+</tbody></table>
+<p>Each stage has an <strong>input</strong>, an <strong>output</strong>, and a &quot;definition of done&quot; for
+that stage alone — you should never leave a stage with unfinished work in it.</p>
+<hr>
+<h2 id="2-roles">2. Roles<a class="heading-anchor" href="#2-roles">#</a></h2>
+<p>Even with one human developer, name the hats so each stage has a clear
+&quot;owner.&quot; The same person (or AI) can wear multiple hats per change.</p>
+<table>
+<thead>
+<tr>
+<th>Hat</th>
+<th>Owns</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Product</strong></td>
+<td>What to build, why, acceptance criteria. Stages 1–3.</td>
+</tr>
+<tr>
+<td><strong>Developer</strong></td>
+<td>Implementation + tests + docs. Stages 4–7.</td>
+</tr>
+<tr>
+<td><strong>Reviewer</strong></td>
+<td>Code review pass — second pair of eyes (human or <code>/code-review</code>). Stages 8, 10.</td>
+</tr>
+<tr>
+<td><strong>Security reviewer</strong></td>
+<td>Conditional — only for security-sensitive changes. Stage 9.</td>
+</tr>
+<tr>
+<td><strong>Release manager</strong></td>
+<td>Versioning, CHANGELOG, tagging, release notes. Stages 11–16.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="3-the-16-stages">3. The 16 stages<a class="heading-anchor" href="#3-the-16-stages">#</a></h2>
+<h3 id="stage-1-discover">Stage 1 — Discover<a class="heading-anchor" href="#stage-1-discover">#</a></h3>
+<p><strong>Input:</strong> a user need, a competitor scan, an exploratory finding, a roadmap
+backlog item.</p>
+<p><strong>Output:</strong> a one-paragraph <strong>feature brief</strong> added to
+<code>docs/ROADMAP.md</code> (or its backlog) — <em>the why, not the how.</em></p>
+<h3 id="stage-2-define">Stage 2 — Define<a class="heading-anchor" href="#stage-2-define">#</a></h3>
+<p><strong>Input:</strong> an approved feature brief.</p>
+<p><strong>Output:</strong> a feature definition with:</p>
+<ul>
+<li><strong>Acceptance criteria</strong> — concrete, checkable (&quot;Importing a QIF file
+produces N transactions&quot; not &quot;QIF works&quot;)</li>
+<li><strong>Out of scope</strong> — what we explicitly <em>aren&#39;t</em> building this time</li>
+<li><strong>Data model impact</strong> — new columns, new tables, migrations needed</li>
+<li><strong>API surface</strong> — new endpoints, request/response shapes</li>
+<li><strong>UX sketch</strong> — if the change is user-visible (ASCII or wireframe)</li>
+<li><strong>Test layers</strong> — which suites get new tests (unit/integration/functional/
+security/e2e); aim for the <strong>lowest</strong> layer that proves the behavior</li>
+<li><strong>TaskCreate entries</strong> — one per slice the AI agent will execute</li>
+</ul>
+<h3 id="stage-3-definition-of-ready-gate">Stage 3 — Definition of Ready (gate)<a class="heading-anchor" href="#stage-3-definition-of-ready-gate">#</a></h3>
+<blockquote>
+<p>Don&#39;t write code until every box is ticked.</p>
+</blockquote>
+<ul>
+<li><input disabled="" type="checkbox"> Feature is in <code>docs/ROADMAP.md</code></li>
+<li><input disabled="" type="checkbox"> Acceptance criteria are written and concrete</li>
+<li><input disabled="" type="checkbox"> Out-of-scope is explicit</li>
+<li><input disabled="" type="checkbox"> Data-model / API impact is documented</li>
+<li><input disabled="" type="checkbox"> Test layers are identified</li>
+<li><input disabled="" type="checkbox"> Branch name decided (Stage 4)</li>
+</ul>
+<p>If any box is open, go back to Stage 2.</p>
+<h3 id="stage-4-branch">Stage 4 — Branch<a class="heading-anchor" href="#stage-4-branch">#</a></h3>
+<pre><code class="language-sh">git checkout main &amp;&amp; git pull
+git checkout -b feat/&lt;phase&gt;-&lt;short-slug&gt;
+</code></pre>
+<p>Branch names:</p>
+<table>
+<thead>
+<tr>
+<th>Prefix</th>
+<th>Use for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>feat/&lt;phase&gt;-&lt;slug&gt;</code></td>
+<td>Anything that delivers user value (<code>feat/3-receipt-upload</code>)</td>
+</tr>
+<tr>
+<td><code>fix/&lt;slug&gt;</code></td>
+<td>Non-urgent bug fix on <code>main</code></td>
+</tr>
+<tr>
+<td><code>hotfix/&lt;slug&gt;</code></td>
+<td>Urgent fix against a released tag</td>
+</tr>
+<tr>
+<td><code>chore/&lt;slug&gt;</code></td>
+<td>Refactors, dependency bumps, doc-only changes</td>
+</tr>
+</tbody></table>
+<h3 id="stage-5-code">Stage 5 — Code<a class="heading-anchor" href="#stage-5-code">#</a></h3>
+<ul>
+<li>Tests live in <strong>the same change</strong> as production code — never a follow-up.</li>
+<li>Touch docs as you go (<code>docs/FEATURES.md</code>, <code>docs/KNOWN_ISSUES.md</code>,
+<code>docs/ROADMAP.md</code> if anything shifts).</li>
+<li>Match the surrounding code&#39;s style — that&#39;s load-bearing.</li>
+</ul>
+<h3 id="stage-6-test">Stage 6 — Test<a class="heading-anchor" href="#stage-6-test">#</a></h3>
+<p>Pick the lowest layer that proves the behavior:</p>
+<ul>
+<li>Pure function → <strong>unit</strong> (Vitest)</li>
+<li>Route/handler → <strong>integration</strong> (Vitest + <code>app.inject</code>)</li>
+<li>Business outcome → <strong>functional</strong></li>
+<li>User journey → <strong>e2e</strong> (Playwright)</li>
+<li>Hostile or malformed input → <strong>security</strong></li>
+</ul>
+<p>The test pyramid still applies: many fast unit tests, fewer end-to-end.</p>
+<h3 id="stage-7-local-verify">Stage 7 — Local verify<a class="heading-anchor" href="#stage-7-local-verify">#</a></h3>
+<p>Everything green locally before review.</p>
+<pre><code class="language-sh">npm run typecheck      # both packages
+npm test               # server + web vitest
+npm run test:e2e       # Playwright
+</code></pre>
+<p>For UI changes: <code>/verify</code> (drives the app) or <code>/run</code> (just launches it for a
+manual look). For Phase 5+: also <code>docker compose build</code>.</p>
+<h3 id="stage-8-code-review">Stage 8 — Code review<a class="heading-anchor" href="#stage-8-code-review">#</a></h3>
+<ol>
+<li><strong>Self-review.</strong> Re-read your own diff with fresh eyes.</li>
+<li><strong><code>/code-review</code></strong> — structured AI pass for correctness bugs.</li>
+<li><strong><code>/ultrareview</code></strong> — for big or risky changes; spins up a multi-agent
+cloud review of the branch.</li>
+</ol>
+<p>Address every comment or explicitly note why you disagree. Don&#39;t move on with
+unresolved review threads.</p>
+<h3 id="stage-9-security-review-conditional">Stage 9 — Security review (conditional)<a class="heading-anchor" href="#stage-9-security-review-conditional">#</a></h3>
+<p>Required when the change touches <strong>any</strong> of:</p>
+<ul>
+<li>Authentication, sessions, password handling</li>
+<li>Secrets / API keys / credentials</li>
+<li>File upload, attachment storage, file-system access</li>
+<li>A third-party API (Plaid, OFX direct, AI providers, etc.)</li>
+<li>SQL or any data-store query, especially with user-supplied input</li>
+<li>Cross-origin or auth-bearing HTTP requests</li>
+</ul>
+<p>Run <code>/security-review</code>. The &quot;try-to-break-it&quot; mindset is the goal — feed bad
+input, oversized payloads, hostile strings.</p>
+<h3 id="stage-10-fix-issues">Stage 10 — Fix issues<a class="heading-anchor" href="#stage-10-fix-issues">#</a></h3>
+<p>Push fixes to <strong>the same branch</strong>. Don&#39;t rewrite history pre-merge; squash
+happens at merge time so the merge commit is the single unit on <code>main</code>.</p>
+<h3 id="stage-11-changelog">Stage 11 — CHANGELOG<a class="heading-anchor" href="#stage-11-changelog">#</a></h3>
+<p>Every PR adds a line under <code>## [Unreleased]</code> in <code>CHANGELOG.md</code>, in the
+correct section (Added / Changed / Fixed / Removed / Security / Deprecated).
+Style:</p>
+<pre><code>- Pluggable `TransactionNormalizer` interface with three providers (rules,
+  Claude API, Ollama).
+</code></pre>
+<p>Required for every PR, including chores — the changelog is the source of
+release notes.</p>
+<h3 id="stage-12-version-at-release-points-only">Stage 12 — Version (at release points only)<a class="heading-anchor" href="#stage-12-version-at-release-points-only">#</a></h3>
+<ul>
+<li><strong>Phase release</strong> → minor bump (<code>0.2.0</code> → <code>0.3.0</code>)</li>
+<li><strong>Bug-fix-only release</strong> → patch bump (<code>0.2.0</code> → <code>0.2.1</code>)</li>
+<li><strong>1.0.0</strong> — when feature-complete + hardened (after Phase 5)</li>
+</ul>
+<p>When bumping, edit <strong>all four</strong> <code>package.json</code> files (root, <code>server/</code>,
+<code>web/</code>, <code>e2e/</code>) in one commit, and move <code>## [Unreleased]</code> →
+<code>## [X.Y.Z] — YYYY-MM-DD — &lt;phase or theme name&gt;</code> in <code>CHANGELOG.md</code>.</p>
+<p>For PRs that aren&#39;t a release point, no version bump — the CHANGELOG entry
+stays under &quot;Unreleased&quot; until the next release.</p>
+<h3 id="stage-13-build">Stage 13 — Build<a class="heading-anchor" href="#stage-13-build">#</a></h3>
+<pre><code class="language-sh">npm run build --prefix server
+npm run build --prefix web
+</code></pre>
+<p>Catches anything <code>npm test</code> doesn&#39;t (full bundle, no esbuild stripping). For
+Phase 5+: also <code>docker compose build</code> to verify the container image builds.</p>
+<h3 id="stage-14-commit">Stage 14 — Commit<a class="heading-anchor" href="#stage-14-commit">#</a></h3>
+<p><strong>Conventional Commits.</strong> One logical change per commit.</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Use for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>feat</code></td>
+<td>New user-visible capability</td>
+</tr>
+<tr>
+<td><code>fix</code></td>
+<td>Bug fix on shipped behavior</td>
+</tr>
+<tr>
+<td><code>docs</code></td>
+<td>Documentation only</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>Tests only (new or improved)</td>
+</tr>
+<tr>
+<td><code>refactor</code></td>
+<td>Internal restructure, no behavior change</td>
+</tr>
+<tr>
+<td><code>perf</code></td>
+<td>Performance improvement</td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td>Build system / dependency changes</td>
+</tr>
+<tr>
+<td><code>chore</code></td>
+<td>Routine maintenance, including release commits</td>
+</tr>
+</tbody></table>
+<p><strong>Scope</strong> is one of: <code>ai · accounts · transactions · import · categories · web · db · docs · test · build · release · ci</code>.</p>
+<p>Examples:</p>
+<pre><code>feat(ai): add Claude normalizer with prompt caching
+fix(import): handle blank balance column in Chase bank format
+docs(roadmap): mark Phase 2 complete
+test(security): cover SQL injection in search parameter
+chore(release): 0.2.0
+</code></pre>
+<h3 id="stage-15-merge">Stage 15 — Merge<a class="heading-anchor" href="#stage-15-merge">#</a></h3>
+<ul>
+<li>Open a PR on GitHub against <code>main</code>.</li>
+<li>Use the PR template (<code>.github/PULL_REQUEST_TEMPLATE.md</code>) — its checklist
+<em>is</em> the Definition of Done.</li>
+<li><strong>Squash-merge</strong> the feature branch so <code>main</code>&#39;s history is one commit per
+feature.</li>
+<li>Delete the feature branch after merge.</li>
+</ul>
+<h3 id="stage-16-push-amp-release">Stage 16 — Push &amp; release<a class="heading-anchor" href="#stage-16-push-amp-release">#</a></h3>
+<pre><code class="language-sh"># At a release point (after the squash-merge of the version bump):
+git checkout main &amp;&amp; git pull
+git tag -a v0.3.0 -m &quot;Phase 3 — Receipts &amp; Attachments&quot;
+git push --follow-tags
+</code></pre>
+<p>Then on GitHub: <strong>Releases → Draft a new release → choose tag <code>v0.3.0</code></strong>,
+paste that version&#39;s CHANGELOG section as the body. Update
+<code>docs/ROADMAP.md</code> to mark the phase complete and the next one as <code>🔜 Next</code>.</p>
+<p>Phase 5+: build &amp; push the Docker image too.</p>
+<h3 id="stage-17-track-e-retrospective">Stage 17 (Track E) — Retrospective<a class="heading-anchor" href="#stage-17-track-e-retrospective">#</a></h3>
+<p>Lightweight — never a meeting. After a release:</p>
+<ul>
+<li>One line in the release notes or the merge commit: <em>what surprised me /
+what I&#39;d do differently.</em></li>
+<li>Anything newly-discovered → add to <code>docs/KNOWN_ISSUES.md</code> with a <code>KI-NN</code>
+entry.</li>
+<li>Anything worth doing differently next time → adjust this <code>PROCESS.md</code>.</li>
+</ul>
+<hr>
+<h2 id="4-definition-of-done-merge-gate">4. Definition of Done (merge gate)<a class="heading-anchor" href="#4-definition-of-done-merge-gate">#</a></h2>
+<p>Lives in <code>.github/PULL_REQUEST_TEMPLATE.md</code> so it shows up on every PR:</p>
+<ul>
+<li><input disabled="" type="checkbox"> Acceptance criteria met</li>
+<li><input disabled="" type="checkbox"> Tests cover the change (lowest meaningful layer)</li>
+<li><input disabled="" type="checkbox"> <code>npm run typecheck</code> clean (server + web)</li>
+<li><input disabled="" type="checkbox"> <code>npm test</code> clean (server + web)</li>
+<li><input disabled="" type="checkbox"> <code>npm run test:e2e</code> clean (if UI changed)</li>
+<li><input disabled="" type="checkbox"> Docs updated (Features / Roadmap / Known Issues as applicable)</li>
+<li><input disabled="" type="checkbox"> CHANGELOG entry added under <code>## [Unreleased]</code></li>
+<li><input disabled="" type="checkbox"> <code>/code-review</code> run and findings addressed</li>
+<li><input disabled="" type="checkbox"> <code>/security-review</code> run if the change touches the security-sensitive list (Stage 9)</li>
+<li><input disabled="" type="checkbox"> PR description summarizes Summary / What changed / Tests / Screenshots (if UI) / Breaking changes / Linked phase</li>
+</ul>
+<hr>
+<h2 id="5-versioning-semantic-versioning">5. Versioning (Semantic Versioning)<a class="heading-anchor" href="#5-versioning-semantic-versioning">#</a></h2>
+<p><code>MAJOR.MINOR.PATCH</code>:</p>
+<ul>
+<li><strong>PATCH</strong> — backward-compatible bug fixes (<code>0.2.0</code> → <code>0.2.1</code>)</li>
+<li><strong>MINOR</strong> — backward-compatible new features; a phase ships as a minor bump (<code>0.2.0</code> → <code>0.3.0</code>)</li>
+<li><strong>MAJOR</strong> — breaking changes; <code>1.0.0</code> arrives when the product is
+feature-complete and Phase 5 hardening is done</li>
+</ul>
+<p>Anchor points:</p>
+<table>
+<thead>
+<tr>
+<th>Version</th>
+<th>Marker</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>0.1.0</code></td>
+<td>Phase 1 — Foundation &amp; Import</td>
+</tr>
+<tr>
+<td><code>0.2.0</code></td>
+<td>Phase 2 — AI Normalization (current)</td>
+</tr>
+<tr>
+<td><code>0.3.0</code></td>
+<td>Phase 3 — Receipts &amp; Attachments</td>
+</tr>
+<tr>
+<td>… one minor per phase …</td>
+<td></td>
+</tr>
+<tr>
+<td><code>1.0.0</code></td>
+<td>Feature-complete + hardened (post-Phase 5)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="6-changelog-discipline">6. CHANGELOG discipline<a class="heading-anchor" href="#6-changelog-discipline">#</a></h2>
+<p>Format: <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
+<p>Sections per release (omit empty ones):</p>
+<ul>
+<li><strong>Added</strong> — new capabilities</li>
+<li><strong>Changed</strong> — behavioral changes to existing capabilities</li>
+<li><strong>Fixed</strong> — bug fixes</li>
+<li><strong>Removed</strong> — capabilities deleted</li>
+<li><strong>Deprecated</strong> — marked for removal but still working</li>
+<li><strong>Security</strong> — vulnerability fixes</li>
+<li><strong>Migration notes</strong> — anything operators must do when upgrading</li>
+</ul>
+<p>A release entry is the release notes — write it for the person reading the
+GitHub release page, not for the team that built it.</p>
+<hr>
+<h2 id="7-release-types">7. Release types<a class="heading-anchor" href="#7-release-types">#</a></h2>
+<h3 id="phase-release-minor-bump-the-common-case">Phase release (minor bump, the common case)<a class="heading-anchor" href="#phase-release-minor-bump-the-common-case">#</a></h3>
+<p>Schedule of changes accumulated since the last phase release. Tag on the
+squash-merge of the version-bump PR.</p>
+<h3 id="maintenance-release-patch-bump">Maintenance release (patch bump)<a class="heading-anchor" href="#maintenance-release-patch-bump">#</a></h3>
+<p>Bug fixes or small adjustments that don&#39;t introduce features. Multiple fixes
+can ride one patch release; cut a patch whenever the bug-fix backlog is worth
+publishing.</p>
+<h3 id="hotfix-urgent-patch">Hotfix (urgent patch)<a class="heading-anchor" href="#hotfix-urgent-patch">#</a></h3>
+<p>When a critical bug ships in a release and <code>main</code> has already moved on:</p>
+<pre><code class="language-sh">git checkout v0.2.0                     # released tag
+git checkout -b hotfix/&lt;slug&gt;           # off the tag, not off main
+# fix + tests
+# bump patch → 0.2.1, update CHANGELOG
+git tag v0.2.1 &amp;&amp; git push --follow-tags
+# then merge the hotfix branch into main so main has the fix too
+</code></pre>
+<hr>
+<h2 id="8-rollback">8. Rollback<a class="heading-anchor" href="#8-rollback">#</a></h2>
+<ul>
+<li>Tags are the rollback point: <code>git checkout vX.Y.Z</code> reproduces that build.</li>
+<li>Migrations are <strong>forward-only.</strong> Any migration that&#39;s hard to reverse
+manually must say so in the CHANGELOG under <strong>Migration notes</strong>, with the
+recovery procedure.</li>
+<li>The Postgres data volume is the durable state — back up before any release
+that changes the schema (see <code>docs/ADMIN_GUIDE.md</code> § Database backup).</li>
+</ul>
+<hr>
+<h2 id="9-hooked-tools-which-claude-code-skill-fits-where">9. Hooked tools (which Claude Code skill fits where)<a class="heading-anchor" href="#9-hooked-tools-which-claude-code-skill-fits-where">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Skill / tool</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1, 2</td>
+<td><code>AskUserQuestion</code> (forks where your answer changes the spec)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>TaskCreate</code> / <code>TaskUpdate</code> (slice the work)</td>
+</tr>
+<tr>
+<td>5, 6</td>
+<td>regular Edit/Write + Vitest + Playwright</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>/verify</code> (drive the app), <code>/run</code> (just launch)</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>/code-review</code> (local AI pass), <code>/ultrareview</code> (cloud multi-agent)</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>/security-review</code> (security-sensitive changes only)</td>
+</tr>
+<tr>
+<td>14</td>
+<td>git (no skill needed)</td>
+</tr>
+<tr>
+<td>16</td>
+<td>git tag + GitHub Releases</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="10-worked-example-adding-quotofx-file-importquot-in-phase-3">10. Worked example — adding &quot;OFX file import&quot; in Phase 3<a class="heading-anchor" href="#10-worked-example-adding-quotofx-file-importquot-in-phase-3">#</a></h2>
+<blockquote>
+<p>Hypothetical walkthrough. Real Phase 3 will have its own spec.</p>
+</blockquote>
+<ol>
+<li><strong>Discover (1).</strong> Roadmap already lists OFX import under Phase 8; pull it
+forward because it&#39;s cheap and unlocks the Quicken-migration story.</li>
+<li><strong>Define (2).</strong> Acceptance: &quot;An OFX file uploaded via the existing import
+wizard produces correctly-signed integer-cents transactions and is
+detected automatically.&quot; Out of scope: OFX Direct Connect (just file
+import). Data model: no change. API: no change. Tests: unit for the OFX
+parser, integration via <code>/api/imports/preview</code> and <code>/commit</code>, functional
+test with a synthetic OFX fixture.</li>
+<li><strong>Ready (3).</strong> Tick all boxes.</li>
+<li><strong>Branch (4).</strong> <code>git checkout -b feat/3-ofx-import</code>.</li>
+<li><strong>Code + test (5, 6).</strong> Add <code>server/src/import/parse-ofx.ts</code>, register
+it in <code>parse.ts</code>, add a format registry entry, write <code>tests/unit/ parse-ofx.test.ts</code> and <code>tests/functional/ofx-import.test.ts</code>.</li>
+<li><strong>Verify (7).</strong> <code>npm run typecheck &amp;&amp; npm test</code>.</li>
+<li><strong>Code review (8).</strong> Run <code>/code-review</code>. Fix the two findings.</li>
+<li><strong>Security (9).</strong> OFX is parsed XML from user upload — yes, run
+<code>/security-review</code>. Add a malformed-OFX security test if needed.</li>
+<li><strong>CHANGELOG (11).</strong> <code>Added: OFX (.ofx, .qfx) import alongside CSV/XLSX.</code></li>
+<li><strong>PR &amp; merge (15).</strong> Open PR, DoD checklist ticks, squash-merge.</li>
+<li><strong>Version (12).</strong> This is a Phase 3 mid-feature, not a release point —
+no version bump yet. The entry stays under &quot;Unreleased.&quot;</li>
+<li><strong>At end of Phase 3</strong>, a single PR bumps to <code>0.3.0</code>, moves Unreleased →
+<code>[0.3.0]</code>, and gets tagged &amp; released.</li>
+</ol>
+<hr>
+<h2 id="quick-reference-cheatsheet">Quick-reference cheatsheet<a class="heading-anchor" href="#quick-reference-cheatsheet">#</a></h2>
+<pre><code class="language-sh"># Start a feature
+git checkout main &amp;&amp; git pull
+git checkout -b feat/&lt;phase&gt;-&lt;slug&gt;
+
+# Implement + test
+# ...code...
+npm run typecheck
+npm test
+npm run test:e2e        # if UI touched
+
+# Review
+# /code-review
+# /security-review       # if security-sensitive
+
+# CHANGELOG
+# edit CHANGELOG.md → add a bullet under [Unreleased]
+
+# Commit + open PR
+git add -A
+git commit -m &quot;feat(&lt;scope&gt;): &lt;short description&gt;&quot;
+git push -u origin feat/&lt;phase&gt;-&lt;slug&gt;
+# open PR on GitHub, fill the template
+
+# After merge — at a release point:
+git checkout main &amp;&amp; git pull
+git tag -a vX.Y.Z -m &quot;Phase N — &lt;theme&gt;&quot;
+git push --follow-tags
+# draft GitHub Release from CHANGELOG section
+</code></pre>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

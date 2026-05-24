@@ -1,16 +1,21 @@
 # SmrtCash
 
-A self-hosted personal finance manager (in the spirit of Quicken / Monarch).
+A personal-finance manager (in the spirit of Quicken / Monarch).
 Import bank & credit-card exports, let AI normalize messy transaction
-descriptions, attach receipts, and see where your money goes — all running in
-your own container, with your data staying on your machine.
+descriptions, attach receipts, and see where your money goes — runs
+**self-hosted** on hardware you control **or as a SaaS** on
+infrastructure the operator deploys.
 
 ## Status
 
-**Phases 1 through 9 — complete.** Original backlog also complete
-(`0.13.0` → `0.13.6`); only native mobile is deferred (the PWA covers it).
-**`0.14.0` → `0.14.4` — multi-tenant isolation hardening pass** verified
-end-to-end by 72 dedicated cross-tenant tests.
+**Phases 1–9 + the original 0.13/0.14 hardening — complete.** **The
+0.15.x SaaS pivot — complete** (`0.15.0` → `0.15.5`): Stripe billing,
+entitlement gating, dunning + grace, operator runbook. **The 0.16.x
+SaaS launch readiness — complete** (`0.16.0` → `0.16.4`): public
+signup with email verification, self-service password reset,
+super-admin subscriptions console, runtime-editable Stripe + signup
+settings, surfaced support link, **per-tenant attachment encryption
+with envelope key wrapping + super-admin-driven rotation**.
 
 What ships today:
 
@@ -25,7 +30,9 @@ What ships today:
   a **conversational financial assistant** with 17 tenant-scoped,
   audit-logged tools.
 - **Receipts** — drag-and-drop attachments with Claude-vision OCR +
-  AES-256-GCM encryption at rest, mismatch flagging.
+  **per-tenant envelope encryption** (AES-256-GCM DEK wrapped by a
+  global KEK; super-admin can rotate any tenant's key without touching
+  others), mismatch flagging.
 - **Wealth** — investment holdings (cost basis + mark-to-market), manual
   assets & liabilities, **multi-currency** with daily-refreshed FX
   rates, **retirement projections**, **crypto** tracking with daily
@@ -42,9 +49,19 @@ What ships today:
   roles, **per-account read/read-write permission tuning**, **bill-
   splitting** with net-balance settlement, **cross-tenant isolation
   verified** by a dedicated security test suite.
-- **Ops** — single-container Docker stack, Argon2id auth, super-admin
-  audit log, GUI-managed backups + runtime settings, live health
-  dashboard, SMTP for alerts.
+- **SaaS billing** — three tiers (Starter / Plus / Family), Stripe
+  Checkout + Customer Portal, 14-day trial, dunning emails on
+  payment_failed + 3-day grace, per-tenant metered usage (AI
+  assistant, OCR) with cap-overflow warnings.
+- **Public signup + self-service** — `/signup` (gated by
+  `PUBLIC_SIGNUP_ENABLED`), email verification, password reset, all
+  with anti-enumeration response shapes.
+- **Operator surface** — super-admin **subscriptions console**
+  (`/system/subscriptions`) with grant / sync-from-Stripe /
+  force-cancel actions; **SaaS health dashboard** on `/health` with
+  tenant + subscription + webhook ingest metrics; runtime-editable
+  settings (Stripe keys, signup gate, support URL); operator runbook
+  with playbooks for the common SaaS incidents.
 
 See the [Roadmap](./docs/ROADMAP.md) for the full phase history and
 [Changelog](./CHANGELOG.md) for what landed when.
@@ -57,13 +74,23 @@ See the [Roadmap](./docs/ROADMAP.md) for the full phase history and
 | [Installation Guide](./docs/INSTALLATION.md) | Full step-by-step setup |
 | [General Documentation](./docs/DOCUMENTATION.md) | Architecture, data model, API reference |
 | [Admin Guide](./docs/ADMIN_GUIDE.md) | Operations, backups, security, troubleshooting |
+| [Operator Runbook](./docs/OPERATOR_RUNBOOK.md) | SaaS-mode playbooks: webhook failures, customer-no-access, encryption rotation, dunning, grace window |
+| [SaaS Plan](./docs/SAAS_PLAN.md) | Pricing tiers + feature gating (source of truth for paywall) |
+| [Stripe Setup](./docs/STRIPE_SETUP.md) | Initial Stripe configuration walkthrough |
 | [Testing Guide](./docs/TESTING.md) | Test suite, how to run it, exploratory charters |
 | [Process Playbook](./docs/PROCESS.md) | The 16-stage feature lifecycle, branching, versioning, DoD |
 | [Contributing](./docs/CONTRIBUTING.md) | Brief entry point for new work |
 | [Changelog](./CHANGELOG.md) | Release notes per version |
 | [Feature List](./docs/FEATURES.md) | What works now vs. what's planned |
-| [Roadmap](./docs/ROADMAP.md) | The nine-phase plan |
+| [Roadmap](./docs/ROADMAP.md) | The phase + release history |
 | [Known Issues](./docs/KNOWN_ISSUES.md) | Current limitations & planned fixes |
+| [Terms of Service](./docs/TERMS_OF_SERVICE.md) | Placeholder — replace with lawyer copy before commercial launch |
+| [Privacy Policy](./docs/PRIVACY_POLICY.md) | Placeholder — replace with lawyer copy before commercial launch |
+
+> **Static HTML versions** of every doc above live at
+> [`docs/html/`](./docs/html/) for direct hosting on a marketing
+> site. Regenerate with `npm run docs:html` after editing any
+> `.md` source.
 
 ## Quick start
 
@@ -104,10 +131,10 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-~630 automated tests spanning unit, integration, functional, security
-(incl. **72 cross-tenant isolation tests**), smoke, performance, and
-end-to-end layers — full server suite passes cleanly. With PostgreSQL
-running:
+**743 automated server tests + 6 web tests** spanning unit,
+integration, functional, security (incl. **72 cross-tenant isolation
+tests**), smoke, performance, and end-to-end layers — full suite
+passes cleanly. With PostgreSQL running:
 
 ```sh
 npm test            # server + web tests

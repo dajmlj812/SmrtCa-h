@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash operator runbook# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-operator-runbook">SmrtCash operator runbook<a class="heading-anchor" href="#smrtcash-operator-runbook">#</a></h1>
+<p>Practical playbooks for running SmrtCash as SaaS. Each section
+gives the symptom, the first thing to check, and the recovery
+steps. Aimed at the person on-call — terse on purpose.</p>
+<p>If you only run SmrtCash for yourself (the self-host story is
+unchanged), most of this is overkill; jump straight to the
+&quot;Customer reports they paid but can&#39;t access&quot; + &quot;Webhook
+delivery is failing&quot; sections, which are the ones a single
+operator hits with real Stripe traffic.</p>
+<hr>
+<h2 id="quick-reference">Quick reference<a class="heading-anchor" href="#quick-reference">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Where to look</th>
+<th>What it answers</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/health</code> page (super-admin)</td>
+<td>Process + DB + storage + <strong>SaaS section</strong> (0.15.5)</td>
+</tr>
+<tr>
+<td>Stripe Dashboard → Developers → Events</td>
+<td>What Stripe thinks it sent us, deliveries, retries</td>
+</tr>
+<tr>
+<td>Stripe Dashboard → Customers</td>
+<td>Customer ↔ tenant lookup (search by email)</td>
+</tr>
+<tr>
+<td><code>psql</code> <code>subscriptions</code> table</td>
+<td>What we believe about each tenant&#39;s plan + status</td>
+</tr>
+<tr>
+<td><code>psql</code> <code>stripe_processed_events</code></td>
+<td>Webhook ingest log (one row per delivered event_id)</td>
+</tr>
+<tr>
+<td><code>psql</code> <code>usage_counters</code></td>
+<td>AI / OCR usage per billing period</td>
+</tr>
+<tr>
+<td><code>scripts/inspect-subscriptions.mjs</code></td>
+<td>Pretty-print all subscription rows</td>
+</tr>
+<tr>
+<td><code>scripts/grant-saas-plan.mjs</code></td>
+<td>Dev: grant a tenant a subscription bypassing Stripe</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="customer-reports-they-paid-but-can39t-access-features">Customer reports they paid but can&#39;t access features<a class="heading-anchor" href="#customer-reports-they-paid-but-can39t-access-features">#</a></h2>
+<p>Symptom: a tenant says they completed Stripe Checkout but a
+gated page still shows the upgrade prompt.</p>
+<ol>
+<li><strong>Find the tenant.</strong><pre><code class="language-sql">SELECT t.id, t.slug, t.name
+  FROM tenants t
+  JOIN memberships m ON m.tenant_id = t.id
+  JOIN users u ON u.id = m.user_id
+ WHERE u.email = &#39;&lt;customer@example.com&gt;&#39;;
+</code></pre>
+</li>
+<li><strong>Read our subscription row.</strong><pre><code class="language-sql">SELECT * FROM subscriptions WHERE tenant_id = &#39;&lt;id&gt;&#39;;
+</code></pre>
+<ul>
+<li>Row missing → webhook never landed. Jump to &quot;Webhook
+delivery is failing.&quot;</li>
+<li><code>status = &#39;incomplete&#39;</code> → Checkout completed without a
+payment method (Stripe quirk). Have the customer open the
+Customer Portal from /billing and confirm a card.</li>
+<li><code>status = &#39;past_due&#39;</code> and <code>current_period_end</code> was over 3
+days ago → grace expired (see entitlements.ts
+<code>GRACE_DAYS_AFTER_PAST_DUE</code>). Tell them to update the card;
+<code>customer.subscription.updated</code> on the retry will flip them
+back to <code>active</code> automatically.</li>
+</ul>
+</li>
+<li><strong>Cross-check against Stripe.</strong> Search the dashboard by
+customer email or by the <code>stripe_customer_id</code> from our row.
+Look at the subscription&#39;s status, current period end, and
+the latest invoice. If Stripe says <code>active</code> and we say
+anything else, we missed an event — see &quot;Reconciling a
+subscription state mismatch&quot; below.</li>
+<li><strong>Courtesy grant (only if you trust the customer&#39;s claim
+and Stripe is silent).</strong> Run <code>scripts/grant-saas-plan.mjs</code> to
+write a row directly; this is a dev script, not production
+reconciliation. Prefer fixing the upstream missed webhook.</li>
+</ol>
+<hr>
+<h2 id="webhook-delivery-is-failing">Webhook delivery is failing<a class="heading-anchor" href="#webhook-delivery-is-failing">#</a></h2>
+<p>Symptom: <code>webhooks.processed_24h</code> on /health is zero or much
+lower than usual; checkout completes but subscription rows
+don&#39;t appear; customers report no access.</p>
+<ol>
+<li><strong>Verify the receiver is alive.</strong> From the server host:<pre><code class="language-bash">curl -s -o /dev/null -w &#39;%{http_code}\n&#39; \
+  -H &#39;stripe-signature: nope&#39; \
+  -X POST https://&lt;your-domain&gt;/api/billing/webhook
+</code></pre>
+Expect <code>400</code> (invalid signature) — that proves the route is
+wired and reachable. <code>503</code> means <code>STRIPE_SECRET_KEY</code> or
+<code>STRIPE_WEBHOOK_SECRET</code> is unset in the runtime env. <code>5xx</code>
+anything else, check container logs.</li>
+<li><strong>Check Stripe&#39;s delivery log.</strong> Dashboard → Developers →
+Webhooks → your endpoint → &quot;Recent events.&quot; Failed
+deliveries show HTTP status + body. A run of <code>400 Invalid signature</code> means the <code>STRIPE_WEBHOOK_SECRET</code> env var
+doesn&#39;t match the endpoint&#39;s signing secret — copy the
+correct one from the dashboard and restart the server.</li>
+<li><strong>Replay missed events.</strong> Stripe → event detail → &quot;Send
+test webhook&quot; or <code>stripe events resend &lt;evt_id&gt;</code> from the
+CLI. Our handler is idempotent (<code>stripe_processed_events</code>
+table) so re-applying a successful event is a no-op.</li>
+<li><strong>If only a single event failed</strong>: look at the response
+body Stripe captured. A handler crash will have logged at
+<code>level=error</code> with <code>eventId</code> + stack trace. Common culprit:
+a subscription created in the Stripe dashboard manually,
+without our <code>tenant_id</code>/<code>smrtcash_plan</code> metadata —
+<code>handleSubscriptionUpsert</code> returns <code>applied: false</code>,
+<code>reason: &#39;missing or invalid tenant_id/smrtcash_plan metadata&#39;</code> and the row is intentionally skipped.</li>
+</ol>
+<hr>
+<h2 id="reconciling-a-subscription-state-mismatch">Reconciling a subscription state mismatch<a class="heading-anchor" href="#reconciling-a-subscription-state-mismatch">#</a></h2>
+<p>Symptom: Stripe says <code>active</code>, we say something else (or vice
+versa). Usually caused by a dropped webhook delivery.</p>
+<ol>
+<li>Find the canonical state in Stripe (dashboard → subscription
+detail). Note <code>status</code>, <code>current_period_end</code>, <code>cancel_at_period_end</code>,
+<code>trial_end</code>.</li>
+<li>Find the most recent <code>customer.subscription.updated</code> event
+for that subscription in Stripe&#39;s event log.</li>
+<li>Resend it: <code>stripe events resend &lt;evt_id&gt;</code>. Our webhook will
+UPSERT the row to match.</li>
+<li>Verify with <code>scripts/inspect-subscriptions.mjs</code> or the
+<code>/health</code> SaaS section.</li>
+<li><strong>Do not edit the row by hand</strong> unless step 3 is impossible
+(event purged by Stripe retention). Hand-edits diverge from
+Stripe-as-source-of-truth and the next webhook will overwrite
+you anyway.</li>
+</ol>
+<hr>
+<h2 id="smtp-outage-dunning-emails-not-sending">SMTP outage / dunning emails not sending<a class="heading-anchor" href="#smtp-outage-dunning-emails-not-sending">#</a></h2>
+<p>Symptom: a customer&#39;s card failed but they didn&#39;t receive a
+dunning email.</p>
+<p>Dunning is best-effort: when SMTP isn&#39;t configured, the webhook
+handler returns <code>applied: true, reason: &#39;mail skipped: SMTP not configured…&#39;</code> so Stripe still sees a 200 and stops retrying.
+This is intentional — a deployment without SMTP shouldn&#39;t break
+webhook ingest just because mail is missing.</p>
+<p>To check:</p>
+<ol>
+<li>/health page → no direct SMTP indicator; the Settings page
+has a Test button that exercises the same <code>tryMail()</code>
+plumbing.</li>
+<li>Look in the server logs for <code>Webhook event accepted but not applied</code> with <code>reason: &#39;mail skipped: …&#39;</code>. If you see those
+for <code>invoice.payment_failed</code> events, that&#39;s the smoking gun.</li>
+<li>To recover: configure <code>SMTP_HOST</code> + <code>SMTP_FROM</code> in the
+Settings page (per-deployment runtime settings — no restart
+needed). The customer&#39;s next dunning email will go through;
+manually email the affected customers about the missed
+retry if you care.</li>
+</ol>
+<hr>
+<h2 id="past-due-grace-window-math">Past-due grace window math<a class="heading-anchor" href="#past-due-grace-window-math">#</a></h2>
+<p>When a payment fails:</p>
+<ol>
+<li>Stripe → <code>invoice.payment_failed</code> → we send a dunning email,
+<code>customer.subscription.updated</code> arrives with <code>status = past_due</code>.</li>
+<li><code>effectivePlan(tenantId)</code> returns the plan for the next
+<code>GRACE_DAYS_AFTER_PAST_DUE</code> (3) days after
+<code>current_period_end</code>.</li>
+<li>Stripe retries the card on its smart-retry schedule
+(default ~1d / 3d / 5d / 7d). A successful retry fires
+<code>customer.subscription.updated</code> with <code>status = active</code> and
+the next <code>current_period_end</code>. Grace is over; back to normal.</li>
+<li>If all retries fail, Stripe fires
+<code>customer.subscription.deleted</code>. We flip the row to
+<code>canceled</code> and <code>effectivePlan</code> returns null.</li>
+</ol>
+<p>To check a tenant&#39;s effective state right now: <code>psql</code> →
+<code>SELECT status, current_period_end FROM subscriptions WHERE tenant_id = &#39;&lt;id&gt;&#39;;</code> and apply the rule in your head, or open
+their <code>/billing</code> page in an impersonation cookie.</p>
+<hr>
+<h2 id="how-to-grant-courtesy-access">How to grant courtesy access<a class="heading-anchor" href="#how-to-grant-courtesy-access">#</a></h2>
+<p>If you owe a customer a free month (apology credit, contest
+prize, etc.):</p>
+<ul>
+<li><strong>Preferred — apply via Stripe.</strong> Add a one-off coupon /
+credit balance to the customer in the dashboard. Their next
+invoice will reflect it; the subscription row updates via
+the normal webhook path. This keeps Stripe as the source of
+truth.</li>
+<li><strong>Dev / emergency — direct DB grant.</strong> <code>scripts/grant-saas- plan.mjs &lt;tenant_slug&gt; &lt;plan&gt; [days]</code> writes a subscription
+row with <code>status = &#39;active&#39;</code> and <code>current_period_end</code> set to
+<code>now() + days</code>. <strong>No <code>stripe_*</code> IDs are populated</strong> — the
+customer cannot use the Customer Portal until they pass
+through Checkout once. Use sparingly.</li>
+</ul>
+<hr>
+<h2 id="stripe-automatic-tax">Stripe automatic tax<a class="heading-anchor" href="#stripe-automatic-tax">#</a></h2>
+<p>Off by default to keep dev / pre-launch deployments out of
+&quot;no tax origin address&quot; errors. Flip on for production with:</p>
+<pre><code>STRIPE_AUTOMATIC_TAX=true
+</code></pre>
+<p>You also need a tax origin address configured in the Stripe
+dashboard (Tax → Settings). For US sales tax this is enough;
+for EU VAT MOSS you&#39;ll also need to enable Tax → Registrations
+for each country you collect in.</p>
+<hr>
+<h2 id="saas-health-page-checklist-daily-glance">SaaS health page checklist (daily glance)<a class="heading-anchor" href="#saas-health-page-checklist-daily-glance">#</a></h2>
+<p>Open <code>/health</code> (super-admin) once a day during early launch:</p>
+<ul>
+<li><strong>Webhooks → Processed (24h)</strong> — should match your rough
+expected delivery count (≥ one per active sub per day for
+invoice events, plus checkout traffic). A sudden drop is the
+first sign of a broken receiver.</li>
+<li><strong>Subscriptions → by_status</strong> — <code>past_due</code> should be tiny
+(mostly clears within 3 days as cards retry); <code>canceled</code>
+drifts upward over time as customers churn. A sudden
+<code>past_due</code> spike means either a payment processor outage or
+a card-network event.</li>
+<li><strong>Tenants → With active subscription</strong> vs <strong>Total tenants</strong>
+— your conversion ratio. Sudden divergence (lots of new
+tenants, no new subs) usually means a Checkout regression.</li>
+</ul>
+<hr>
+<h2 id="useful-one-liners">Useful one-liners<a class="heading-anchor" href="#useful-one-liners">#</a></h2>
+<pre><code class="language-bash"># How many tenants, paying vs not
+psql &quot;$DATABASE_URL&quot; -c \
+  &quot;SELECT COUNT(*) FILTER (WHERE s.status IN (&#39;trialing&#39;,&#39;active&#39;,&#39;past_due&#39;)) AS paying,
+          COUNT(*) AS total
+     FROM tenants t LEFT JOIN subscriptions s ON s.tenant_id = t.id;&quot;
+
+# Subscriptions in past_due (sorted by how long they&#39;ve been there)
+psql &quot;$DATABASE_URL&quot; -c \
+  &quot;SELECT tenant_id, plan_id, current_period_end
+     FROM subscriptions WHERE status=&#39;past_due&#39;
+     ORDER BY current_period_end ASC;&quot;
+
+# Webhook events in the last hour (count by hour)
+psql &quot;$DATABASE_URL&quot; -c \
+  &quot;SELECT date_trunc(&#39;hour&#39;, processed_at) AS hour, COUNT(*)
+     FROM stripe_processed_events
+     WHERE processed_at &gt; now() - interval &#39;24 hours&#39;
+     GROUP BY 1 ORDER BY 1 DESC;&quot;
+</code></pre>
+<hr>
+<h2 id="related-docs">Related docs<a class="heading-anchor" href="#related-docs">#</a></h2>
+<ul>
+<li><code>docs/SAAS_PLAN.md</code> — pricing tiers + feature gating (source of truth)</li>
+<li><code>docs/STRIPE_SETUP.md</code> — initial Stripe configuration walkthrough</li>
+<li><code>docs/TERMS_OF_SERVICE.md</code> — placeholder (legal review required before launch)</li>
+<li><code>docs/PRIVACY_POLICY.md</code> — placeholder (legal review required before launch)</li>
+</ul>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

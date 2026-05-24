@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Testing Guide# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-testing-guide">SmrtCash — Testing Guide<a class="heading-anchor" href="#smrtcash-testing-guide">#</a></h1>
+<p>How SmrtCash is tested, how to run the suite, and how to extend it.</p>
+<p>As of <strong>Phase 1</strong> the suite has <strong>95 automated tests</strong>: 83 server, 6 web,
+6 end-to-end — all passing.</p>
+<hr>
+<h2 id="1-philosophy">1. Philosophy<a class="heading-anchor" href="#1-philosophy">#</a></h2>
+<p><strong>Automated first.</strong> Machine-run tests are repeatable and cheap, so the bulk
+of testing is automated and runs on every change.</p>
+<p><strong>The testing pyramid.</strong> Many fast, low-level tests; fewer slow, high-level
+ones. Unit tests catch most regressions instantly; a handful of end-to-end
+tests prove the whole system holds together.</p>
+<p><strong>Try to break it.</strong> Good tests do not just confirm the happy path — they
+feed the app bad data, hostile input, and unexpected actions and check that it
+degrades gracefully instead of crashing or corrupting data.</p>
+<p><strong>Tests are code.</strong> They are reviewed, kept clean, and never run against real
+financial data — every layer uses synthetic fixtures and isolated databases.</p>
+<hr>
+<h2 id="2-test-types-and-how-smrtcash-implements-them">2. Test types and how SmrtCash implements them<a class="heading-anchor" href="#2-test-types-and-how-smrtcash-implements-them">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Where</th>
+<th>Tooling</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Unit</strong></td>
+<td><code>server/tests/unit/</code></td>
+<td>Vitest</td>
+<td>Pure functions: cents parsing, date parsing, dedup hashing, format detection</td>
+</tr>
+<tr>
+<td><strong>Integration</strong></td>
+<td><code>server/tests/integration/</code></td>
+<td>Vitest + Fastify inject</td>
+<td>API routes against a real test database</td>
+</tr>
+<tr>
+<td><strong>Functional</strong></td>
+<td><code>server/tests/functional/</code></td>
+<td>Vitest</td>
+<td>Business outcomes — exact counts and balances from imports</td>
+</tr>
+<tr>
+<td><strong>End-to-end</strong></td>
+<td><code>e2e/</code></td>
+<td>Playwright</td>
+<td>Real browser driving the whole stack</td>
+</tr>
+<tr>
+<td><strong>Smoke</strong></td>
+<td><code>server/tests/smoke/</code>, <code>e2e/tests/smoke.spec.ts</code></td>
+<td>Vitest / Playwright</td>
+<td>Fast &quot;are the major features alive?&quot; check</td>
+</tr>
+<tr>
+<td><strong>Security</strong></td>
+<td><code>server/tests/security/</code></td>
+<td>Vitest</td>
+<td>SQL-injection, malformed input, abuse, oversized data</td>
+</tr>
+<tr>
+<td><strong>Performance</strong></td>
+<td><code>server/tests/performance/</code></td>
+<td>Vitest</td>
+<td>Large-file import and query timing</td>
+</tr>
+<tr>
+<td><strong>Acceptance</strong></td>
+<td><a href="#7-acceptance-checklist">§7</a></td>
+<td>Checklist</td>
+<td>Formal sign-off against business requirements</td>
+</tr>
+<tr>
+<td><strong>Manual / Exploratory</strong></td>
+<td><a href="#8-exploratory-testing-charters">§8</a></td>
+<td>Human</td>
+<td>Unscripted hunting for non-obvious defects</td>
+</tr>
+</tbody></table>
+<h3 id="unit">Unit<a class="heading-anchor" href="#unit">#</a></h3>
+<p>Lowest level, no I/O, milliseconds to run. Example: every form of a money
+string (<code>&quot;$1,419.00&quot;</code>, <code>&quot;(12.34)&quot;</code>, <code>&quot;-9.99&quot;</code>) maps to the correct integer
+cents, and <code>0.10 + 0.20</code> in cents exactly equals <code>0.30</code> (no float drift).</p>
+<h3 id="integration">Integration<a class="heading-anchor" href="#integration">#</a></h3>
+<p>Builds the real Fastify app and drives it with <code>app.inject()</code> — no network,
+but real routes and a real PostgreSQL database. Verifies status codes,
+validation, and that modules (routes → importer → database) work together.</p>
+<h3 id="functional">Functional<a class="heading-anchor" href="#functional">#</a></h3>
+<p>Also database-backed, but asserts <strong>product-defined outcomes</strong>: importing the
+sample credit-card file yields <em>exactly</em> 8 transactions and a balance of
+<em>exactly</em> <code>$260.68</code>. Where an integration test checks &quot;the database can be
+queried&quot;, a functional test checks &quot;the answer is the one the spec requires&quot;.</p>
+<h3 id="end-to-end">End-to-end<a class="heading-anchor" href="#end-to-end">#</a></h3>
+<p>Playwright starts the API and web app on isolated ports and drives a real
+Chromium browser through complete user journeys: create an account, upload a
+file, confirm the import, view the transactions.</p>
+<h3 id="security">Security<a class="heading-anchor" href="#security">#</a></h3>
+<p>Deliberately hostile: SQL-injection strings in search parameters and account
+names, wrong-typed JSON fields, 50,000-character inputs, non-CSV uploads,
+path-traversal filenames. Each asserts graceful handling — never a 500 crash,
+never data loss. (Writing these surfaced and fixed a real hardening gap in the
+accounts route.)</p>
+<h3 id="performance">Performance<a class="heading-anchor" href="#performance">#</a></h3>
+<p>Generates a 5,000-row statement, imports it, and asserts both correctness and
+that it completes well within a generous time budget — catching catastrophic
+regressions without flaky timing assertions.</p>
+<hr>
+<h2 id="3-test-databases">3. Test databases<a class="heading-anchor" href="#3-test-databases">#</a></h2>
+<p>Tests never touch your real data. Two throwaway databases are created
+automatically in the same PostgreSQL container:</p>
+<table>
+<thead>
+<tr>
+<th>Database</th>
+<th>Used by</th>
+<th>Lifecycle</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>smrtcash</code></td>
+<td>The real app</td>
+<td>Your actual data</td>
+</tr>
+<tr>
+<td><code>smrtcash_test</code></td>
+<td>Vitest (server)</td>
+<td>Created on first run; truncated between tests</td>
+</tr>
+<tr>
+<td><code>smrtcash_e2e</code></td>
+<td>Playwright</td>
+<td>Created and cleaned before each e2e run</td>
+</tr>
+</tbody></table>
+<p>A safety guard (<code>server/tests/setup/test-db.ts</code>) aborts the suite immediately
+if it is ever pointed at a database whose name does not end in <code>_test</code>.</p>
+<hr>
+<h2 id="4-running-the-tests">4. Running the tests<a class="heading-anchor" href="#4-running-the-tests">#</a></h2>
+<p><strong>Prerequisite:</strong> the PostgreSQL container must be running —
+<code>docker compose -p smrtcash up -d db</code>.</p>
+<h3 id="from-the-repo-root">From the repo root<a class="heading-anchor" href="#from-the-repo-root">#</a></h3>
+<pre><code class="language-sh">npm test            # all server + web tests
+npm run test:e2e    # end-to-end browser tests
+npm run test:all    # everything
+</code></pre>
+<h3 id="server-suite">Server suite<a class="heading-anchor" href="#server-suite">#</a></h3>
+<pre><code class="language-sh">npm run test --prefix server              # all 83 server tests
+npm run test:unit --prefix server         # unit only
+npm run test:integration --prefix server  # integration only
+npm run test:functional --prefix server   # functional only
+npm run test:security --prefix server     # security only
+npm run test:smoke --prefix server        # smoke only (fastest signal)
+npm run test:perf --prefix server         # performance only
+npm run test:coverage --prefix server     # with a coverage report
+npm run test:watch --prefix server        # re-run on file changes
+</code></pre>
+<h3 id="web-suite">Web suite<a class="heading-anchor" href="#web-suite">#</a></h3>
+<pre><code class="language-sh">npm run test --prefix web
+</code></pre>
+<h3 id="end-to-end-suite">End-to-end suite<a class="heading-anchor" href="#end-to-end-suite">#</a></h3>
+<pre><code class="language-sh">npm run test --prefix e2e            # headless
+npm run test:headed --prefix e2e     # watch the browser
+npm run test:ui --prefix e2e         # interactive Playwright UI
+npm run report --prefix e2e          # open the last HTML report
+</code></pre>
+<p>The first e2e run needs the browser installed once:
+<code>npm run install:browser --prefix e2e</code>.</p>
+<hr>
+<h2 id="5-project-layout">5. Project layout<a class="heading-anchor" href="#5-project-layout">#</a></h2>
+<pre><code>server/
+  vitest.config.ts            Vitest config + test-database wiring
+  tests/
+    setup/                    global setup, DB helpers, fixtures loader
+    fixtures/                 synthetic CSV files (safe to commit)
+    unit/  integration/  functional/  security/  smoke/  performance/
+web/
+  vitest.config.ts
+  tests/unit/                 display-formatting tests
+e2e/
+  playwright.config.ts        Playwright config + web servers
+  setup-db.mjs                creates/cleans the e2e database
+  tests/                      browser specs
+</code></pre>
+<hr>
+<h2 id="6-writing-new-tests">6. Writing new tests<a class="heading-anchor" href="#6-writing-new-tests">#</a></h2>
+<ul>
+<li><strong>Pick the lowest layer that can cover the behavior.</strong> Pure logic → unit.
+A route → integration. A user journey → e2e.</li>
+<li><strong>Use the fixtures</strong> in <code>server/tests/fixtures/</code>; add new synthetic ones as
+needed. Never commit real financial data.</li>
+<li><strong>Database tests</strong> <code>import { resetDb }</code> and call it in <code>beforeEach</code> for
+isolation.</li>
+<li><strong>Cover the unhappy path</strong> — invalid input, missing fields, duplicates.</li>
+<li><strong>Keep tests deterministic</strong> — no reliance on clock, ordering, or leftover
+state.</li>
+<li>Tests are part of code review — review them like production code.</li>
+</ul>
+<hr>
+<h2 id="7-acceptance-checklist">7. Acceptance checklist<a class="heading-anchor" href="#7-acceptance-checklist">#</a></h2>
+<p>Formal Phase 1 sign-off. Every item below is also covered by an automated
+test, but this checklist is the human-readable contract.</p>
+<ul>
+<li><input disabled="" type="checkbox"> An account can be created for each type (checking, savings, credit card, …)</li>
+<li><input disabled="" type="checkbox"> A Chase credit-card CSV export imports successfully</li>
+<li><input disabled="" type="checkbox"> A Chase checking/savings CSV export imports successfully</li>
+<li><input disabled="" type="checkbox"> A non-Chase file imports via custom column mapping</li>
+<li><input disabled="" type="checkbox"> The import preview shows the detected format and row counts before saving</li>
+<li><input disabled="" type="checkbox"> Re-importing the same file adds no duplicate transactions</li>
+<li><input disabled="" type="checkbox"> A file with bad rows imports the good rows and reports the bad ones</li>
+<li><input disabled="" type="checkbox"> Transactions are listed, searchable, and paginated</li>
+<li><input disabled="" type="checkbox"> Account balance and transaction count are displayed</li>
+<li><input disabled="" type="checkbox"> Money is always exact — no floating-point rounding errors</li>
+<li><input disabled="" type="checkbox"> Deleting an account removes its transactions</li>
+<li><input disabled="" type="checkbox"> The app does not crash on malformed or hostile input</li>
+</ul>
+<hr>
+<h2 id="8-exploratory-testing-charters">8. Exploratory testing charters<a class="heading-anchor" href="#8-exploratory-testing-charters">#</a></h2>
+<p>Automated tests confirm what we <em>expect</em>; exploratory testing finds what we
+did not think of. Run a focused, time-boxed session (<strong>60–90 minutes, never
+more than two hours</strong>) against one charter at a time, and log every surprise.</p>
+<h3 id="charter-a-importing">Charter A — Importing<a class="heading-anchor" href="#charter-a-importing">#</a></h3>
+<p><em>Explore the import flow with unusual files to discover parsing failures.</em>
+Try: empty files, header-only files, huge files, files with extra columns,
+different date formats, negative and zero amounts, non-UTF-8 encodings,
+<code>.xlsx</code> exports, wrong file extensions, and double-clicking Import.</p>
+<h3 id="charter-b-accounts-amp-transactions">Charter B — Accounts &amp; transactions<a class="heading-anchor" href="#charter-b-accounts-amp-transactions">#</a></h3>
+<p><em>Explore account and transaction management to discover state and navigation
+bugs.</em> Try: many accounts, very long names, deleting an account mid-view,
+browser back/forward, search with punctuation and wildcards (<code>%</code>, <code>_</code>),
+pagination at the first/last page, and refreshing on a detail page.</p>
+<h3 id="charter-c-data-integrity-amp-display">Charter C — Data integrity &amp; display<a class="heading-anchor" href="#charter-c-data-integrity-amp-display">#</a></h3>
+<p><em>Explore how money and dates are shown to discover correctness bugs.</em> Try:
+large balances, exactly-zero balances, all-negative accounts, transactions on
+the same day, month boundaries, and confirm displayed totals match the
+underlying data.</p>
+<p>For each session record: what was tested, what surprised you, and any defect
+worth filing in <a href="./KNOWN_ISSUES.html">KNOWN_ISSUES.md</a>.</p>
+<hr>
+<h2 id="9-continuous-integration">9. Continuous integration<a class="heading-anchor" href="#9-continuous-integration">#</a></h2>
+<p>The suite is CI-ready — every command above exits non-zero on failure. A CI
+job needs only a PostgreSQL service plus:</p>
+<pre><code class="language-sh">npm ci --prefix server &amp;&amp; npm ci --prefix web
+npm test
+npm run test:e2e
+</code></pre>
+<p>No CI provider config ships yet (deferred by choice); adding a GitHub Actions
+or Bitbucket Pipelines file is a small, self-contained follow-up.</p>
+<hr>
+<p><em>See also: <a href="./DOCUMENTATION.html">DOCUMENTATION.md</a> ·
+<a href="./KNOWN_ISSUES.html">KNOWN_ISSUES.md</a></em></p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

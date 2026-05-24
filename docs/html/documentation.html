@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — General Documentation# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-general-documentation">SmrtCash — General Documentation<a class="heading-anchor" href="#smrtcash-general-documentation">#</a></h1>
+<p>Technical reference for the SmrtCash application as of <strong>Phase 1</strong>.</p>
+<ul>
+<li>New here? Start with the <a href="./QUICKSTART.html">Quick Start</a>.</li>
+<li>Setting it up properly? See the <a href="./INSTALLATION.html">Installation Guide</a>.</li>
+<li>Running it day to day? See the <a href="./ADMIN_GUIDE.html">Admin Guide</a>.</li>
+</ul>
+<hr>
+<h2 id="1-overview">1. Overview<a class="heading-anchor" href="#1-overview">#</a></h2>
+<p>SmrtCash is a self-hosted personal finance manager. You import bank and
+credit-card statement exports; SmrtCash stores them, de-duplicates them, and
+(from Phase 2) uses AI to clean and categorize each transaction.</p>
+<p><strong>Design principles</strong></p>
+<ul>
+<li><strong>Local-first.</strong> Your data lives in your own PostgreSQL database. Nothing is
+sent to a third party except, optionally, transaction text to your chosen AI
+provider in Phase 2.</li>
+<li><strong>Exact money.</strong> All amounts are stored as integer <strong>cents</strong>. Floating-point
+math is never used for currency.</li>
+<li><strong>Phased delivery.</strong> Every phase produces a working application. See the
+<a href="./ROADMAP.html">Roadmap</a>.</li>
+<li><strong>Typed end to end.</strong> TypeScript on both the server and the client.</li>
+</ul>
+<hr>
+<h2 id="2-architecture">2. Architecture<a class="heading-anchor" href="#2-architecture">#</a></h2>
+<pre><code>   Browser
+      │  http://localhost:5173
+      ▼
+┌──────────────┐   /api/* proxied   ┌──────────────┐   SQL   ┌──────────────┐
+│  Web (Vite)  │ ─────────────────▶ │  API         │ ──────▶ │ PostgreSQL   │
+│  React SPA   │                    │  (Fastify)   │         │  (Docker)    │
+│  :5173       │ ◀───────────────── │  :4000       │ ◀────── │  :5432       │
+└──────────────┘     JSON           └──────────────┘         └──────────────┘
+</code></pre>
+<ul>
+<li><strong>Web</strong> — a React single-page app served by Vite. In development, Vite
+proxies every <code>/api/*</code> request to the API, so the browser sees one origin.</li>
+<li><strong>API</strong> — a Fastify server exposing a JSON REST API. Holds all business
+logic: importing, parsing, de-duplication, persistence.</li>
+<li><strong>Database</strong> — PostgreSQL 17, run as a Docker container with a named volume
+for durable storage.</li>
+</ul>
+<p>The three pieces run separately in development. Phase 5 packages all of them
+into one <code>docker compose up</code>.</p>
+<hr>
+<h2 id="3-technology-stack">3. Technology stack<a class="heading-anchor" href="#3-technology-stack">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Runtime</td>
+<td>Node.js 24</td>
+<td>ES modules throughout</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>TypeScript 5/6</td>
+<td><code>strict</code> mode, on server and client</td>
+</tr>
+<tr>
+<td>API framework</td>
+<td>Fastify 5</td>
+<td>Routing, logging, multipart uploads</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>PostgreSQL 17</td>
+<td>Runs in Docker</td>
+</tr>
+<tr>
+<td>DB driver</td>
+<td><code>pg</code> (node-postgres)</td>
+<td>Raw SQL, parameterized queries</td>
+</tr>
+<tr>
+<td>CSV parsing</td>
+<td><code>csv-parse</code></td>
+<td>Quoted-field aware</td>
+</tr>
+<tr>
+<td>XLSX parsing</td>
+<td><code>exceljs</code></td>
+<td>See <a href="./KNOWN_ISSUES.html">KI-02</a></td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>React 19</td>
+<td></td>
+</tr>
+<tr>
+<td>Build tool</td>
+<td>Vite</td>
+<td>Dev server + production bundling</td>
+</tr>
+<tr>
+<td>Routing (web)</td>
+<td><code>react-router-dom</code> 7</td>
+<td></td>
+</tr>
+<tr>
+<td>Dev runner</td>
+<td><code>tsx</code></td>
+<td>Runs/watches TypeScript directly</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="4-repository-layout">4. Repository layout<a class="heading-anchor" href="#4-repository-layout">#</a></h2>
+<pre><code>SmrtCash/
+├─ docker-compose.yml      PostgreSQL service
+├─ .env                    Local config + secrets (gitignored)
+├─ .env.example            Config template (committed)
+├─ README.md
+├─ docs/                   This documentation set
+├─ samples/                Local test files (gitignored)
+│
+├─ server/                 Fastify + TypeScript API
+│  └─ src/
+│     ├─ index.ts          API bootstrap, error handler
+│     ├─ config.ts         Loads + validates environment
+│     ├─ util.ts           Shared helpers (UUID check)
+│     ├─ db/
+│     │  ├─ pool.ts        pg pool, type parsers, withTransaction()
+│     │  ├─ migrate.ts     Migration runner
+│     │  └─ migrations/    Numbered .sql files
+│     ├─ domain/
+│     │  ├─ money.ts       String ⇄ integer-cents
+│     │  └─ dates.ts       Date string ⇒ ISO
+│     ├─ import/
+│     │  ├─ types.ts       Shared import types
+│     │  ├─ parse.ts       CSV/XLSX file ⇒ rows
+│     │  ├─ formats.ts     Format registry + detection
+│     │  ├─ dedup.ts       Duplicate hashing
+│     │  └─ importer.ts    Preview + commit orchestration
+│     └─ routes/
+│        ├─ accounts.ts
+│        ├─ transactions.ts
+│        └─ imports.ts
+│
+└─ web/                    React + Vite frontend
+   └─ src/
+      ├─ main.tsx          App entry
+      ├─ App.tsx           Layout + routes
+      ├─ api.ts            Typed API client
+      ├─ format.ts         Currency/date display helpers
+      ├─ styles.css
+      ├─ components/
+      │  └─ TransactionTable.tsx
+      └─ pages/
+         ├─ AccountsPage.tsx
+         ├─ AccountDetailPage.tsx
+         ├─ TransactionsPage.tsx
+         └─ ImportPage.tsx
+</code></pre>
+<hr>
+<h2 id="5-data-model">5. Data model<a class="heading-anchor" href="#5-data-model">#</a></h2>
+<p>Defined in <code>server/src/db/migrations/001_init.sql</code>. All primary keys are
+UUIDs. Money columns are <code>bigint</code> (integer cents).</p>
+<h3 id="accounts"><code>accounts</code><a class="heading-anchor" href="#accounts">#</a></h3>
+<p>A bank or credit-card account.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>uuid</td>
+<td>PK</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>text</td>
+<td>Required</td>
+</tr>
+<tr>
+<td><code>institution</code></td>
+<td>text</td>
+<td>e.g. &quot;Chase&quot;</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>text</td>
+<td><code>checking</code>, <code>savings</code>, <code>credit_card</code>, <code>cash</code>, <code>investment</code>, <code>loan</code>, <code>other</code></td>
+</tr>
+<tr>
+<td><code>last4</code></td>
+<td>text</td>
+<td>Last 4 digits</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>text</td>
+<td>Default <code>USD</code></td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>timestamptz</td>
+<td></td>
+</tr>
+</tbody></table>
+<h3 id="transactions"><code>transactions</code><a class="heading-anchor" href="#transactions">#</a></h3>
+<p>One financial transaction. Phase 2–4 columns exist already but are unused.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>uuid</td>
+<td>PK</td>
+</tr>
+<tr>
+<td><code>account_id</code></td>
+<td>uuid</td>
+<td>FK → accounts (cascade delete)</td>
+</tr>
+<tr>
+<td><code>import_batch_id</code></td>
+<td>uuid</td>
+<td>FK → import_batches</td>
+</tr>
+<tr>
+<td><code>txn_date</code></td>
+<td>date</td>
+<td>Transaction date</td>
+</tr>
+<tr>
+<td><code>post_date</code></td>
+<td>date</td>
+<td>Posting date</td>
+</tr>
+<tr>
+<td><code>amount_cents</code></td>
+<td>bigint</td>
+<td>Negative = money out</td>
+</tr>
+<tr>
+<td><code>raw_description</code></td>
+<td>text</td>
+<td>Cleaned-of-padding original description</td>
+</tr>
+<tr>
+<td><code>source_category</code></td>
+<td>text</td>
+<td>Category from the bank, if any</td>
+</tr>
+<tr>
+<td><code>source_type</code></td>
+<td>text</td>
+<td>Bank&#39;s type code (e.g. <code>ACH_DEBIT</code>)</td>
+</tr>
+<tr>
+<td><code>memo</code></td>
+<td>text</td>
+<td></td>
+</tr>
+<tr>
+<td><code>balance_cents</code></td>
+<td>bigint</td>
+<td>Running balance from the export, if present</td>
+</tr>
+<tr>
+<td><code>normalized_merchant</code></td>
+<td>text</td>
+<td>Phase 2 — AI merchant name</td>
+</tr>
+<tr>
+<td><code>category_id</code></td>
+<td>uuid</td>
+<td>Phase 2 — FK → categories</td>
+</tr>
+<tr>
+<td><code>normalization_status</code></td>
+<td>text</td>
+<td><code>pending</code> / <code>normalized</code> / <code>manual</code> / <code>skipped</code></td>
+</tr>
+<tr>
+<td><code>transfer_group_id</code></td>
+<td>uuid</td>
+<td>Phase 4 — links transfers</td>
+</tr>
+<tr>
+<td><code>dedup_hash</code></td>
+<td>text</td>
+<td>Duplicate-detection key</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>timestamptz</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Unique index on <code>(account_id, dedup_hash)</code> enforces de-duplication.</p>
+<h3 id="import_batches"><code>import_batches</code><a class="heading-anchor" href="#import_batches">#</a></h3>
+<p>One import operation, for history and auditing — <code>filename</code>, <code>format_id</code>,
+<code>row_count</code>, <code>imported_count</code>, <code>skipped_count</code>, <code>error_count</code>.</p>
+<h3 id="categories"><code>categories</code><a class="heading-anchor" href="#categories">#</a></h3>
+<p>Category taxonomy (hierarchical via <code>parent_id</code>). Populated in Phase 2.</p>
+<h3 id="attachments"><code>attachments</code><a class="heading-anchor" href="#attachments">#</a></h3>
+<p>Receipts/files linked to a transaction. Schema exists; used in Phase 3.</p>
+<h3 id="schema_migrations"><code>schema_migrations</code><a class="heading-anchor" href="#schema_migrations">#</a></h3>
+<p>Bookkeeping table — records which migration files have been applied.</p>
+<hr>
+<h2 id="6-api-reference">6. API reference<a class="heading-anchor" href="#6-api-reference">#</a></h2>
+<p>Base path: <code>/api</code>. All responses are JSON. Errors return
+<code>{ &quot;error&quot;: &quot;message&quot; }</code> with an appropriate HTTP status.</p>
+<h3 id="health">Health<a class="heading-anchor" href="#health">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/health</code></td>
+<td>Liveness + DB check → <code>{ status, time }</code></td>
+</tr>
+</tbody></table>
+<h3 id="accounts">Accounts<a class="heading-anchor" href="#accounts">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/accounts</code></td>
+<td>List accounts with <code>balance_cents</code> + <code>transaction_count</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/accounts/:id</code></td>
+<td>One account (404 if missing)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/accounts</code></td>
+<td>Create. Body: <code>{ name, type, institution?, last4?, currency? }</code> → 201</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/accounts/:id</code></td>
+<td>Delete account + its transactions → 204</td>
+</tr>
+</tbody></table>
+<h3 id="transactions">Transactions<a class="heading-anchor" href="#transactions">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/transactions</code></td>
+<td>List transactions</td>
+</tr>
+</tbody></table>
+<p>Query parameters: <code>accountId</code> (uuid), <code>search</code> (description contains),
+<code>limit</code> (1–500, default 100), <code>offset</code> (default 0).
+Response: <code>{ transactions[], total, limit, offset }</code>.</p>
+<h3 id="imports">Imports<a class="heading-anchor" href="#imports">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/imports/formats</code></td>
+<td>List built-in import formats</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/imports/preview</code></td>
+<td>Parse + detect, do <strong>not</strong> save</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/imports/commit</code></td>
+<td>Parse + save into an account</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/imports</code></td>
+<td>List past import batches</td>
+</tr>
+</tbody></table>
+<p><code>preview</code> and <code>commit</code> accept <code>multipart/form-data</code>:</p>
+<ul>
+<li><code>file</code> — the CSV/XLSX file (required)</li>
+<li><code>accountId</code> — target account (required for <code>commit</code>)</li>
+<li><code>formatId</code> — force a specific format (optional; default = auto-detect)</li>
+<li><code>mapping</code> — JSON column mapping for unknown formats (optional)</li>
+</ul>
+<p><code>preview</code> returns detected format, row counts, a sample of parsed
+transactions, and any row errors. <code>commit</code> returns
+<code>{ batchId, importedCount, skippedCount, errorCount, errors }</code>.</p>
+<hr>
+<h2 id="7-the-import-pipeline">7. The import pipeline<a class="heading-anchor" href="#7-the-import-pipeline">#</a></h2>
+<p>A file moves through five stages (<code>server/src/import/</code>):</p>
+<ol>
+<li><strong>Parse</strong> (<code>parse.ts</code>) — CSV or XLSX bytes become <code>{ headers, rows }</code>,
+where every cell is a trimmed string.</li>
+<li><strong>Detect format</strong> (<code>formats.ts</code>) — the headers are matched against a
+registry of built-in formats. A format matches if every column in its
+<em>signature</em> is present.</li>
+<li><strong>Map rows</strong> (<code>importer.ts</code>) — each raw row is converted to a
+<code>ParsedTransaction</code>. A row that fails (e.g. an unreadable date) is
+collected as an error; the rest of the import continues.</li>
+<li><strong>De-duplicate</strong> (<code>dedup.ts</code>) — each transaction gets a SHA-256
+<code>dedup_hash</code> of date + amount + description, plus an occurrence counter so
+genuinely identical rows in one file are all kept.</li>
+<li><strong>Commit</strong> (<code>importer.ts</code>) — rows are inserted inside a single database
+transaction using <code>ON CONFLICT (account_id, dedup_hash) DO NOTHING</code>, so
+re-importing a file adds nothing new.</li>
+</ol>
+<h3 id="built-in-formats">Built-in formats<a class="heading-anchor" href="#built-in-formats">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Format ID</th>
+<th>Matches</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>chase_credit_card</code></td>
+<td>Chase credit-card CSV export</td>
+</tr>
+<tr>
+<td><code>chase_bank</code></td>
+<td>Chase checking/savings CSV export</td>
+</tr>
+</tbody></table>
+<h3 id="custom-column-mapping">Custom column mapping<a class="heading-anchor" href="#custom-column-mapping">#</a></h3>
+<p>For any other bank, supply a <code>mapping</code> JSON object instead of a <code>formatId</code>:</p>
+<pre><code class="language-jsonc">{
+  &quot;txnDate&quot;: &quot;Date&quot;,
+  &quot;description&quot;: &quot;Memo&quot;,
+  &quot;amount&quot;: &quot;Amount&quot;,          // single signed column...
+  &quot;debit&quot;: &quot;Withdrawal&quot;,       // ...OR a debit/credit pair
+  &quot;credit&quot;: &quot;Deposit&quot;,
+  &quot;category&quot;: &quot;Category&quot;,
+  &quot;balance&quot;: &quot;Balance&quot;,
+  &quot;dateOrder&quot;: &quot;mdy&quot;           // mdy | dmy | ymd
+}
+</code></pre>
+<p><code>txnDate</code> and <code>description</code> are required; everything else is optional.
+Adding more <em>built-in</em> formats is just adding entries to the registry in
+<code>formats.ts</code>.</p>
+<hr>
+<h2 id="8-configuration">8. Configuration<a class="heading-anchor" href="#8-configuration">#</a></h2>
+<p>All configuration is environment variables, read from the repo-root <code>.env</code>
+file (shared by Docker Compose and the API). Copy <code>.env.example</code> to <code>.env</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Purpose</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>POSTGRES_USER</code></td>
+<td>DB user (Compose + app)</td>
+<td><code>smrtcash</code></td>
+</tr>
+<tr>
+<td><code>POSTGRES_PASSWORD</code></td>
+<td>DB password</td>
+<td><em>(set your own)</em></td>
+</tr>
+<tr>
+<td><code>POSTGRES_DB</code></td>
+<td>DB name</td>
+<td><code>smrtcash</code></td>
+</tr>
+<tr>
+<td><code>POSTGRES_PORT</code></td>
+<td>Host port for Postgres</td>
+<td><code>5432</code></td>
+</tr>
+<tr>
+<td><code>DATABASE_URL</code></td>
+<td>Connection string the API uses</td>
+<td><code>postgres://user:pw@localhost:5432/smrtcash</code></td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td>API listen port</td>
+<td><code>4000</code></td>
+</tr>
+<tr>
+<td><code>NODE_ENV</code></td>
+<td><code>development</code> / <code>production</code></td>
+<td><code>development</code></td>
+</tr>
+<tr>
+<td><code>AI_PROVIDER</code></td>
+<td>Phase 2 — <code>none</code> / <code>claude</code> / <code>ollama</code></td>
+<td><code>none</code></td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_API_KEY</code></td>
+<td>Phase 2 — Claude API key</td>
+<td><em>(empty in Phase 1)</em></td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_MODEL</code></td>
+<td>Phase 2 — Claude model id</td>
+<td><code>claude-haiku-4-5-20251001</code></td>
+</tr>
+<tr>
+<td><code>OLLAMA_BASE_URL</code></td>
+<td>Phase 2 — local model endpoint</td>
+<td><code>http://localhost:11434</code></td>
+</tr>
+<tr>
+<td><code>OLLAMA_MODEL</code></td>
+<td>Phase 2 — local model name</td>
+<td><code>llama3.1</code></td>
+</tr>
+</tbody></table>
+<p><code>.env</code> is gitignored — never commit real credentials.</p>
+<hr>
+<h2 id="9-development-workflow">9. Development workflow<a class="heading-anchor" href="#9-development-workflow">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Start PostgreSQL</td>
+<td><code>docker compose -p smrtcash up -d db</code></td>
+</tr>
+<tr>
+<td>Install server deps</td>
+<td><code>npm install --prefix server</code></td>
+</tr>
+<tr>
+<td>Install web deps</td>
+<td><code>npm install --prefix web</code></td>
+</tr>
+<tr>
+<td>Run migrations</td>
+<td><code>npm run migrate --prefix server</code></td>
+</tr>
+<tr>
+<td>Start API (watch)</td>
+<td><code>npm run dev --prefix server</code></td>
+</tr>
+<tr>
+<td>Start web (watch)</td>
+<td><code>npm run dev --prefix web</code></td>
+</tr>
+<tr>
+<td>Type-check</td>
+<td><code>npm run typecheck --prefix server</code> / <code>--prefix web</code></td>
+</tr>
+<tr>
+<td>Production build</td>
+<td><code>npm run build --prefix server</code> / <code>--prefix web</code></td>
+</tr>
+</tbody></table>
+<p>Default ports: web <code>5173</code>, API <code>4000</code>, PostgreSQL <code>5432</code>.</p>
+<p>The web dev server proxies <code>/api</code> to the API (see <code>web/vite.config.ts</code>), so
+you only ever open <code>http://localhost:5173</code>.</p>
+<hr>
+<h2 id="10-conventions">10. Conventions<a class="heading-anchor" href="#10-conventions">#</a></h2>
+<ul>
+<li><strong>Money</strong> — always integer cents (<code>bigint</code> in the DB, <code>number</code> in code).
+Conversions live in <code>server/src/domain/money.ts</code>. Display formatting is in
+<code>web/src/format.ts</code>.</li>
+<li><strong>Dates</strong> — stored as PostgreSQL <code>date</code>; carried as <code>YYYY-MM-DD</code> strings to
+avoid timezone drift. Parsing is in <code>server/src/domain/dates.ts</code>.</li>
+<li><strong>SQL</strong> — always parameterized (<code>$1</code>, <code>$2</code>, …). No string concatenation of
+user input into queries.</li>
+<li><strong>Errors</strong> — the API has one error handler (<code>server/src/index.ts</code>).
+<code>ImportError</code> maps to HTTP 400; anything else to its <code>statusCode</code> or 500.</li>
+<li><strong>Imports are atomic</strong> — a commit runs in one DB transaction; a failure
+rolls the whole batch back.</li>
+</ul>
+<hr>
+<p><em>See also: <a href="./INSTALLATION.html">Installation</a> · <a href="./ADMIN_GUIDE.html">Admin Guide</a>
+· <a href="./KNOWN_ISSUES.html">Known Issues</a> · <a href="./ROADMAP.html">Roadmap</a></em></p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

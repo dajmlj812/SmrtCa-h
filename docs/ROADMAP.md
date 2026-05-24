@@ -2,15 +2,18 @@
 
 ## Vision
 
-SmrtCash is a **self-hosted personal finance manager** in the spirit of Quicken
-and Monarch. It is built to run as a single, secure Docker container on
-hardware you control, so your financial data never leaves your machine.
+SmrtCash is a personal-finance manager in the spirit of Quicken and Monarch.
+It is built to run **self-hosted** as a single Docker container on hardware
+you control, **or as a SaaS** on infrastructure the operator deploys. The
+self-host path stays first-class; the SaaS path layers Stripe billing,
+public signup, and per-tenant encryption rotation on top of the same
+single-tenant code.
 
-The product is delivered in phases. Each phase produces a usable application —
-nothing is "all or nothing."
+The product is delivered in phases + slices. Each one produces a usable
+application — nothing is "all or nothing."
 
-| Phase | Theme | Status |
-|-------|-------|--------|
+| Phase / series | Theme | Status |
+|---------------|-------|--------|
 | 1 | Foundation & Import | ✅ Complete — 2026-05-22 |
 | 2 | AI Transaction Normalization | ✅ Complete — 2026-05-22 |
 | 3 | Receipts & Attachments | ✅ Complete — 2026-05-22 |
@@ -20,6 +23,10 @@ nothing is "all or nothing."
 | 7 | Wealth & Net Worth | ✅ Complete — 2026-05-23 |
 | 8 | Connectivity & Automation | ✅ Complete — 2026-05-23 |
 | 9 | Mobile, Assistant & Experience | ✅ Complete — 2026-05-23 |
+| 0.13.x | Post-Phase-9 backlog (taxes, anomalies, crypto, sharing, permissions) | ✅ Complete — 2026-05-23 |
+| 0.14.x | Multi-tenant isolation hardening (72 dedicated tests) | ✅ Complete — 2026-05-23 |
+| **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
+| **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -310,6 +317,101 @@ native mobile.
 - Advanced cash-flow forecasting & spending-anomaly alerts — ✅ **0.13.2** (anomaly alerts; 2026-05-23)
 - Native mobile apps — only if the PWA proves insufficient (**deferred**)
 - Data export / portability tooling — ✅ **0.13.0** (2026-05-23)
+
+---
+
+## 0.14.x — Multi-tenant isolation hardening ✅
+
+Five-slice audit + fix pass that produced 72 dedicated cross-tenant
+isolation tests. Every domain route, aggregation, and read path was
+verified to never return data from another tenant. Closed every
+known issue at the end of the series.
+
+- **0.14.0–0.14.4** ✅ — slice-by-slice isolation hardening across
+  routes, RBAC, account access, aggregations, and shared-state
+  surfaces.
+- **0.14.5–0.14.7** ✅ — closed the original KI list (npm
+  vulnerabilities, dedup heuristic, XLSX date parsing, Windows tar
+  shell-out, project folder name).
+
+---
+
+## 0.15.x — SaaS pivot ✅
+
+Layered Stripe billing + entitlement gating on top of the existing
+single-tenant model. Each slice is independently shippable; cumulative
+effect is "the same app, now sellable."
+
+- **0.15.0** ✅ — schema (subscriptions, usage_counters,
+  stripe_processed_events) + entitlement core (PLAN_FEATURES,
+  requireFeature, checkAndIncrementQuota).
+- **0.15.1** ✅ — Stripe Checkout + webhook handler (idempotent
+  upserts), Customer Portal.
+- **0.15.2** ✅ — wire entitlement gates into every premium route
+  (bank sync, AI assistant, OCR, anomalies, crypto, retirement,
+  bill splitting).
+- **0.15.3** ✅ — /billing page (plan card, usage meters, trial
+  countdown, plan picker, manage-billing button).
+- **0.15.4** ✅ — past-due grace (3 days) + dunning emails on
+  payment_failed + UpgradePrompt wired into gated pages +
+  cap-overflow UX.
+- **0.15.5** ✅ — SaaS operator readiness: `/api/health/saas`
+  endpoint + HealthPage SaaS cards, automatic-tax env toggle,
+  operator runbook, ToS + Privacy stubs.
+
+---
+
+## 0.16.x — SaaS launch readiness ✅
+
+Closes the launch gaps: customers can self-serve from `/signup`,
+recover their own passwords, and every customer's attachments are
+encrypted under a per-tenant DEK with a super-admin rotation path.
+
+- **0.16.0** ✅ — public signup + email verification.
+  `POST /api/auth/signup` (gated by `PUBLIC_SIGNUP_ENABLED`),
+  verification email with 24-hour token, tenant + admin
+  membership provisioned on verify, anti-enumeration 202 response.
+- **0.16.1** ✅ — super-admin **subscriptions console** at
+  `/system/subscriptions`. Grant courtesy plans, sync from
+  Stripe, force-cancel locally. Every action audit-logged.
+- **0.16.2** ✅ — self-service password reset.
+  `POST /api/auth/password-reset-request` (always 202),
+  `POST /api/auth/password-reset-confirm` (validates new
+  password, invalidates every existing session for the user).
+- **0.16.3** ✅ — operator settings unification. Six previously
+  env-only keys (Stripe secret/webhook, public base URL,
+  automatic tax, signup gate, support URL) now editable from
+  `/settings`. `STRIPE_SECRET_KEY` rotation hot-swaps the
+  cached SDK client. New `SUPPORT_URL` surfaced as
+  "Help & feature requests" in every sidebar + unauth page,
+  defaulting to https://support.builditsmrt.com/.
+- **0.16.4** ✅ — per-tenant attachment encryption.
+  `tenant_encryption_keys` table, AES-256-GCM envelope (DEK
+  wrapped by KEK), `POST /api/system/tenants/:id/rotate-encryption-key`
+  + button on each tenant row. Legacy v0/v1 stay readable; v1
+  upgrades to v2 on rotation.
+
+---
+
+## Beyond — v0.17+
+
+The big SaaS-launch items left after v0.16:
+
+- **Stripe Tax dashboard setup** — enabling automatic tax
+  requires Stripe Tax → Settings to be configured with a tax
+  origin address (and country-by-country registrations for EU
+  VAT MOSS). Out of the codebase; flag in `/settings` is wired.
+- **ToS + Privacy lawyer review** — the placeholder stubs in
+  `docs/TERMS_OF_SERVICE.md` and `docs/PRIVACY_POLICY.md` need
+  jurisdiction-specific copy before commercial launch.
+- **Observability** — structured request logs, Sentry-equivalent
+  error tracking, slow-query / slow-route alerts. The /health
+  page covers process metrics; an external sink is the gap.
+- **Annual-pre-pay discount UX** — pricing already shows the
+  yearly tier at a ~58% discount; a visible "Save 41%" badge
+  on /billing would lift annual conversion.
+- **Native mobile** — re-evaluate at 12 months if the PWA
+  retention story isn't holding.
 
 ---
 

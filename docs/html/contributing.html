@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contributing to SmrtCash# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="contributing-to-smrtcash">Contributing to SmrtCash<a class="heading-anchor" href="#contributing-to-smrtcash">#</a></h1>
+<p>Thanks for working on SmrtCash. This is a brief entry point — the full
+process lives in <a href="./PROCESS.html">PROCESS.md</a>.</p>
+<h2 id="before-you-start">Before you start<a class="heading-anchor" href="#before-you-start">#</a></h2>
+<ul>
+<li>Read <a href="./PROCESS.html">PROCESS.md</a> for the 16-stage lifecycle, branching, and
+Definition of Ready / Done.</li>
+<li>Check the <a href="./ROADMAP.html">Roadmap</a> — what phase are we in, what&#39;s planned.</li>
+<li>Make sure the test database setup runs locally (see
+<a href="./TESTING.html">TESTING.md</a> and <a href="./INSTALLATION.html">INSTALLATION.md</a>).</li>
+</ul>
+<h2 id="quick-rules">Quick rules<a class="heading-anchor" href="#quick-rules">#</a></h2>
+<ol>
+<li><strong><code>main</code> is always green.</strong> Never push to <code>main</code> directly except for the
+single release commit that bumps versions.</li>
+<li><strong>Tests live in the same PR as production code.</strong> Not a follow-up.</li>
+<li><strong>Every PR adds a line to <code>CHANGELOG.md</code></strong> under <code>## [Unreleased]</code>.</li>
+<li><strong>Conventional Commits</strong> for messages — <code>feat(scope): …</code>,
+<code>fix(scope): …</code>, <code>docs(scope): …</code>. Scopes are listed in
+<a href="./PROCESS.html#stage-14--commit">PROCESS.md § 3 Stage 14</a>.</li>
+<li><strong>Branch names:</strong> <code>feat/&lt;phase&gt;-&lt;slug&gt;</code>, <code>fix/&lt;slug&gt;</code>, <code>hotfix/&lt;slug&gt;</code>,
+<code>chore/&lt;slug&gt;</code>.</li>
+<li><strong>Squash-merge</strong> feature branches.</li>
+</ol>
+<h2 id="reporting-issues">Reporting issues<a class="heading-anchor" href="#reporting-issues">#</a></h2>
+<p>Use the GitHub issue templates — bug report or feature request.</p>
+<h2 id="reviewing">Reviewing<a class="heading-anchor" href="#reviewing">#</a></h2>
+<p>Self-review every PR plus <code>/code-review</code>. Run <code>/security-review</code> if the
+change touches auth, secrets, file upload, a third-party API, or the data
+layer with user-supplied input.</p>
+<h2 id="releasing">Releasing<a class="heading-anchor" href="#releasing">#</a></h2>
+<p>See <a href="./PROCESS.html#7-release-types">PROCESS.md § 7 Release types</a>. The short
+version:</p>
+<ul>
+<li>One phase = one minor version (<code>0.2.0</code> → <code>0.3.0</code>).</li>
+<li>Bug fixes between phases = patch (<code>0.2.0</code> → <code>0.2.1</code>).</li>
+<li><code>1.0.0</code> arrives after Phase 5.</li>
+</ul>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

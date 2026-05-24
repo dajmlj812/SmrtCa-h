@@ -1,6 +1,6 @@
 {
   "name": "smrtcash",
-  "version": "0.16.4",
+  "version": "0.17.0",
   "private": true,
   "description": "Self-hosted personal finance manager",
   "scripts": {
@@ -14,9 +14,13 @@
     "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix web",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
-    "create-super-admin": "node scripts/create-super-admin.mjs"
+    "create-super-admin": "node scripts/create-super-admin.mjs",
+    "docs:html": "node scripts/build-docs-html.mjs"
   },
   "dependencies": {
     "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "marked": "^17.0.0"
   }
 }

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash">SmrtCash<a class="heading-anchor" href="#smrtcash">#</a></h1>
+<p>A personal-finance manager (in the spirit of Quicken / Monarch).
+Import bank &amp; credit-card exports, let AI normalize messy transaction
+descriptions, attach receipts, and see where your money goes — runs
+<strong>self-hosted</strong> on hardware you control <strong>or as a SaaS</strong> on
+infrastructure the operator deploys.</p>
+<h2 id="status">Status<a class="heading-anchor" href="#status">#</a></h2>
+<p><strong>Phases 1–9 + the original 0.13/0.14 hardening — complete.</strong> <strong>The
+0.15.x SaaS pivot — complete</strong> (<code>0.15.0</code> → <code>0.15.5</code>): Stripe billing,
+entitlement gating, dunning + grace, operator runbook. <strong>The 0.16.x
+SaaS launch readiness — complete</strong> (<code>0.16.0</code> → <code>0.16.4</code>): public
+signup with email verification, self-service password reset,
+super-admin subscriptions console, runtime-editable Stripe + signup
+settings, surfaced support link, <strong>per-tenant attachment encryption
+with envelope key wrapping + super-admin-driven rotation</strong>.</p>
+<p>What ships today:</p>
+<ul>
+<li><strong>Import &amp; connectivity</strong> — CSV / XLSX / OFX / QFX / QIF import with
+bank-format auto-detection and duplicate protection; <strong>OFX Direct
+Connect</strong> to pull transactions straight from supporting banks;
+<strong>opt-in Plaid integration</strong> (off by default); <strong>scheduled background
+sync</strong> that drives all sources on a per-source cadence and refreshes
+crypto prices.</li>
+<li><strong>AI normalization</strong> — pluggable provider (rules / Claude API /
+Ollama) that cleans merchant names and categorizes transactions, plus
+a <strong>conversational financial assistant</strong> with 17 tenant-scoped,
+audit-logged tools.</li>
+<li><strong>Receipts</strong> — drag-and-drop attachments with Claude-vision OCR +
+<strong>per-tenant envelope encryption</strong> (AES-256-GCM DEK wrapped by a
+global KEK; super-admin can rotate any tenant&#39;s key without touching
+others), mismatch flagging.</li>
+<li><strong>Wealth</strong> — investment holdings (cost basis + mark-to-market), manual
+assets &amp; liabilities, <strong>multi-currency</strong> with daily-refreshed FX
+rates, <strong>retirement projections</strong>, <strong>crypto</strong> tracking with daily
+CoinGecko price refresh.</li>
+<li><strong>Budgeting &amp; cash flow</strong> — flex budgets, weekly→monthly periods,
+budget-vs-actual, savings goals, bill reminders, AutoMagic wizard
+with fuel/toll math, 90-day forecast.</li>
+<li><strong>Reporting &amp; insights</strong> — dashboard charts, anomaly alerts,
+tax-category tagging + year-end Schedule A/C reports, calendar
+budget view, filtered CSV export, data portability tooling.</li>
+<li><strong>Mobile</strong> — installable PWA with responsive UI, offline shell,
+install prompt.</li>
+<li><strong>Households &amp; sharing</strong> — multi-tenant with admin/spouse/child
+roles, <strong>per-account read/read-write permission tuning</strong>, <strong>bill-
+splitting</strong> with net-balance settlement, <strong>cross-tenant isolation
+verified</strong> by a dedicated security test suite.</li>
+<li><strong>SaaS billing</strong> — three tiers (Starter / Plus / Family), Stripe
+Checkout + Customer Portal, 14-day trial, dunning emails on
+payment_failed + 3-day grace, per-tenant metered usage (AI
+assistant, OCR) with cap-overflow warnings.</li>
+<li><strong>Public signup + self-service</strong> — <code>/signup</code> (gated by
+<code>PUBLIC_SIGNUP_ENABLED</code>), email verification, password reset, all
+with anti-enumeration response shapes.</li>
+<li><strong>Operator surface</strong> — super-admin <strong>subscriptions console</strong>
+(<code>/system/subscriptions</code>) with grant / sync-from-Stripe /
+force-cancel actions; <strong>SaaS health dashboard</strong> on <code>/health</code> with
+tenant + subscription + webhook ingest metrics; runtime-editable
+settings (Stripe keys, signup gate, support URL); operator runbook
+with playbooks for the common SaaS incidents.</li>
+</ul>
+<p>See the <a href="./ROADMAP.html">Roadmap</a> for the full phase history and
+<a href="./CHANGELOG.html">Changelog</a> for what landed when.</p>
+<h2 id="documentation">Documentation<a class="heading-anchor" href="#documentation">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Document</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="./QUICKSTART.html">Quick Start</a></td>
+<td>Get running in ~5 minutes</td>
+</tr>
+<tr>
+<td><a href="./INSTALLATION.html">Installation Guide</a></td>
+<td>Full step-by-step setup</td>
+</tr>
+<tr>
+<td><a href="./DOCUMENTATION.html">General Documentation</a></td>
+<td>Architecture, data model, API reference</td>
+</tr>
+<tr>
+<td><a href="./ADMIN_GUIDE.html">Admin Guide</a></td>
+<td>Operations, backups, security, troubleshooting</td>
+</tr>
+<tr>
+<td><a href="./OPERATOR_RUNBOOK.html">Operator Runbook</a></td>
+<td>SaaS-mode playbooks: webhook failures, customer-no-access, encryption rotation, dunning, grace window</td>
+</tr>
+<tr>
+<td><a href="./SAAS_PLAN.html">SaaS Plan</a></td>
+<td>Pricing tiers + feature gating (source of truth for paywall)</td>
+</tr>
+<tr>
+<td><a href="./STRIPE_SETUP.html">Stripe Setup</a></td>
+<td>Initial Stripe configuration walkthrough</td>
+</tr>
+<tr>
+<td><a href="./TESTING.html">Testing Guide</a></td>
+<td>Test suite, how to run it, exploratory charters</td>
+</tr>
+<tr>
+<td><a href="./PROCESS.html">Process Playbook</a></td>
+<td>The 16-stage feature lifecycle, branching, versioning, DoD</td>
+</tr>
+<tr>
+<td><a href="./CONTRIBUTING.html">Contributing</a></td>
+<td>Brief entry point for new work</td>
+</tr>
+<tr>
+<td><a href="./CHANGELOG.html">Changelog</a></td>
+<td>Release notes per version</td>
+</tr>
+<tr>
+<td><a href="./FEATURES.html">Feature List</a></td>
+<td>What works now vs. what&#39;s planned</td>
+</tr>
+<tr>
+<td><a href="./ROADMAP.html">Roadmap</a></td>
+<td>The phase + release history</td>
+</tr>
+<tr>
+<td><a href="./KNOWN_ISSUES.html">Known Issues</a></td>
+<td>Current limitations &amp; planned fixes</td>
+</tr>
+<tr>
+<td><a href="./TERMS_OF_SERVICE.html">Terms of Service</a></td>
+<td>Placeholder — replace with lawyer copy before commercial launch</td>
+</tr>
+<tr>
+<td><a href="./PRIVACY_POLICY.html">Privacy Policy</a></td>
+<td>Placeholder — replace with lawyer copy before commercial launch</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>Static HTML versions</strong> of every doc above live at
+<a href="./html/"><code>docs/html/</code></a> for direct hosting on a marketing
+site. Regenerate with <code>npm run docs:html</code> after editing any
+<code>.md</code> source.</p>
+</blockquote>
+<h2 id="quick-start">Quick start<a class="heading-anchor" href="#quick-start">#</a></h2>
+<p><strong>Production (single container):</strong></p>
+<pre><code class="language-powershell">Copy-Item .env.example .env
+# Generate a session secret + attachment key (paste into .env)
+node -e &quot;console.log(&#39;SESSION_SECRET=&#39; + require(&#39;crypto&#39;).randomBytes(32).toString(&#39;base64&#39;))&quot;
+node -e &quot;console.log(&#39;ATTACHMENT_ENCRYPTION_KEY=&#39; + require(&#39;crypto&#39;).randomBytes(32).toString(&#39;base64&#39;))&quot;
+docker compose -p smrtcash up -d --build
+</code></pre>
+<p>Then open <strong><a href="http://localhost:4000">http://localhost:4000</a></strong> and set your password on the first
+screen.</p>
+<p><strong>Development (hot reload, no container build):</strong></p>
+<pre><code class="language-powershell">Copy-Item .env.example .env
+docker compose -p smrtcash up -d db
+npm install --prefix server
+npm install --prefix web
+npm run migrate --prefix server
+npm run dev --prefix server   # terminal 1
+npm run dev --prefix web      # terminal 2
+</code></pre>
+<p>Then open <strong><a href="http://localhost:5173">http://localhost:5173</a></strong>. Full details in the
+<a href="./QUICKSTART.html">Quick Start</a>.</p>
+<h2 id="architecture">Architecture<a class="heading-anchor" href="#architecture">#</a></h2>
+<ul>
+<li><strong>server/</strong> — Fastify + TypeScript API</li>
+<li><strong>web/</strong> — React + Vite + TypeScript frontend</li>
+<li><strong>PostgreSQL 17</strong> — runs as a dedicated docker-compose service</li>
+<li>Money is stored as <strong>integer cents</strong> — never floating point.</li>
+</ul>
+<h2 id="testing">Testing<a class="heading-anchor" href="#testing">#</a></h2>
+<p><strong>743 automated server tests + 6 web tests</strong> spanning unit,
+integration, functional, security (incl. <strong>72 cross-tenant isolation
+tests</strong>), smoke, performance, and end-to-end layers — full suite
+passes cleanly. With PostgreSQL running:</p>
+<pre><code class="language-sh">npm test            # server + web tests
+npm run test:e2e    # browser end-to-end tests
+</code></pre>
+<p>See the <a href="./TESTING.html">Testing Guide</a> for the full strategy, commands,
+and exploratory-testing charters.</p>
+<h2 id="security-notes">Security notes<a class="heading-anchor" href="#security-notes">#</a></h2>
+<ul>
+<li><code>.env</code> is gitignored — never commit real credentials.</li>
+<li>The <code>samples/</code> folder is gitignored — never commit real financial exports.</li>
+<li><code>SESSION_SECRET</code> and <code>ATTACHMENT_ENCRYPTION_KEY</code> must be set in <code>.env</code>
+for a real deployment; the README quick-start shows how to generate them.</li>
+<li>Database encryption at rest is via the host volume (LUKS / BitLocker /
+FileVault / encrypted ZFS) — not in-app. Put HTTPS (Caddy / nginx) in
+front and set <code>COOKIE_SECURE=1</code>.</li>
+</ul>
+<p>See the <a href="./ADMIN_GUIDE.html#security-checklist">Admin Guide</a> for the full
+security checklist, HTTPS-via-Caddy snippet, and dependency vulnerability
+policy.</p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

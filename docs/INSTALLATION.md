@@ -48,12 +48,48 @@ Open `.env` and review the values. The defaults are fine for local use; for
 anything beyond your own machine, **change `POSTGRES_PASSWORD`** and update the
 password inside `DATABASE_URL` to match.
 
-| Key | Change for production? |
-|-----|------------------------|
-| `POSTGRES_PASSWORD` | **Yes — set a strong password** |
-| `DATABASE_URL` | Yes — must contain the same password |
-| `POSTGRES_PORT`, `PORT` | Only if those ports are taken |
-| `AI_PROVIDER` and keys | Leave as-is until Phase 2 |
+### Bootstrap-only env keys (must be set in `.env`)
+
+These are captured at process boot and require a restart to change. They
+**do not** appear in `/settings`.
+
+| Key | What it does | Change for production? |
+|-----|--------------|------------------------|
+| `DATABASE_URL` | Postgres connection string | **Yes — strong password** |
+| `POSTGRES_PASSWORD` | Compose-managed DB password | **Yes — strong password** |
+| `POSTGRES_PORT`, `PORT` | Host ports | Only if those ports are taken |
+| `NODE_ENV` | `development` or `production` | `production` for hosted |
+| `COOKIE_SECURE` | `1` to set the `Secure` cookie flag | **Yes — set to 1 behind HTTPS** |
+| `STATIC_DIR` | Path to the built web bundle | Container handles this |
+| `ATTACHMENTS_DIR` | Path to the attachments root | Set to a volume mount |
+| `ATTACHMENTS_MAX_REQUEST_BYTES` | Per-request upload cap | Default 100 MB is fine |
+| `SESSION_SECRET` | Random 32 bytes; signs session cookies | **Yes — generate fresh** |
+| `ATTACHMENT_ENCRYPTION_KEY` | 32-byte KEK wrapping every tenant's DEK | **Yes — back up offline** |
+
+Generate the two secret keys with:
+
+```powershell
+node -e "console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('base64'))"
+node -e "console.log('ATTACHMENT_ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('base64'))"
+```
+
+### Runtime-editable settings (preferred — set via `/settings`)
+
+Everything else can be edited from the super-admin **Settings** page once
+the app is running. Setting any of these in `.env` is still supported (the
+DB value wins; the env value is the fallback). Including but not limited to:
+
+- AI provider + API keys (`AI_PROVIDER`, `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_MODEL`, `OLLAMA_*`)
+- SMTP — host / port / user / pass / from / secure
+- **Stripe — secret key, webhook secret, public base URL, automatic-tax
+  toggle**
+- **SaaS — `PUBLIC_SIGNUP_ENABLED`, `SUPPORT_URL`**
+- Backups — enabled / frequency / time / retention / directory
+- Anomaly alerts — enabled, thresholds, digest email
+- Crypto price provider / FX provider / display currency
+- Plaid (opt-in) — enabled / client_id / secret / env
+- Auto-sync — enabled / frequency / time
 
 `.env` is gitignored and must never be committed.
 

@@ -1,9 +1,12 @@
 # SmrtCash — Known Issues
 
-This page tracks current limitations as of **0.14.7 (2026-05-23)**.
+This page tracks current limitations as of **0.16.4 (2026-05-24)**.
 
 **No open issues at the moment.** The original KI-02 / KI-05 / KI-06 / KI-07 /
-KI-08 list has been retired in full — see the Resolved section below.
+KI-08 list has been retired in full — see the Resolved section below. The
+0.15.x SaaS pivot and 0.16.x SaaS launch readiness work introduced no new
+open issues; every gap surfaced during those slices was closed within the
+slice that introduced it.
 
 Severity: 🔴 high · 🟡 medium · 🟢 low / cosmetic. Add new findings as they
 surface.

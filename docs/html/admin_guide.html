@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Administrator Guide# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-administrator-guide">SmrtCash — Administrator Guide<a class="heading-anchor" href="#smrtcash-administrator-guide">#</a></h1>
+<p>Operating, maintaining, and securing a SmrtCash installation.
+For first-time setup, see the <a href="./INSTALLATION.html">Installation Guide</a>.</p>
+<p>All commands are run from the <strong>project root</strong>.</p>
+<hr>
+<h2 id="service-overview">Service overview<a class="heading-anchor" href="#service-overview">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>What it is</th>
+<th>Port</th>
+<th>Lifecycle</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>smrtcash-db</code></td>
+<td>PostgreSQL 17 container</td>
+<td>5432</td>
+<td><code>docker compose</code></td>
+</tr>
+<tr>
+<td>API</td>
+<td>Fastify server</td>
+<td>4000</td>
+<td><code>npm run dev</code> / <code>npm start</code></td>
+</tr>
+<tr>
+<td>Web</td>
+<td>Vite dev server / static build</td>
+<td>5173</td>
+<td><code>npm run dev</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="starting-amp-stopping">Starting &amp; stopping<a class="heading-anchor" href="#starting-amp-stopping">#</a></h2>
+<pre><code class="language-powershell"># Start the database
+docker compose -p smrtcash up -d db
+
+# Stop the database (data is preserved)
+docker compose -p smrtcash stop db
+
+# Stop and remove the container (data volume preserved)
+docker compose -p smrtcash down
+
+# Restart
+docker compose -p smrtcash restart db
+</code></pre>
+<p>The API and web servers are stopped with <code>Ctrl+C</code> in their terminals.</p>
+<p>Check status and health:</p>
+<pre><code class="language-powershell">docker compose -p smrtcash ps
+docker ps --filter name=smrtcash-db
+</code></pre>
+<hr>
+<h2 id="database-administration">Database administration<a class="heading-anchor" href="#database-administration">#</a></h2>
+<h3 id="connect-with-psql">Connect with psql<a class="heading-anchor" href="#connect-with-psql">#</a></h3>
+<pre><code class="language-powershell">docker exec -it smrtcash-db psql -U smrtcash -d smrtcash
+</code></pre>
+<p>Useful inside psql: <code>\dt</code> (list tables), <code>\d transactions</code> (describe a table),
+<code>\q</code> (quit).</p>
+<h3 id="backup-database-attachments">Backup (database + attachments)<a class="heading-anchor" href="#backup-database-attachments">#</a></h3>
+<p>Phase 5 ships a one-shot backup script that snapshots both the Postgres
+database AND the attachments directory into <code>./backups/&lt;timestamp&gt;/</code>:</p>
+<pre><code class="language-powershell">npm run backup
+</code></pre>
+<p>Requires <code>pg_dump</code> and <code>tar</code> on PATH. Each run produces two files:</p>
+<ul>
+<li><code>db.dump</code> — <code>pg_dump --format=custom</code> archive (restored with <code>pg_restore</code>)</li>
+<li><code>attachments.tgz</code> — gzipped tar of the attachments tree</li>
+</ul>
+<p>Store backups off the same disk and treat them as sensitive financial data.
+Schedule a regular run via Task Scheduler (Windows) or cron (Linux/macOS).</p>
+<h3 id="restore">Restore<a class="heading-anchor" href="#restore">#</a></h3>
+<p>The restore script is destructive — it drops and recreates every table in
+the target database before reloading, then replaces the attachments tree.
+<strong>Stop the server first</strong>:</p>
+<pre><code class="language-powershell">npm run restore -- ./backups/2026-05-22_12-00-00
+</code></pre>
+<p>You&#39;ll be prompted to type <code>restore</code> to confirm; add <code>--force</code> to skip.</p>
+<h3 id="reset-the-database">Reset the database<a class="heading-anchor" href="#reset-the-database">#</a></h3>
+<p>This <strong>erases all data</strong> and recreates empty tables:</p>
+<pre><code class="language-powershell">docker compose -p smrtcash down -v        # deletes the data volume
+docker compose -p smrtcash up -d db
+npm run migrate --prefix server
+</code></pre>
+<h3 id="where-the-data-lives">Where the data lives<a class="heading-anchor" href="#where-the-data-lives">#</a></h3>
+<p>PostgreSQL data is stored in the Docker named volume
+<code>smrtcash_smrtcash-db-data</code>. Inspect it with:</p>
+<pre><code class="language-powershell">docker volume inspect smrtcash_smrtcash-db-data
+</code></pre>
+<hr>
+<h2 id="migrations">Migrations<a class="heading-anchor" href="#migrations">#</a></h2>
+<p>Schema changes ship as numbered <code>.sql</code> files in
+<code>server/src/db/migrations/</code>. Apply all pending migrations with:</p>
+<pre><code class="language-powershell">npm run migrate --prefix server
+</code></pre>
+<p>The runner is idempotent — already-applied files are skipped (tracked in the
+<code>schema_migrations</code> table). Always back up before migrating a database with
+real data.</p>
+<hr>
+<h2 id="environment-amp-secrets">Environment &amp; secrets<a class="heading-anchor" href="#environment-amp-secrets">#</a></h2>
+<ul>
+<li>All configuration is in the project-root <code>.env</code> file.</li>
+<li><code>.env</code> is gitignored — <strong>never commit it</strong>.</li>
+<li>The sensitive values are <code>POSTGRES_PASSWORD</code>, <code>DATABASE_URL</code>, and (from
+Phase 2) <code>ANTHROPIC_API_KEY</code>.</li>
+<li>After changing <code>.env</code>, restart the affected service (the DB container for
+<code>POSTGRES_*</code>, the API for everything else).</li>
+<li>If you change the database password, update it in <strong>both</strong> <code>POSTGRES_PASSWORD</code>
+and <code>DATABASE_URL</code>.</li>
+</ul>
+<hr>
+<h2 id="ai-provider-configuration-phase-2">AI provider configuration (Phase 2)<a class="heading-anchor" href="#ai-provider-configuration-phase-2">#</a></h2>
+<p>AI normalization is not active in Phase 1, but the settings already exist:</p>
+<table>
+<thead>
+<tr>
+<th><code>AI_PROVIDER</code></th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>none</code></td>
+<td>No AI (current default)</td>
+</tr>
+<tr>
+<td><code>claude</code></td>
+<td>Use the Anthropic Claude API — requires <code>ANTHROPIC_API_KEY</code></td>
+</tr>
+<tr>
+<td><code>ollama</code></td>
+<td>Use a local model via Ollama — requires <code>OLLAMA_BASE_URL</code></td>
+</tr>
+</tbody></table>
+<p>When Phase 2 ships, choose a provider here. <code>ollama</code> keeps all transaction
+text on your own machine; <code>claude</code> sends transaction descriptions to
+Anthropic&#39;s API.</p>
+<hr>
+<h2 id="logs-amp-monitoring">Logs &amp; monitoring<a class="heading-anchor" href="#logs-amp-monitoring">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>How to view</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Database</td>
+<td><code>docker compose -p smrtcash logs -f db</code></td>
+</tr>
+<tr>
+<td>API</td>
+<td>Output in the terminal running <code>npm run dev --prefix server</code></td>
+</tr>
+<tr>
+<td>Web</td>
+<td>Output in the terminal running <code>npm run dev --prefix web</code></td>
+</tr>
+</tbody></table>
+<p>The API logs every request (method, path, status, duration) as JSON.</p>
+<hr>
+<h2 id="security-checklist">Security checklist<a class="heading-anchor" href="#security-checklist">#</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Strong password.</strong> Set at first launch on the setup screen. ≥ 8
+characters minimum; treat like banking credentials. No recovery flow —
+store in a password manager.</li>
+<li><input disabled="" type="checkbox"> <strong><code>SESSION_SECRET</code></strong> is set in <code>.env</code> to a long random value. Without
+it the server generates an ephemeral one and existing sessions are
+invalidated on every restart. Generate one with:
+<code>node -e &quot;console.log(require(&#39;crypto&#39;).randomBytes(32).toString(&#39;base64&#39;))&quot;</code></li>
+<li><input disabled="" type="checkbox"> <strong><code>ATTACHMENT_ENCRYPTION_KEY</code></strong> is set when you care about
+attachment-at-rest encryption. New uploads are then AES-256-GCM
+encrypted on disk. Generate the same way as <code>SESSION_SECRET</code>. Store
+it OUT of band — losing it makes encrypted attachments unrecoverable.</li>
+<li><input disabled="" type="checkbox"> <strong>Strong <code>POSTGRES_PASSWORD</code>.</strong> The DB credentials are stored in
+<code>.env</code> and never sent to the client.</li>
+<li><input disabled="" type="checkbox"> <strong><code>COOKIE_SECURE=1</code></strong> when running behind HTTPS — adds the <code>Secure</code>
+flag to the session cookie so it never leaks over plain HTTP.</li>
+<li><input disabled="" type="checkbox"> <strong>Database volume on encrypted storage.</strong> SmrtCash does not encrypt
+Postgres data inside the container — encrypt the host volume
+(LUKS / BitLocker / FileVault / encrypted ZFS dataset) instead.</li>
+<li><input disabled="" type="checkbox"> <strong>HTTPS in front.</strong> Don&#39;t expose port 4000 directly — put Caddy or
+nginx in front with a real cert. See <em>HTTPS via Caddy</em> below.</li>
+<li><input disabled="" type="checkbox"> <strong>Run on localhost or a trusted LAN.</strong> Single-user auth makes
+brute-force-by-network the main remaining risk.</li>
+<li><input disabled="" type="checkbox"> <strong>Keep dependencies current.</strong> See <em>Dependency vulnerability policy</em>
+below.</li>
+<li><input disabled="" type="checkbox"> <strong>Backups are sensitive.</strong> <code>backups/</code> contains everything — store
+with the same care as <code>.env</code>.</li>
+</ul>
+<hr>
+<h2 id="https-via-caddy">HTTPS via Caddy<a class="heading-anchor" href="#https-via-caddy">#</a></h2>
+<p>Caddy auto-provisions Let&#39;s Encrypt certificates and reverse-proxies to
+SmrtCash with one line of config. From the host that runs Docker:</p>
+<pre><code class="language-caddyfile">finance.example.com {
+    reverse_proxy localhost:4000
+}
+</code></pre>
+<p>Set <code>COOKIE_SECURE=1</code> in <code>.env</code> so the session cookie is only sent over
+HTTPS, then restart the app container.</p>
+<p>For a LAN-only deployment, use Caddy&#39;s internal CA (<code>tls internal</code>) or
+self-signed certs.</p>
+<hr>
+<h2 id="dependency-vulnerability-policy">Dependency vulnerability policy<a class="heading-anchor" href="#dependency-vulnerability-policy">#</a></h2>
+<ul>
+<li><strong>Cadence.</strong> Run <code>npm audit</code> in <code>server/</code>, <code>web/</code>, and <code>e2e/</code> monthly,
+and after every dependency change.</li>
+<li><strong>Triage by severity.</strong><ul>
+<li><strong>Critical / High</strong> — patch within 7 days, or document the
+accepted-risk reason in <code>docs/KNOWN_ISSUES.md</code>.</li>
+<li><strong>Moderate</strong> — patch within 30 days. Existing moderate advisories live
+as KI entries with their planned resolution.</li>
+<li><strong>Low</strong> — patch at next dependency-bump cycle.</li>
+</ul>
+</li>
+<li><strong>Pin majors, accept minors.</strong> All dependencies in this repo use
+caret ranges (<code>^x.y.z</code>) so patch &amp; minor updates pull in automatically
+on <code>npm install</code>; major bumps need an explicit review.</li>
+<li><strong>Transitive vulnerabilities</strong> — prefer overriding the offending
+transitive dep via <code>overrides</code> in <code>package.json</code> rather than dropping
+the direct dep that pulls it in.</li>
+</ul>
+<hr>
+<h2 id="routine-maintenance">Routine maintenance<a class="heading-anchor" href="#routine-maintenance">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Frequency</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Database backup</td>
+<td>Before each import session / weekly</td>
+</tr>
+<tr>
+<td><code>npm audit</code> review</td>
+<td>Monthly, and after dependency updates</td>
+</tr>
+<tr>
+<td>Apply migrations</td>
+<td>After every code update</td>
+</tr>
+<tr>
+<td>Docker image updates (<code>docker compose pull</code>)</td>
+<td>Quarterly</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="troubleshooting">Troubleshooting<a class="heading-anchor" href="#troubleshooting">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>API exits with &quot;Missing required environment variable&quot;</td>
+<td>No <code>.env</code>, or <code>DATABASE_URL</code> unset</td>
+<td>Create <code>.env</code> from <code>.env.example</code></td>
+</tr>
+<tr>
+<td>API: <code>ECONNREFUSED</code> on startup</td>
+<td>Postgres not running</td>
+<td><code>docker compose -p smrtcash up -d db</code></td>
+</tr>
+<tr>
+<td><code>docker compose</code> errors</td>
+<td>Docker not running</td>
+<td>Start Docker Desktop</td>
+</tr>
+<tr>
+<td>Container stuck &quot;unhealthy&quot;</td>
+<td>Port 5432 in use / volume corruption</td>
+<td>Change <code>POSTGRES_PORT</code>, or reset the volume</td>
+</tr>
+<tr>
+<td>Web loads but shows API errors</td>
+<td>API not running, or wrong <code>PORT</code></td>
+<td>Start the API; confirm <code>/api/health</code></td>
+</tr>
+<tr>
+<td>Migration fails midway</td>
+<td>SQL error</td>
+<td>It rolls back; fix the migration file, re-run</td>
+</tr>
+<tr>
+<td>Import: &quot;Could not recognize this file&#39;s format&quot;</td>
+<td>Unknown bank layout</td>
+<td>Use a CSV export; supply a column mapping</td>
+</tr>
+<tr>
+<td>Re-import added 0 rows</td>
+<td>Duplicate detection working as intended</td>
+<td>Expected — that file was already imported</td>
+</tr>
+</tbody></table>
+<p>For known limitations and their planned fixes, see
+<a href="./KNOWN_ISSUES.html">KNOWN_ISSUES.md</a>.</p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

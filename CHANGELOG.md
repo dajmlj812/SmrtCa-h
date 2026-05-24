@@ -9,12 +9,89 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.16.0–0.16.4 shipped. v0.16 closes out: public signup +
-verification, password reset, super-admin subscriptions
-console, settings unification, per-tenant attachment encryption
-with envelope key wrapping + rotation. The remaining SAAS_PLAN
-items (Stripe automatic tax via dashboard, ToS/Privacy legal
-review) live outside the codebase. v0.17 next._
+_0.17.0 shipped — documentation refresh + HTML build pipeline.
+Every primary doc reflects the v0.16.4 reality; the marketing
+site can now pull static HTML straight from `docs/html/`._
+
+---
+
+## [0.17.0] — 2026-05-24 — Documentation refresh + HTML build
+
+Two-part: bring the top-of-funnel docs in line with the v0.16
+SaaS-pivot reality, then add a static-site-friendly HTML
+mirror of every doc for the marketing site to serve.
+
+### Doc refresh
+
+- **`README.md`** — status section now mentions both the
+  self-host and SaaS deployment paths; lists the 0.15.x SaaS
+  pivot + 0.16.x launch readiness work explicitly; updates the
+  test count to **743 server + 6 web** (was ~630); adds new
+  documentation links (Operator Runbook, SaaS Plan, Stripe
+  Setup, ToS, Privacy); adds a "Static HTML" pointer.
+- **`docs/FEATURES.md`** — two new sections at the top:
+  **"Accounts, signup, billing (SaaS)"** covering pricing
+  tiers, trial, dunning, grace, signup, password reset, the
+  subscriptions console + SaaS health dashboard, runtime
+  settings, and support link; **"Security & encryption"**
+  covering per-tenant envelope encryption, the rotate button,
+  isolation tests, and account-enumeration prevention.
+- **`docs/ROADMAP.md`** — table extended with 0.13.x / 0.14.x
+  / 0.15.x / 0.16.x rows; new "0.14.x" + "0.15.x" + "0.16.x"
+  sections in the body documenting every slice; new "v0.17+"
+  section enumerating what's left after v0.16
+  (Stripe Tax setup, lawyer review, observability, annual
+  discount UX, native mobile).
+- **`docs/KNOWN_ISSUES.md`** — date stamp bumped to 0.16.4;
+  notes that the SaaS pivot introduced no new open issues.
+- **`docs/INSTALLATION.md`** — env-vars table split into
+  **bootstrap-only** (set in `.env`, requires restart:
+  `DATABASE_URL`, `SESSION_SECRET`, `ATTACHMENT_ENCRYPTION_KEY`,
+  etc.) and **runtime-editable** (preferred via `/settings`:
+  Stripe keys, signup gate, support URL, SMTP, AI, etc.).
+  Includes the two `node -e` one-liners for generating the
+  secret keys.
+- **`docs/README.md`** — replaced the "reflects Phase 1" stamp
+  with a v0.16.4 current-state pointer; added rows for the
+  three SaaS-mode docs; added a "HTML mirror" section.
+
+### HTML build pipeline
+
+- **`scripts/build-docs-html.mjs`** — converts every `.md` in
+  the repo (root + `docs/`, minus the duplicate
+  `docs/README.md`) to a self-contained HTML page via
+  `marked`. Output lives at `docs/html/`. Features:
+  - Inline CSS — no external requests, no build step for the
+    marketing site (just static files).
+  - `prefers-color-scheme: dark` media query — pages look
+    right on any theme without the host site interfering.
+  - GitHub-style anchor links on every heading (hover to
+    reveal `#`).
+  - Internal `.md` links rewritten to `.html` so navigation
+    inside the bundle works without help from the host.
+  - Top header with brand + back-to-index link + outbound
+    Support link.
+  - Footer with the generation timestamp + git short SHA
+    when run inside a git checkout.
+  - `index.html` with category-organized list (Getting
+    started / Product / SaaS operator / Development / Legal).
+- **`npm run docs:html`** — script alias.
+- **`marked@^17`** added as a root devDependency. No other
+  new dependencies; output is plain static files.
+- 18 pages committed to `docs/html/`. Marketing site can
+  pull straight from `main`.
+
+### Operator notes
+
+- The HTML output IS committed to the repo so a marketing
+  deploy doesn't need a build pipeline. Re-run
+  `npm run docs:html` after editing any `.md` source and
+  commit the result. CI could enforce this with a `git diff
+  --exit-code` check if drift becomes a problem.
+- The legal stubs (`TERMS_OF_SERVICE.md`,
+  `PRIVACY_POLICY.md`) are rendered as-is; they're still
+  marked "PLACEHOLDER" at the top of the body and shouldn't
+  ship to customers until lawyer-reviewed copy replaces them.
 
 ---
 

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Roadmap# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-roadmap">SmrtCash — Roadmap<a class="heading-anchor" href="#smrtcash-roadmap">#</a></h1>
+<h2 id="vision">Vision<a class="heading-anchor" href="#vision">#</a></h2>
+<p>SmrtCash is a personal-finance manager in the spirit of Quicken and Monarch.
+It is built to run <strong>self-hosted</strong> as a single Docker container on hardware
+you control, <strong>or as a SaaS</strong> on infrastructure the operator deploys. The
+self-host path stays first-class; the SaaS path layers Stripe billing,
+public signup, and per-tenant encryption rotation on top of the same
+single-tenant code.</p>
+<p>The product is delivered in phases + slices. Each one produces a usable
+application — nothing is &quot;all or nothing.&quot;</p>
+<table>
+<thead>
+<tr>
+<th>Phase / series</th>
+<th>Theme</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Foundation &amp; Import</td>
+<td>✅ Complete — 2026-05-22</td>
+</tr>
+<tr>
+<td>2</td>
+<td>AI Transaction Normalization</td>
+<td>✅ Complete — 2026-05-22</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Receipts &amp; Attachments</td>
+<td>✅ Complete — 2026-05-22</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Insights &amp; Reconciliation</td>
+<td>✅ Complete — 2026-05-22</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Dockerization, Auth &amp; Hardening</td>
+<td>✅ Complete — 2026-05-22</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Budgeting &amp; Cash Flow</td>
+<td>✅ Complete — 2026-05-22</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Wealth &amp; Net Worth</td>
+<td>✅ Complete — 2026-05-23</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Connectivity &amp; Automation</td>
+<td>✅ Complete — 2026-05-23</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Mobile, Assistant &amp; Experience</td>
+<td>✅ Complete — 2026-05-23</td>
+</tr>
+<tr>
+<td>0.13.x</td>
+<td>Post-Phase-9 backlog (taxes, anomalies, crypto, sharing, permissions)</td>
+<td>✅ Complete — 2026-05-23</td>
+</tr>
+<tr>
+<td>0.14.x</td>
+<td>Multi-tenant isolation hardening (72 dedicated tests)</td>
+<td>✅ Complete — 2026-05-23</td>
+</tr>
+<tr>
+<td><strong>0.15.x</strong></td>
+<td><strong>SaaS pivot — Stripe billing, gating, dunning, operator readiness</strong></td>
+<td>✅ Complete — 2026-05-24</td>
+</tr>
+<tr>
+<td><strong>0.16.x</strong></td>
+<td><strong>SaaS launch readiness — signup, password reset, per-tenant encryption</strong></td>
+<td>✅ Complete — 2026-05-24</td>
+</tr>
+</tbody></table>
+<p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
+<hr>
+<h2 id="product-positioning">Product positioning<a class="heading-anchor" href="#product-positioning">#</a></h2>
+<p>A competitive review of Monarch, Simplifi, Empower, Banktivity, CountAbout,
+Rocket Money, Moneydance and others shaped this roadmap. The conclusion:</p>
+<ul>
+<li><strong>Table-stakes features</strong> (budgeting, categorization, recurring expenses,
+net worth, investment tracking, mobile access) must all arrive — they are
+expected of any serious money app.</li>
+<li><strong>But none of those competitors offer SmrtCash&#39;s wedge:</strong> every cloud app
+(Monarch, Simplifi, Empower, CountAbout, Rocket Money) holds your data on
+<em>their</em> servers; the desktop apps (Banktivity, Moneydance) are closed and
+unextensible. <strong>SmrtCash wins on privacy, data ownership, and your-own-AI.</strong></li>
+</ul>
+<p>So the roadmap adopts the universal features but delivers them <em>without</em>
+breaking the self-hosted model. Three direction-setting decisions:</p>
+<ul>
+<li><strong>Bank connectivity — offer all three options.</strong> File import stays the
+always-available, fully-local baseline; OFX Direct Connect and an opt-in
+Plaid integration are added as <em>choices</em>, via a pluggable data-source layer
+(the same pattern as the pluggable AI normalizer).</li>
+<li><strong>Balanced focus</strong> — build budgeting depth first (Phase 6), then wealth and
+net worth (Phase 7).</li>
+<li><strong>Mobile via an installable PWA</strong> — responsive web, installable to a phone,
+one codebase, no app stores, still self-hosted.</li>
+</ul>
+<hr>
+<h2 id="phase-1-foundation-amp-import">Phase 1 — Foundation &amp; Import ✅<a class="heading-anchor" href="#phase-1-foundation-amp-import">#</a></h2>
+<p><strong>Goal:</strong> Stand up the stack and reliably import real bank/credit-card exports.</p>
+<p>Delivered: monorepo + PostgreSQL + migrations; Fastify/TypeScript API; CSV &amp;
+XLSX importer with Chase format auto-detection and generic column mapping;
+duplicate detection; integer-cents money handling; React web app for accounts,
+transactions and importing; a 95-test automated suite. Verified end-to-end
+with 1,944 real transactions.</p>
+<hr>
+<h2 id="phase-2-ai-transaction-normalization">Phase 2 — AI Transaction Normalization ✅<a class="heading-anchor" href="#phase-2-ai-transaction-normalization">#</a></h2>
+<p><strong>Goal:</strong> Turn messy bank descriptions into clean, categorized data.</p>
+<p>Delivered:</p>
+<ul>
+<li><input checked="" disabled="" type="checkbox"> Pluggable <code>TransactionNormalizer</code> interface</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Claude API</strong> provider — Haiku 4.5, prompt-cached system prompt, structured outputs</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Ollama</strong> provider — local model via HTTP, JSON-mode output, graceful parsing</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Rules</strong> provider — deterministic baseline (the default; works offline with no setup)</li>
+<li><input checked="" disabled="" type="checkbox"> Provider chosen by configuration (<code>AI_PROVIDER</code>)</li>
+<li><input checked="" disabled="" type="checkbox"> Per-transaction output: cleaned merchant, category, confidence score, optional note</li>
+<li><input checked="" disabled="" type="checkbox"> User-editable category taxonomy with seeded defaults</li>
+<li><input checked="" disabled="" type="checkbox"> In-prompt batching (one API call per ~25 transactions)</li>
+<li><input checked="" disabled="" type="checkbox"> Review-and-edit UI: status filter, inline category editing, manual edits preserved across re-runs</li>
+<li><input checked="" disabled="" type="checkbox"> 42 additional automated tests covering each provider and the full pipeline</li>
+</ul>
+<hr>
+<h2 id="phase-3-receipts-amp-attachments">Phase 3 — Receipts &amp; Attachments ✅<a class="heading-anchor" href="#phase-3-receipts-amp-attachments">#</a></h2>
+<p><strong>Goal:</strong> Tie supporting documents to transactions for clarity at tax time.</p>
+<p>Delivered:</p>
+<ul>
+<li><input checked="" disabled="" type="checkbox"> Multipart upload route (<code>POST /api/transactions/:id/attachments</code>) with
+drag-and-drop and click-to-browse in the web UI</li>
+<li><input checked="" disabled="" type="checkbox"> Multiple attachments per transaction; inline image preview, PDF icon</li>
+<li><input checked="" disabled="" type="checkbox"> JPEG / PNG / WEBP / PDF allow-list; 25 MB per-file cap; 100 MB
+aggregate cap per request</li>
+<li><input checked="" disabled="" type="checkbox"> Filesystem storage under <code>ATTACHMENTS_DIR</code> (defaults to
+<code>&lt;repo&gt;/data/attachments</code>); path-traversal hardened</li>
+<li><input checked="" disabled="" type="checkbox"> Receipt OCR via a pluggable <code>OcrProvider</code> interface — Claude vision
+provider (<code>claude-haiku-4-5</code>) extracts amount / date / merchant /
+confidence; results compared against the transaction with a $0.50 /
+3-day match tolerance</li>
+<li><input checked="" disabled="" type="checkbox"> Restart-safe sweep on server boot retries any attachment still at
+<code>ocr_status=&#39;pending&#39;</code> (file missing → marked <code>failed</code>)</li>
+<li><input checked="" disabled="" type="checkbox"> 18 additional automated tests (unit + integration + functional)
+plus a Playwright end-to-end spec</li>
+</ul>
+<p><strong>Deferred to Phase 5:</strong> encryption at rest, Docker volume mount for the
+attachments directory.</p>
+<hr>
+<h2 id="phase-4-insights-amp-reconciliation">Phase 4 — Insights &amp; Reconciliation ✅<a class="heading-anchor" href="#phase-4-insights-amp-reconciliation">#</a></h2>
+<p><strong>Goal:</strong> Make the data answer real questions about your money.</p>
+<p>Delivered:</p>
+<ul>
+<li><input checked="" disabled="" type="checkbox"> <strong>Transfer detection</strong> — <code>POST /api/transfers/detect</code> pairs
+equal-opposite amounts across different accounts within 5 days; the
+Transfers page lists pairs and supports manual link / unlink; rows
+show a <code>↔ transfer</code> pill on the Transactions page</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>True balance reconciliation</strong> — opening balance + as-of date on
+every account; account balance = opening + activity from opening date;
+per-row running balance via SQL window function; <strong>closes KI-01</strong></li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Insights endpoints</strong> — spending-by-category, monthly
+income-vs-expense, monthly net-worth-over-time; all exclude transfers
+where it matters</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Dashboard</strong> — pie of spending by parent category, grouped bar of
+income vs expense, line of net worth over time (Recharts)</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Filtered CSV export</strong> — <code>GET /api/transactions/export</code> honors all
+list filters plus optional date range; UTF-8, always-quoted cells,
+date-stamped filename</li>
+</ul>
+<hr>
+<h2 id="phase-5-dockerization-auth-amp-hardening">Phase 5 — Dockerization, Auth &amp; Hardening ✅<a class="heading-anchor" href="#phase-5-dockerization-auth-amp-hardening">#</a></h2>
+<p><strong>Goal:</strong> Ship the secure, self-contained container.</p>
+<p>Delivered:</p>
+<ul>
+<li><input checked="" disabled="" type="checkbox"> <strong>Single-container Docker stack</strong> — multi-stage Dockerfile builds the
+web bundle, builds the server, ships a minimal <code>node:22-alpine</code>
+runtime; the server serves API + SPA from one port. <code>docker compose up</code> brings up db + app together; both have healthchecks.</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Single-user authentication</strong> — Argon2id password, signed
+httpOnly/sameSite=strict session cookie, first-boot &quot;set your
+password&quot; flow, full auth gate on <code>/api/*</code>. <strong>Closes KI-03.</strong></li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Attachment encryption at rest</strong> — AES-256-GCM with
+<code>ATTACHMENT_ENCRYPTION_KEY</code>; v=0 plaintext files keep working for
+backward compatibility.</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Database encryption at rest</strong> — documented via host-volume
+encryption (LUKS/BitLocker/FileVault/encrypted ZFS) in the admin
+guide; no in-app column encryption.</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Secrets via env</strong>, <strong>non-root <code>node</code> user</strong>, <strong><code>tini</code> entrypoint</strong>.</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>HTTPS guidance</strong> — Caddy reverse-proxy snippet + <code>COOKIE_SECURE</code>
+flag in the admin guide.</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Dependency vulnerability policy</strong> — cadence, severity SLAs, and
+pinning approach in the admin guide.</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Backup &amp; restore tooling</strong> — <code>npm run backup</code> and <code>npm run restore</code>
+cover both database (pg_dump custom format) and attachments (tgz).</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Migrations ship in <code>dist/</code></strong> — Dockerfile copies SQL into the
+compiled output. <strong>Closes KI-04.</strong></li>
+</ul>
+<hr>
+<h2 id="phase-6-budgeting-amp-cash-flow">Phase 6 — Budgeting &amp; Cash Flow ✅<a class="heading-anchor" href="#phase-6-budgeting-amp-cash-flow">#</a></h2>
+<p><strong>Goal:</strong> Match the everyday strengths of Monarch and Simplifi.</p>
+<p>Delivered:</p>
+<ul>
+<li><input checked="" disabled="" type="checkbox"> <strong>Flex budgeting</strong> — monthly per-category budgets plus one explicit
+flex-pool row that catches spending in non-budgeted categories</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Monthly budget-vs-actual</strong> — <code>/api/budgets/actual</code> with the
+flex-pool calculation; transfers excluded; full UI with red-when-over
+progress bars</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Savings goals</strong> — name + target + current + optional date,
+progress-capped server-side, full CRUD UI</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Bill reminders + upcoming-bills view</strong> — bills and recurring
+income, mark-paid advances the next due date by frequency,
+dashboard tile showing the next 30 days</li>
+<li><input checked="" disabled="" type="checkbox"> <strong>Cash-flow forecast</strong> — <code>/api/cash-flow</code> walks current net worth
+forward through every projected bill/income event, plotted as a
+90-day line chart on the dashboard</li>
+</ul>
+<p><strong>Auto-detection of recurring charges is deferred</strong> — the manual entry
+path turned out to be plenty for a single-user instance, and auto-
+detection wants its own phase to handle the false-positive UX properly.</p>
+<hr>
+<h2 id="phase-7-wealth-amp-net-worth">Phase 7 — Wealth &amp; Net Worth ✅<a class="heading-anchor" href="#phase-7-wealth-amp-net-worth">#</a></h2>
+<p><strong>Goal:</strong> Add the wealth-tracking depth of Empower and Banktivity.</p>
+<p>Sliced into three releases:</p>
+<ul>
+<li><strong>7.0</strong> ✅ — investment holdings (cost basis + mark-to-market) and
+manual asset/liability accounts (house, mortgage, etc.); net-worth
+chart on the dashboard now includes them</li>
+<li><strong>7.1</strong> ✅ (released as 0.10.0) — multi-currency with exchange
+rates. <code>exchange_rates</code> table, <code>open.er-api.com</code> auto-refresh,
+per-account currency picker, dashboard sums into a global display
+currency.</li>
+<li><strong>7.2</strong> ✅ (released as 0.10.1) — retirement / long-term goal
+projections. <code>retirement_projections</code> table, monthly-compound
+math, /retirement page with nominal+real curves and optional
+target line.</li>
+</ul>
+<p>Phase 7 deliberately took a long detour through operator features
+(multi-tenant + RBAC + SMTP + backups + monitoring + design refresh,
+versions 0.7.4 → 0.9.5) before closing out 7.1 and 7.2. The operator
+features were originally backlog items; bringing them forward turned
+the app into a real household-shared deployment before the wealth-
+projection extras landed.</p>
+<hr>
+<h2 id="phase-8-connectivity-amp-automation">Phase 8 — Connectivity &amp; Automation ✅<a class="heading-anchor" href="#phase-8-connectivity-amp-automation">#</a></h2>
+<p><strong>Goal:</strong> Offer all three ways to get data in — without forcing the cloud.</p>
+<p>Sliced into four releases:</p>
+<ul>
+<li><strong>8.0</strong> ✅ (released as 0.11.0) — extended file imports (OFX 1.x SGML,
+OFX 2.x XML, QFX, QIF) plus the pluggable <code>TransactionDataSource</code>
+layer that the rest of Phase 8 plugs into. Enables a clean
+migration off Quicken / Banktivity / Moneydance with no aggregator.</li>
+<li><strong>8.1</strong> ✅ (released as 0.11.1) — <strong>OFX Direct Connect</strong>: pull
+transactions straight from banks that support the protocol, with
+no aggregator. New <code>ofx_dc_connections</code> table (credentials stored
+AES-256-GCM encrypted under <code>ATTACHMENT_ENCRYPTION_KEY</code>), OFX 1.x
+SGML request builder, <code>/api/ofx-dc/connections</code> CRUD + <code>/test</code> +
+<code>/sync</code> routes, web Connections page with Test / Sync now.</li>
+<li><strong>8.2</strong> ✅ (released as 0.11.2) — <strong>Plaid integration</strong>,
+super-admin-gated via the <code>PLAID_ENABLED</code> setting and disabled
+by default. New <code>plaid_items</code> + <code>plaid_account_links</code> tables
+(access tokens AES-256-GCM encrypted), full
+link-token / public-token exchange / <code>/transactions/sync</code> /
+<code>/item/remove</code> flow, web Connections page extension that only
+renders when <code>/api/plaid/status</code> reports enabled=true and only
+loads Plaid&#39;s external Link widget on-demand.</li>
+<li><strong>8.3</strong> ✅ (released as 0.11.3) — <strong>scheduled background sync</strong>.
+In-process 60s scheduler walks every enabled OFX-DC connection
+and active Plaid item; per-source cadence gate on <code>last_sync_at</code>
+so a 60s tick never floods banks. Settings: <code>AUTO_SYNC_ENABLED</code><ul>
+<li><code>AUTO_SYNC_FREQUENCY</code> (hourly/daily/weekly) + <code>AUTO_SYNC_TIME</code>,
+all super-only. Super-admin &quot;Auto-sync&quot; panel on /system with
+enable / cadence / &quot;Run all syncs now&quot; controls. Per-source
+failures isolated (one bad bank can&#39;t block the rest).</li>
+</ul>
+</li>
+<li><strong>8.3</strong> 📋 — <strong>scheduled background sync</strong> + auto-import. A
+per-tenant cadence calls <code>fetch()</code> on each enabled data source
+and runs the same dedup + persistence path.</li>
+</ul>
+<hr>
+<h2 id="phase-9-mobile-assistant-amp-experience">Phase 9 — Mobile, Assistant &amp; Experience ✅<a class="heading-anchor" href="#phase-9-mobile-assistant-amp-experience">#</a></h2>
+<p><strong>Goal:</strong> Make SmrtCash a pleasure to use anywhere.</p>
+<p>Sliced into four releases:</p>
+<ul>
+<li><strong>9.0</strong> ✅ (released as 0.12.0) — <strong>Installable PWA</strong>. Web app
+manifest, service worker (cache-first for built assets,
+network-only for <code>/api/*</code>, offline app-shell fallback), responsive
+CSS pass with a collapsible mobile drawer, install prompt that
+surfaces <code>beforeinstallprompt</code>, offline indicator pill. Same
+container — no second deployment.</li>
+<li><strong>9.1</strong> ✅ (released as 0.12.1) — <strong>AI financial assistant</strong>.
+Multi-turn tool-use loop against Claude with 12 tools (8 read,
+4 write). Tenant-scoped on every call; every write tool calls
+<code>recordAudit()</code> so the super-admin audit log captures every
+change. Children blocked. Bulk operations hard-capped at 500.
+New /assistant chat page with inline tool-call chips so the
+user sees exactly what the assistant did.</li>
+<li><strong>9.2</strong> ✅ (released as 0.12.2) — <strong>Bill-splitting / shared
+expenses</strong>. New <code>split_participants</code> + <code>transaction_shares</code> tables
+(tenant-scoped, sign convention preserved so totals never desync).
+Routes: participant CRUD, <code>PUT /api/transactions/:id/shares</code>,
+<code>POST /api/transaction-shares/:id/settle</code>, summary endpoint.
+New /sharing page (net balances + per-participant share list +
+settle toggle), 👥 button on every transaction row opens a modal
+with split-equally + manual allocation. Two new assistant tools
+(<code>share_summary</code>, <code>split_transaction</code>) so the AI can answer &quot;who
+owes me?&quot; and &quot;split this dinner 4 ways&quot; in natural language.</li>
+<li><strong>9.3</strong> ✅ (released as 0.12.3) — <strong>Calendar budget view</strong>.
+Single new endpoint <code>GET /api/calendar/:month</code> returns per-day
+spend / income / txn-count plus bill-due-marker ids, monthly
+totals (spend, income, budget), and upcoming bills. New
+<code>/calendar</code> page renders a 7-column grid with intensity-based
+spending heatmap, bill-due markers, click-a-day drawer showing
+that day&#39;s transactions. Tenant-scoped. One new assistant
+read tool (<code>calendar_month_summary</code>) so the AI can answer
+&quot;what does my May calendar look like?&quot;.</li>
+</ul>
+<hr>
+<h2 id="beyond-backlog">Beyond — Backlog 💡<a class="heading-anchor" href="#beyond-backlog">#</a></h2>
+<p>User asked to work through the backlog after Phase 9 closed. Active
+backlog plan: ship five small releases (<code>0.13.0</code> → <code>0.13.4</code>), defer
+native mobile.</p>
+<ul>
+<li>Multi-user / household mode with per-user permissions — ✅ <strong>0.13.4</strong> (per-account read/read_write tuning; 2026-05-23)</li>
+<li>Tax-category tagging and year-end reports — ✅ <strong>0.13.1</strong> (2026-05-23)</li>
+<li>Cryptocurrency tracking (Simplifi-style) — ✅ <strong>0.13.3</strong> + scheduled refresh ✅ <strong>0.13.5</strong> (2026-05-23)</li>
+<li>Non-AI rules engine for auto-categorization — ✅ <strong>0.13.6</strong> (auto-apply on import + tenant scope + enable/priority; 2026-05-23)</li>
+<li>Advanced cash-flow forecasting &amp; spending-anomaly alerts — ✅ <strong>0.13.2</strong> (anomaly alerts; 2026-05-23)</li>
+<li>Native mobile apps — only if the PWA proves insufficient (<strong>deferred</strong>)</li>
+<li>Data export / portability tooling — ✅ <strong>0.13.0</strong> (2026-05-23)</li>
+</ul>
+<hr>
+<h2 id="014x-multi-tenant-isolation-hardening">0.14.x — Multi-tenant isolation hardening ✅<a class="heading-anchor" href="#014x-multi-tenant-isolation-hardening">#</a></h2>
+<p>Five-slice audit + fix pass that produced 72 dedicated cross-tenant
+isolation tests. Every domain route, aggregation, and read path was
+verified to never return data from another tenant. Closed every
+known issue at the end of the series.</p>
+<ul>
+<li><strong>0.14.0–0.14.4</strong> ✅ — slice-by-slice isolation hardening across
+routes, RBAC, account access, aggregations, and shared-state
+surfaces.</li>
+<li><strong>0.14.5–0.14.7</strong> ✅ — closed the original KI list (npm
+vulnerabilities, dedup heuristic, XLSX date parsing, Windows tar
+shell-out, project folder name).</li>
+</ul>
+<hr>
+<h2 id="015x-saas-pivot">0.15.x — SaaS pivot ✅<a class="heading-anchor" href="#015x-saas-pivot">#</a></h2>
+<p>Layered Stripe billing + entitlement gating on top of the existing
+single-tenant model. Each slice is independently shippable; cumulative
+effect is &quot;the same app, now sellable.&quot;</p>
+<ul>
+<li><strong>0.15.0</strong> ✅ — schema (subscriptions, usage_counters,
+stripe_processed_events) + entitlement core (PLAN_FEATURES,
+requireFeature, checkAndIncrementQuota).</li>
+<li><strong>0.15.1</strong> ✅ — Stripe Checkout + webhook handler (idempotent
+upserts), Customer Portal.</li>
+<li><strong>0.15.2</strong> ✅ — wire entitlement gates into every premium route
+(bank sync, AI assistant, OCR, anomalies, crypto, retirement,
+bill splitting).</li>
+<li><strong>0.15.3</strong> ✅ — /billing page (plan card, usage meters, trial
+countdown, plan picker, manage-billing button).</li>
+<li><strong>0.15.4</strong> ✅ — past-due grace (3 days) + dunning emails on
+payment_failed + UpgradePrompt wired into gated pages +
+cap-overflow UX.</li>
+<li><strong>0.15.5</strong> ✅ — SaaS operator readiness: <code>/api/health/saas</code>
+endpoint + HealthPage SaaS cards, automatic-tax env toggle,
+operator runbook, ToS + Privacy stubs.</li>
+</ul>
+<hr>
+<h2 id="016x-saas-launch-readiness">0.16.x — SaaS launch readiness ✅<a class="heading-anchor" href="#016x-saas-launch-readiness">#</a></h2>
+<p>Closes the launch gaps: customers can self-serve from <code>/signup</code>,
+recover their own passwords, and every customer&#39;s attachments are
+encrypted under a per-tenant DEK with a super-admin rotation path.</p>
+<ul>
+<li><strong>0.16.0</strong> ✅ — public signup + email verification.
+<code>POST /api/auth/signup</code> (gated by <code>PUBLIC_SIGNUP_ENABLED</code>),
+verification email with 24-hour token, tenant + admin
+membership provisioned on verify, anti-enumeration 202 response.</li>
+<li><strong>0.16.1</strong> ✅ — super-admin <strong>subscriptions console</strong> at
+<code>/system/subscriptions</code>. Grant courtesy plans, sync from
+Stripe, force-cancel locally. Every action audit-logged.</li>
+<li><strong>0.16.2</strong> ✅ — self-service password reset.
+<code>POST /api/auth/password-reset-request</code> (always 202),
+<code>POST /api/auth/password-reset-confirm</code> (validates new
+password, invalidates every existing session for the user).</li>
+<li><strong>0.16.3</strong> ✅ — operator settings unification. Six previously
+env-only keys (Stripe secret/webhook, public base URL,
+automatic tax, signup gate, support URL) now editable from
+<code>/settings</code>. <code>STRIPE_SECRET_KEY</code> rotation hot-swaps the
+cached SDK client. New <code>SUPPORT_URL</code> surfaced as
+&quot;Help &amp; feature requests&quot; in every sidebar + unauth page,
+defaulting to <a href="https://support.builditsmrt.com/">https://support.builditsmrt.com/</a>.</li>
+<li><strong>0.16.4</strong> ✅ — per-tenant attachment encryption.
+<code>tenant_encryption_keys</code> table, AES-256-GCM envelope (DEK
+wrapped by KEK), <code>POST /api/system/tenants/:id/rotate-encryption-key</code><ul>
+<li>button on each tenant row. Legacy v0/v1 stay readable; v1
+upgrades to v2 on rotation.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="beyond-v017">Beyond — v0.17+<a class="heading-anchor" href="#beyond-v017">#</a></h2>
+<p>The big SaaS-launch items left after v0.16:</p>
+<ul>
+<li><strong>Stripe Tax dashboard setup</strong> — enabling automatic tax
+requires Stripe Tax → Settings to be configured with a tax
+origin address (and country-by-country registrations for EU
+VAT MOSS). Out of the codebase; flag in <code>/settings</code> is wired.</li>
+<li><strong>ToS + Privacy lawyer review</strong> — the placeholder stubs in
+<code>docs/TERMS_OF_SERVICE.md</code> and <code>docs/PRIVACY_POLICY.md</code> need
+jurisdiction-specific copy before commercial launch.</li>
+<li><strong>Observability</strong> — structured request logs, Sentry-equivalent
+error tracking, slow-query / slow-route alerts. The /health
+page covers process metrics; an external sink is the gap.</li>
+<li><strong>Annual-pre-pay discount UX</strong> — pricing already shows the
+yearly tier at a ~58% discount; a visible &quot;Save 41%&quot; badge
+on /billing would lift annual conversion.</li>
+<li><strong>Native mobile</strong> — re-evaluate at 12 months if the PWA
+retention story isn&#39;t holding.</li>
+</ul>
+<hr>
+<p><em>This roadmap is a living document. Phase scope and ordering may shift as the
+product is used and priorities become clearer.</em></p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

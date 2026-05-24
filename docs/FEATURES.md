@@ -4,10 +4,51 @@ Legend: ✅ available now · 🔜 next · 📋 planned · 💡 backlog (deferred
 
 The planned set was shaped by a competitive review of Monarch, Simplifi,
 Empower, Banktivity, CountAbout, Rocket Money and Moneydance — adopting their
-table-stakes features while keeping SmrtCash self-hosted and private. As of
-`0.13.5`, Phases 1–9 and the post-Phase-9 backlog are all complete except for
-native mobile (deferred — the PWA covers it). See the [Roadmap](./ROADMAP.md)
-for phase detail and the [Changelog](../CHANGELOG.md) for per-release notes.
+table-stakes features. As of **0.16.4**, Phases 1–9, the 0.13/0.14 hardening
+backlog, the 0.15.x SaaS pivot, and the 0.16.x SaaS launch readiness work
+are all complete. Native mobile is deferred (the PWA covers it). See the
+[Roadmap](./ROADMAP.md) for phase detail and the [Changelog](../CHANGELOG.md)
+for per-release notes.
+
+---
+
+## Accounts, signup, billing (SaaS — 0.15.x / 0.16.x)
+
+| Feature | Status |
+|---------|--------|
+| Three pricing tiers — Starter / Plus / Family — with feature gating | ✅ |
+| 14-day free trial via Stripe Checkout (no card required up front) | ✅ |
+| Stripe Customer Portal — change plan, update card, cancel | ✅ |
+| Dunning emails on `invoice.payment_failed` + 3-day grace window | ✅ |
+| Past-due grace handling at the entitlement layer | ✅ |
+| Per-tenant metered quotas (AI assistant, OCR) with cap-overflow warnings | ✅ |
+| Bank-connection cap by tier (0 / 10 / 25) | ✅ |
+| Public signup at `/signup` gated by `PUBLIC_SIGNUP_ENABLED` env | ✅ |
+| Email verification on signup (anti-enumeration: 202 always) | ✅ |
+| Self-service password reset with 1-hour token + session invalidation | ✅ |
+| Super-admin **subscriptions console** — grant / sync from Stripe / force-cancel | ✅ |
+| Super-admin **SaaS health dashboard** — tenants + subs + webhook ingest | ✅ |
+| Runtime-editable Stripe keys + signup gate + support URL (no env-file edit) | ✅ |
+| Operator-configured support / feature-request link on every page | ✅ |
+| Stripe automatic tax toggle (env or `/settings`) | ✅ |
+| Operator runbook covering webhook failures, customer triage, dunning, grace | ✅ |
+| Stripe automatic-tax dashboard setup (US sales-tax / EU VAT MOSS) | 📋 outside the codebase |
+| ToS + Privacy Policy lawyer review | 📋 before commercial launch |
+
+## Security & encryption
+
+| Feature | Status |
+|---------|--------|
+| Argon2id password hashing | ✅ |
+| Signed HttpOnly session cookies, sameSite=Strict | ✅ |
+| **Per-tenant envelope encryption** for attachments (DEK wrapped by KEK) | ✅ |
+| Super-admin **rotate-encryption-key** button (re-encrypts every attachment) | ✅ |
+| Legacy v0 (plaintext) and v1 (KEK-direct) attachments stay readable | ✅ |
+| 72 dedicated cross-tenant isolation tests | ✅ |
+| Cross-tenant attachment decryption fails GCM auth | ✅ |
+| Audit log for every super-admin mutation | ✅ |
+| Account enumeration prevented on signup + password reset | ✅ |
+| Bring-your-own KMS for KEK | 💡 deferred — current env-var KEK works |
 
 ---
 
