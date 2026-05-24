@@ -141,7 +141,10 @@ export function BudgetsPage() {
         <div>
           <h1>Budgets</h1>
           <div className="subtitle">
-            Set a per-category budget plus one flex pool for everything else.
+            <strong>Paycheck-to-Paycheck Budgeting</strong> above plans each
+            income period through to leftover; the <strong>Monthly Budget</strong>
+            below tracks calendar-month actuals against your per-category
+            budgets.
           </div>
         </div>
         <div className="toolbar inline">
@@ -186,34 +189,60 @@ export function BudgetsPage() {
 
       {error && <div className="banner error">{error}</div>}
 
-      {/* 0.17.10 — one PeriodOverview card per committed period.
+      {/* ── Paycheck-to-Paycheck Budgeting ──────────────────────
+        * 0.17.10 — one PeriodOverview card per committed period.
         * Stacked in ascending period.start order. When nothing is
         * committed yet, the server returns a single calendar-
         * month placeholder so the CTA still has a card to render.
+        * 0.17.13 — renamed section. The cards plan each income
+        * window through to leftover; that's "paycheck-to-paycheck"
+        * in user language.
         */}
-      {periods.map((p) => (
-        <PeriodOverview
-          key={`${p.period.start}-${p.period.end}-${p.period.type}`}
-          summary={p}
-          accounts={accountsList}
-          onRunWizard={() => setShowWizard(true)}
-        />
-      ))}
-
-      {!loading && rows.length === 0 && (
-        <div className="card empty-card">
-          <p className="muted">
-            No budgets set for {formatMonth(month)} yet. Use the form below to
-            add one, or copy from the previous month.
-          </p>
-          <button className="btn secondary" type="button" onClick={copyPrev}>
-            Copy from {formatMonth(prevMonth(month))}
-          </button>
+      <div className="page-section">
+        <div className="page-section-head">
+          <div>
+            <h2 style={{ margin: 0 }}>Paycheck-to-Paycheck Budgeting</h2>
+            <div className="muted small">
+              One card per income period — income, bills, set-aside, net.
+            </div>
+          </div>
         </div>
-      )}
+        {periods.map((p) => (
+          <PeriodOverview
+            key={`${p.period.start}-${p.period.end}-${p.period.type}`}
+            summary={p}
+            accounts={accountsList}
+            onRunWizard={() => setShowWizard(true)}
+          />
+        ))}
+      </div>
 
-      {!loading && rows.length > 0 && (
-        <div className="card">
+      {/* ── Monthly Budget (budget-vs-actual) ────────────────── */}
+      <div className="page-section">
+        <div className="page-section-head">
+          <div>
+            <h2 style={{ margin: 0 }}>Monthly Budget</h2>
+            <div className="muted small">
+              Calendar-month actuals against per-category budgets.
+              Use the picker above to change month.
+            </div>
+          </div>
+        </div>
+
+        {!loading && rows.length === 0 && (
+          <div className="card empty-card">
+            <p className="muted">
+              No budgets set for {formatMonth(month)} yet. Use the form below
+              to add one, or copy from the previous month.
+            </p>
+            <button className="btn secondary" type="button" onClick={copyPrev}>
+              Copy from {formatMonth(prevMonth(month))}
+            </button>
+          </div>
+        )}
+
+        {!loading && rows.length > 0 && (
+          <div className="card">
           <div className="budget-totals">
             <span>
               <span className="muted">Total budgeted </span>
@@ -244,13 +273,14 @@ export function BudgetsPage() {
         </div>
       )}
 
-      <BudgetAddForm
-        month={month}
-        categories={categories}
-        hasFlex={hasFlex}
-        budgetedIds={budgetedIds}
-        onAdd={onUpsert}
-      />
+        <BudgetAddForm
+          month={month}
+          categories={categories}
+          hasFlex={hasFlex}
+          budgetedIds={budgetedIds}
+          onAdd={onUpsert}
+        />
+      </div>
     </div>
   );
 }

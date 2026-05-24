@@ -161,11 +161,39 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.12 shipped. 0.17.12 closes the last loop on
-per-period account scope: the Period Overview&#39;s Bills and
-Income sections now respect the scope alongside the actuals,
-so deselecting an account in the wizard hides ALL of that
-account&#39;s outgoing money, not just the actuals total.</em></p>
+<p><em>0.17.0–0.17.13 shipped. 0.17.13 renames the two halves of
+/budgets — the top is &quot;Paycheck-to-Paycheck Budgeting&quot;, the
+bottom is &quot;Monthly Budget&quot;.</em></p>
+<hr>
+<h2 id="01713-2026-05-24-section-labels-on-budgets">[0.17.13] — 2026-05-24 — Section labels on /budgets<a class="heading-anchor" href="#01713-2026-05-24-section-labels-on-budgets">#</a></h2>
+<p>The two halves of the budgets page do genuinely different
+things and the user reframed them in their own language:</p>
+<ul>
+<li><strong>Top</strong> — the stacked Period Overview cards from AutoMagic.
+One per income period, with income / bills / set-aside /
+net. The user calls this <strong>&quot;Paycheck-to-Paycheck
+Budgeting&quot;</strong> because each card maps to one paycheck cycle.</li>
+<li><strong>Bottom</strong> — the budget-vs-actual table. Calendar-month
+actuals against per-category budgets. The user calls this
+<strong>&quot;Monthly Budget&quot;</strong>.</li>
+</ul>
+<h3 id="change">Change<a class="heading-anchor" href="#change">#</a></h3>
+<ul>
+<li>New <code>&lt;h2&gt;</code> heading + subtitle above the period cards:
+<strong>&quot;Paycheck-to-Paycheck Budgeting · One card per income
+period — income, bills, set-aside, net.&quot;</strong></li>
+<li>New <code>&lt;h2&gt;</code> heading + subtitle above the budget-vs-actual
+table: <strong>&quot;Monthly Budget · Calendar-month actuals against
+per-category budgets. Use the picker above to change
+month.&quot;</strong></li>
+<li>Page-header subtitle rewritten to call out both flows in
+one sentence so a new operator understands the page at a
+glance.</li>
+<li>The &quot;AutoMagic setup&quot; button + month picker stay in the
+page header (they&#39;re tied to the period cards + monthly
+table respectively).</li>
+</ul>
+<p>No backend changes; all-UI slice.</p>
 <hr>
 <h2 id="01712-2026-05-24-period-overview-bills-income-honor-scope">[0.17.12] — 2026-05-24 — Period overview bills + income honor scope<a class="heading-anchor" href="#01712-2026-05-24-period-overview-bills-income-honor-scope">#</a></h2>
 <p>After 0.17.11 added per-budget account scope on actuals,
@@ -6009,7 +6037,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 22:01:55 UTC · commit 4cabb13</span>
+  <span>Generated 2026-05-24 22:07:15 UTC · commit 1df5e6a</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

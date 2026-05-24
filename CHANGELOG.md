@@ -9,11 +9,42 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.12 shipped. 0.17.12 closes the last loop on
-per-period account scope: the Period Overview's Bills and
-Income sections now respect the scope alongside the actuals,
-so deselecting an account in the wizard hides ALL of that
-account's outgoing money, not just the actuals total._
+_0.17.0–0.17.13 shipped. 0.17.13 renames the two halves of
+/budgets — the top is "Paycheck-to-Paycheck Budgeting", the
+bottom is "Monthly Budget"._
+
+---
+
+## [0.17.13] — 2026-05-24 — Section labels on /budgets
+
+The two halves of the budgets page do genuinely different
+things and the user reframed them in their own language:
+
+- **Top** — the stacked Period Overview cards from AutoMagic.
+  One per income period, with income / bills / set-aside /
+  net. The user calls this **"Paycheck-to-Paycheck
+  Budgeting"** because each card maps to one paycheck cycle.
+- **Bottom** — the budget-vs-actual table. Calendar-month
+  actuals against per-category budgets. The user calls this
+  **"Monthly Budget"**.
+
+### Change
+
+- New `<h2>` heading + subtitle above the period cards:
+  **"Paycheck-to-Paycheck Budgeting · One card per income
+  period — income, bills, set-aside, net."**
+- New `<h2>` heading + subtitle above the budget-vs-actual
+  table: **"Monthly Budget · Calendar-month actuals against
+  per-category budgets. Use the picker above to change
+  month."**
+- Page-header subtitle rewritten to call out both flows in
+  one sentence so a new operator understands the page at a
+  glance.
+- The "AutoMagic setup" button + month picker stay in the
+  page header (they're tied to the period cards + monthly
+  table respectively).
+
+No backend changes; all-UI slice.
 
 ---
 
