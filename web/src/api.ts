@@ -945,6 +945,50 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+// ── Billing (0.15.x) ─────────────────────────────────────
+
+/** Stripe lookup_keys created by scripts/stripe-setup.mjs. */
+export type PlanLookupKey =
+  | 'starter_monthly' | 'starter_annual'
+  | 'plus_monthly'    | 'plus_annual'
+  | 'family_monthly'  | 'family_annual';
+
+export type Plan = 'starter' | 'plus' | 'family';
+
+export type SubscriptionStatus =
+  | 'trialing' | 'active' | 'past_due' | 'canceled'
+  | 'incomplete' | 'incomplete_expired' | 'unpaid' | 'paused';
+
+/** One metered feature's usage for the current period. cap=null means unlimited. */
+export interface UsageMeter {
+  used: number;
+  cap: number | null;
+  remaining: number | null;
+}
+
+/** Hard caps (bank connections + household seats). */
+export interface CapMeter {
+  used: number;
+  cap: number;
+}
+
+export interface BillingStatus {
+  plan: Plan | null;
+  status: SubscriptionStatus | null;
+  trialEnd: string | null;        // ISO timestamp
+  currentPeriodEnd: string | null; // ISO timestamp
+  cancelAtPeriodEnd: boolean;
+  hasStripeCustomer: boolean;
+  usage: {
+    aiAssistant: UsageMeter;
+    receiptOcr: UsageMeter;
+  };
+  caps: {
+    bankConnections: CapMeter;
+    householdMembers: CapMeter;
+  };
+}
+
 export interface CreateAccountInput {
   name: string;
   institution?: string;
@@ -2318,4 +2362,17 @@ export const api = {
         body: JSON.stringify(params),
       },
     ),
+
+  // ── Billing (0.15.x) ─────────────────────────────────────
+  getBillingStatus: () => http<BillingStatus>('/api/billing/status'),
+
+  startBillingCheckout: (lookupKey: PlanLookupKey) =>
+    http<{ url: string; id: string }>('/api/billing/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lookupKey }),
+    }),
+
+  openBillingPortal: () =>
+    http<{ url: string }>('/api/billing/portal'),
 };

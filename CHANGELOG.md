@@ -9,9 +9,132 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.15.0–0.15.2 shipped. Routes now enforce the entitlement plan
-end-to-end. Slices 0.15.3 (web `/billing` UI), 0.15.4 (dunning +
-grace), and 0.15.5 (SaaS readiness) still pending._
+_0.15.0–0.15.3 shipped. The /billing page in the web client is
+live; users can see their plan + usage, change plan via Stripe
+Checkout, and reach the Customer Portal. Slices 0.15.4 (dunning
++ grace) and 0.15.5 (SaaS readiness) still pending._
+
+---
+
+## [0.15.3] — 2026-05-24 — SaaS pivot, slice 4: /billing page + trial banner + upgrade prompt
+
+User-facing billing surface for the SaaS pivot. After this slice
+a paying tenant can manage their subscription entirely from the
+app — no engineer needed.
+
+### New endpoint
+
+`GET /api/billing/status` — single read powering the /billing
+page. Returns:
+
+```json
+{
+  "plan": "starter" | "plus" | "family" | null,
+  "status": "trialing" | "active" | "past_due" | "canceled" | ...,
+  "trialEnd": "<ISO>" | null,
+  "currentPeriodEnd": "<ISO>" | null,
+  "cancelAtPeriodEnd": false,
+  "hasStripeCustomer": true,
+  "usage": {
+    "aiAssistant": { "used": 47, "cap": 500, "remaining": 453 },
+    "receiptOcr":  { "used": 12, "cap": 200, "remaining": 188 }
+  },
+  "caps": {
+    "bankConnections":  { "used": 3, "cap": 10 },
+    "householdMembers": { "used": 2, "cap": 1 }
+  }
+}
+```
+
+`cap: null` on a metered feature means unlimited on this plan
+(Family). `hasStripeCustomer` drives whether "Manage billing"
+(Customer Portal redirect) is shown vs. greyed out. No Stripe IDs
+or webhook event details are exposed; this stays purely
+plan + state + counters.
+
+### Web
+
+- **`web/src/pages/BillingPage.tsx`** — full billing surface:
+  - Current plan card with status pill + 14-day trial countdown
+    when trialing
+  - "Renews on …" sub-line when active
+  - Inline warnings for `cancel_at_period_end` and `past_due`
+  - Usage meter rows for AI assistant, OCR, bank connections,
+    household members. Color flips warn at 75% and danger at 90%.
+    Unlimited tiers (Family) read as "Unlimited" with no bar.
+  - "Manage billing" button → Stripe Customer Portal redirect
+  - Plan comparison grid (Starter / Plus / Family) with annual +
+    monthly "Pick plan" buttons that kick off Stripe Checkout
+- **`web/src/components/TrialBanner.tsx`** — sitewide bar
+  rendered above main content when `status === 'trialing'` AND
+  `trial_end` is within 5 days. Non-dismissible — the impending
+  end is load-bearing info.
+- **`web/src/components/UpgradePrompt.tsx`** — reusable card for
+  pages whose primary feature is gated. Takes `feature` +
+  `requiredPlan` props; links to `/billing` for the upgrade flow.
+  Will be used in 0.15.4+ when pages catch 402 from the API.
+- **`web/src/api.ts`** — `getBillingStatus`, `startBillingCheckout`,
+  `openBillingPortal`; new types `BillingStatus`, `UsageMeter`,
+  `CapMeter`, `Plan`, `PlanLookupKey`, `SubscriptionStatus`.
+- **`web/src/App.tsx`** — `/billing` route registered, nav entry
+  under the "Household" group, `<TrialBanner />` mounted above
+  the route content.
+- **`web/src/styles.css`** — meter rows + bars, plan grid, badge
+  variants (info / success / warn / muted), callouts, trial
+  banner, upgrade-prompt card.
+
+### Tests (+7)
+
+`tests/integration/billing-status.test.ts` exercises every
+documented shape:
+
+- Default Family/active tenant: unlimited caps, hard caps reported
+- `plan = null` when no subscription row
+- Plus tier with metered usage (3 AI calls burned via the helper
+  the route uses → same period_start by construction)
+- Trialing status with `trialEnd` populated as ISO
+- `hasStripeCustomer` flips true when `stripe_customer_id` is set
+- Bank-connection cap counts both `ofx_dc_connections` +
+  `plaid_items`
+- 403 when the session has no active tenant
+
+Total: **695 server tests pass** (688 + 7). Web typecheck clean,
+6 web tests pass.
+
+### What's NOT in this slice
+
+- `/api/billing/cancel` shortcut — Stripe Customer Portal handles
+  cancel inline (our portal config in `stripe-setup.mjs` enables
+  the cancel feature with reason capture). Adding a dedicated
+  endpoint would duplicate that without value.
+- Plan-selector during signup — that's 0.15.5, alongside the
+  full signup flow rewrite.
+- Wiring `UpgradePrompt` into every gated page — the component
+  exists, but flipping each gated page from "renders an error" to
+  "renders UpgradePrompt on 402" is per-page UX work. Deferred
+  to 0.15.4 so this slice stays focused on the billing surface
+  itself.
+
+### Files
+
+```
+server/src/routes/billing.ts                    (+GET /status, +helpers)
+server/tests/integration/billing-status.test.ts (new — 7 tests)
+web/src/api.ts                                  (+3 methods, +6 types)
+web/src/pages/BillingPage.tsx                   (new)
+web/src/components/TrialBanner.tsx              (new)
+web/src/components/UpgradePrompt.tsx            (new)
+web/src/App.tsx                                 (route + nav + banner)
+web/src/styles.css                              (+billing CSS palette)
+package.json + server/package.json + web/package.json (0.15.2 → 0.15.3)
+```
+
+### Coming next
+
+- **0.15.4** — dunning + grace window + cancellation/downgrade UX.
+  Wire `UpgradePrompt` into the gated pages (catch 402, swap body).
+- **0.15.5** — SaaS readiness (signup flow with plan picker, drop
+  self-host docs, KMS-backed per-tenant keys).
 
 ---
 

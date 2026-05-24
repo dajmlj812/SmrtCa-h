@@ -31,9 +31,11 @@ import { SharingPage } from './pages/SharingPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TaxYearPage } from './pages/TaxYearPage';
 import { AnomaliesPage } from './pages/AnomaliesPage';
+import { BillingPage } from './pages/BillingPage';
 import { ThemeToggle } from './components/ThemeToggle';
 import { MobileBar, SidebarBackdrop, useMobileDrawer } from './components/MobileBar';
 import { InstallPrompt, OfflineIndicator } from './components/InstallPrompt';
+import { TrialBanner } from './components/TrialBanner';
 
 type AuthState =
   | 'loading'
@@ -219,11 +221,12 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
             <div className="nav-group-label">Household</div>
             <NavLink to="/sharing">Sharing</NavLink>
             <NavLink to="/workspace">Workspace</NavLink>
+            <NavLink to="/billing">Billing</NavLink>
           </div>
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.15.2
+          SmrtCash · v0.15.3
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -234,6 +237,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
         </div>
       </aside>
       <main className="content">
+        <TrialBanner />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
@@ -258,6 +262,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           <Route path="/anomalies" element={<AnomaliesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/billing" element={<BillingPage />} />
         </Routes>
       </main>
       <SidebarBackdrop open={open} onClose={() => setOpen(false)} />

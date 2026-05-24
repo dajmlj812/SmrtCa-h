@@ -2,7 +2,14 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 import { pool } from '../db/pool.js';
 import { requireTenant } from '../auth/rbac.js';
-import { getActiveSubscription } from '../auth/entitlements.js';
+import {
+  FEATURES,
+  PLAN_FEATURES,
+  connectionCount,
+  effectivePlan,
+  getActiveSubscription,
+  type Plan,
+} from '../auth/entitlements.js';
 import { getStripe, isStripeConfigured } from '../billing/stripe.js';
 import { isKnownLookupKey } from '../billing/plans.js';
 import {
@@ -28,7 +35,95 @@ function publicBaseUrl(): string {
   return (process.env.STRIPE_PUBLIC_BASE_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
 }
 
+/**
+ * 0.15.3 — usage rollup for the current billing period. Looks up the
+ * tenant's existing counters; null when no row exists yet (which is
+ * indistinguishable from "0 used" for UI purposes).
+ */
+async function currentUsage(
+  tenantId: string,
+  featureKey: string,
+): Promise<number> {
+  const r = await pool.query<{ count: string }>(
+    `SELECT count FROM usage_counters
+      WHERE tenant_id = $1
+        AND feature_key = $2
+        AND period_end >= now()::date
+      ORDER BY period_start DESC
+      LIMIT 1`,
+    [tenantId, featureKey],
+  );
+  return Number(r.rows[0]?.count ?? 0);
+}
+
+async function householdMemberCount(tenantId: string): Promise<number> {
+  const r = await pool.query<{ c: string }>(
+    `SELECT COUNT(*) AS c FROM memberships WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  return Number(r.rows[0]?.c ?? 0);
+}
+
 export async function billingRoutes(app: FastifyInstance): Promise<void> {
+  // ── GET /api/billing/status ───────────────────────────────
+  // Single endpoint powering the /billing page. Returns plan + state
+  // + usage meters + caps, no Stripe IDs (those stay internal). Safe
+  // for any authenticated tenant member to read — it's their own
+  // tenant's billing state.
+  app.get('/api/billing/status', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+
+    const sub = await getActiveSubscription(tenantId);
+    const plan = await effectivePlan(tenantId);
+    const planDef = plan ? PLAN_FEATURES[plan] : null;
+
+    // Usage on metered features. cap=null means unlimited (Family).
+    const aiUsed = planDef ? await currentUsage(tenantId, FEATURES.AI_ASSISTANT) : 0;
+    const ocrUsed = planDef ? await currentUsage(tenantId, FEATURES.RECEIPT_OCR) : 0;
+    const aiCap = planDef?.quotas.aiAssistantToolCalls ?? null;
+    const ocrCap = planDef?.quotas.receiptOcr ?? null;
+
+    const bankUsed = await connectionCount(tenantId);
+    const memberUsed = await householdMemberCount(tenantId);
+
+    return {
+      // null when no active subscription on this tenant — the UI
+      // renders a "subscribe to a plan" card instead of usage meters.
+      plan: plan ?? null,
+      status: sub?.status ?? null,
+      trialEnd: sub?.trialEnd?.toISOString() ?? null,
+      currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
+      cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
+      // True when we have a Stripe customer on file — drives whether
+      // the "Manage billing" button is enabled. Without a customer,
+      // the only viable action is "Pick a plan" via Checkout.
+      hasStripeCustomer: Boolean(sub?.stripeCustomerId),
+      usage: {
+        aiAssistant: {
+          used: aiUsed,
+          cap: aiCap,
+          remaining: aiCap === null ? null : Math.max(0, aiCap - aiUsed),
+        },
+        receiptOcr: {
+          used: ocrUsed,
+          cap: ocrCap,
+          remaining: ocrCap === null ? null : Math.max(0, ocrCap - ocrUsed),
+        },
+      },
+      caps: {
+        bankConnections: {
+          used: bankUsed,
+          cap: planDef?.bankConnectionCap ?? 0,
+        },
+        householdMembers: {
+          used: memberUsed,
+          cap: planDef?.householdMemberCap ?? 0,
+        },
+      },
+    };
+  });
+
   // ── POST /api/billing/checkout ────────────────────────────
   app.post('/api/billing/checkout', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
