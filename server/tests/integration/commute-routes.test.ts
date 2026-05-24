@@ -221,9 +221,12 @@ describe('Budget wizard with route-driven fuel + misc + savings', () => {
     // $1000 goal, $0 current, target ~10 weeks away. Per-week required ≈ $100.
     const target = new Date();
     target.setUTCDate(target.getUTCDate() + 70);
+    // 0.17.6 — savings_goals must be tenant-scoped; the wizard
+    // preview now filters by tenant.
     await pool.query(
-      `INSERT INTO savings_goals (name, target_amount_cents, current_amount_cents, target_date)
-       VALUES ('Vacation', 100000, 0, $1::date)`,
+      `INSERT INTO savings_goals (tenant_id, name, target_amount_cents, current_amount_cents, target_date)
+       VALUES ((SELECT id FROM tenants WHERE slug='default'),
+               'Vacation', 100000, 0, $1::date)`,
       [target.toISOString().slice(0, 10)],
     );
     const r = await app.inject({

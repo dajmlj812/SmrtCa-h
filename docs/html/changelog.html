@@ -161,11 +161,95 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.5 shipped. 0.17.5 makes the AI normalize button
-charge the AI-assistant quota counter (it wasn&#39;t, so /billing
-showed 0 even after thousands of normalize calls) and prompts
-the user before re-running AI on already-normalized rows
-instead of silently skipping them.</em></p>
+<p><em>0.17.0–0.17.6 shipped. 0.17.6 fixes the AutoMagic budget
+wizard, which had been silently creating orphan budget rows
+with <code>tenant_id = NULL</code> since the 0.11.0 multi-tenant phase —
+invisible from any /budgets view. Also closes the related
+cross-tenant leak in the wizard&#39;s preview aggregations.</em></p>
+<hr>
+<h2 id="0176-2026-05-24-fix-automagic-budget-wizard-tenant-scoping">[0.17.6] — 2026-05-24 — Fix: AutoMagic budget wizard tenant scoping<a class="heading-anchor" href="#0176-2026-05-24-fix-automagic-budget-wizard-tenant-scoping">#</a></h2>
+<p>The AutoMagic budget wizard (<code>/api/budgets/wizard/*</code>) predated
+the 0.11.0 multi-tenant phase and was missed in the 0.14.x
+isolation hardening. Bug surfaced on the smrtcash-test deploy
+when an operator ran the wizard, got &quot;Created 61 budget rows&quot;,
+and couldn&#39;t find a single one on the /budgets page.</p>
+<h3 id="three-layered-bugs">Three layered bugs<a class="heading-anchor" href="#three-layered-bugs">#</a></h3>
+<ol>
+<li><p><strong><code>commitWizard</code> INSERTed budgets without <code>tenant_id</code></strong>.
+<code>budgets.tenant_id</code> was added as nullable in migration 017
+and never made NOT NULL, so the INSERTs succeeded but
+produced rows invisible to <code>/api/budgets</code> (which filters
+<code>WHERE tenant_id = $1</code>). The 61 created rows were orphans.</p>
+</li>
+<li><p><strong><code>buildWizardPreview</code> cross-tenant leak</strong>. The preview&#39;s
+grocery-median calculation read <code>transactions</code> with no
+tenant join; route-driven fuel + tolls read <code>vehicles</code>
+and <code>commute_routes</code> without filtering by <code>tenant_id</code>;
+bills and recurring_income were read with no filter
+either. On a multi-tenant deploy tenant A&#39;s wizard would
+include tenant B&#39;s data in the budget suggestions.</p>
+</li>
+<li><p><strong><code>goalRequiredForPeriod</code> cross-tenant leak</strong>. Same shape —
+<code>savings_goals</code> read without tenant filter.</p>
+</li>
+</ol>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<ul>
+<li><code>WizardInput</code> gains a required <code>tenantId</code> field. Threaded
+through <code>buildWizardPreview</code> → all helpers
+(<code>weeklyGroceriesMedian</code>, <code>routeDrivenWeekly</code>,
+<code>goalRequiredForPeriod</code>) and into the resulting
+<code>WizardPreview</code> so <code>commitWizard</code> reads it from the
+preview object (single source of truth, no re-derive).</li>
+<li><code>commitWizard</code> dup-check + INSERTs now both tenant-scoped.
+Categories lookup uses <code>(tenant_id = $1 OR tenant_id IS NULL)</code>
+with DISTINCT ON to prefer the tenant&#39;s own custom category
+over a system seed of the same name.</li>
+<li><code>budget-wizard.ts</code> route uses <code>requireTenant</code> on both
+preview + commit and threads it into the input. <code>parseInput</code>
+now returns <code>Omit&lt;WizardInput, &#39;tenantId&#39;&gt;</code> so the parser
+stays pure and tenant scope lives at the route layer.</li>
+</ul>
+<h3 id="migration-034-backfill-orphans-not-null">Migration 034 — backfill orphans + NOT NULL<a class="heading-anchor" href="#migration-034-backfill-orphans-not-null">#</a></h3>
+<ul>
+<li>Single-tenant deploys (like smrtcash-test): the migration
+backfills all <code>tenant_id = NULL</code> budget rows to the only
+tenant. The 61 orphans on the test box become visible to
+the Default tenant on apply.</li>
+<li>Multi-tenant deploys: orphans are ambiguous (we&#39;d be
+guessing which tenant a wizard run was for), so the
+migration <code>DELETE</code>s them. They were never reachable from
+any UI; no in-app behavior changes.</li>
+<li>Final step: <code>ALTER COLUMN tenant_id SET NOT NULL</code> — any
+future regression of the same bug fails at INSERT time
+instead of silently creating orphans.</li>
+</ul>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>Two existing tests in <code>tests/integration/budget-wizard.test.ts</code>
+and one in <code>tests/integration/commute-routes.test.ts</code> were
+exploiting the cross-tenant leak — they seeded vehicles /
+routes / savings_goals without <code>tenant_id</code> and relied on the
+no-filter SELECT to find them. With the fix those SELECTs
+filter correctly, so the seeds had to be updated to include
+<code>tenant_id = (SELECT id FROM tenants WHERE slug=&#39;default&#39;)</code>.
+Full suite green: 743 server + 6 web.</p>
+<h3 id="operator-notes">Operator notes<a class="heading-anchor" href="#operator-notes">#</a></h3>
+<ul>
+<li>After deploying 0.17.6, <strong>your 61 orphan budgets become
+visible</strong> automatically (single-tenant deploy + migration
+backfill). No re-running of AutoMagic needed; just navigate
+to /budgets.</li>
+<li>The /budgets page shows one month at a time. If your
+AutoMagic run covered multiple weeks (e.g. <code>weekly</code> cadence
+× 12), use the month picker to find each period. The
+budget-vs-actual <code>asOf</code> mode picks the active period for
+the selected date.</li>
+<li>If your run created budgets for non-monthly periods (weekly,
+biweekly, semimonthly), those still write to the same
+<code>budgets</code> table; the budget-vs-actual route already handles
+any <code>period_type</code>. They render on whatever month the
+<code>period_month</code> anchor falls in.</li>
+</ul>
 <hr>
 <h2 id="0175-2026-05-24-meter-normalize-re-normalize-prompt">[0.17.5] — 2026-05-24 — Meter normalize + re-normalize prompt<a class="heading-anchor" href="#0175-2026-05-24-meter-normalize-re-normalize-prompt">#</a></h2>
 <p>Two bugs surfaced during the smrtcash-test deploy after the
@@ -5596,7 +5680,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 20:15:22 UTC · commit 6e1be09</span>
+  <span>Generated 2026-05-24 20:49:49 UTC · commit 1c14be0</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -136,6 +136,8 @@ export interface PeriodPreview {
 }
 
 export interface WizardPreview {
+  /** 0.17.6 — carries from buildWizardPreview() into commitWizard() so the latter doesn't re-derive scope. */
+  tenantId: string;
   periodType: WizardPeriodType;
   anchor: string;
   count: number;
@@ -151,20 +153,27 @@ export interface WizardPreview {
   periods: PeriodPreview[];
 }
 
-async function weeklyGroceriesMedian(): Promise<number> {
+async function weeklyGroceriesMedian(tenantId: string): Promise<number> {
+  // 0.17.6 — tenant-scoped via accounts JOIN. Pre-fix this aggregated
+  // groceries across every tenant in the database; on a multi-tenant
+  // deploy that meant tenant A's wizard preview included tenant B's
+  // grocery spend in the median.
   const r = await pool.query<{ week: string; total: number }>(
     `WITH groc AS (
        SELECT date_trunc('week', txn_date)::date AS week,
               SUM(-amount_cents)::bigint AS total
          FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
          JOIN categories c ON c.id = t.category_id
-        WHERE lower(c.name) = 'groceries'
+        WHERE a.tenant_id = $1
+          AND lower(c.name) = 'groceries'
           AND t.amount_cents < 0
           AND t.transfer_group_id IS NULL
           AND t.txn_date >= (now()::date - interval '8 weeks')
      GROUP BY 1
      )
      SELECT to_char(week, 'YYYY-MM-DD') AS week, total FROM groc ORDER BY total`,
+    [tenantId],
   );
   if (r.rowCount === 0) return 0;
   const sorted = r.rows.map((row) => Number(row.total)).sort((a, b) => a - b);
@@ -196,10 +205,16 @@ interface VehicleFuelRow {
   assigned_miles: number;
 }
 
-async function routeDrivenWeekly(): Promise<{
+async function routeDrivenWeekly(tenantId: string): Promise<{
   fuelCents: number;
   tollsCents: number;
 }> {
+  // 0.17.6 — tenant scope. Vehicles + commute_routes both gained
+  // tenant_id in 0.11.0 (multi-tenant phase) but this aggregation
+  // never picked it up; on a multi-tenant deploy, tenant A's
+  // wizard preview would mix in tenant B's vehicles and tolls.
+  // fuel_prices is global (it's an EIA-driven price index) — no
+  // tenant scope needed there.
   const vehicles = await pool.query<VehicleFuelRow>(
     `SELECT v.id, v.fuel_type,
             v.mpg::float8 AS mpg,
@@ -210,9 +225,10 @@ async function routeDrivenWeekly(): Promise<{
               AS assigned_miles
        FROM vehicles v
   LEFT JOIN route_vehicle_assignments a ON a.vehicle_id = v.id
-  LEFT JOIN commute_routes cr ON cr.id = a.route_id AND cr.active
-      WHERE v.active
+  LEFT JOIN commute_routes cr ON cr.id = a.route_id AND cr.active AND cr.tenant_id = $1
+      WHERE v.active AND v.tenant_id = $1
    GROUP BY v.id`,
+    [tenantId],
   );
   const prices = await pool.query<{ fuel_type: string; price_cents_per_gallon: number }>(
     `SELECT fuel_type, price_cents_per_gallon FROM fuel_prices`,
@@ -251,7 +267,10 @@ async function routeDrivenWeekly(): Promise<{
           FROM route_vehicle_assignments
       GROUP BY route_id
      ) crossings ON crossings.route_id = cr.id
-      WHERE cr.active AND cr.toll_per_crossing_cents IS NOT NULL`,
+      WHERE cr.active
+        AND cr.toll_per_crossing_cents IS NOT NULL
+        AND cr.tenant_id = $1`,
+    [tenantId],
   );
 
   return {
@@ -262,9 +281,12 @@ async function routeDrivenWeekly(): Promise<{
 
 /** Period-level savings suggestion: goal-required across active goals. */
 async function goalRequiredForPeriod(
+  tenantId: string,
   periodEnd: string,
   periodDays: number,
 ): Promise<number> {
+  // 0.17.6 — tenant scope. savings_goals has tenant_id since
+  // 0.11.0 multi-tenant; the wizard never filtered.
   const goals = await pool.query<{
     target_amount_cents: number;
     current_amount_cents: number;
@@ -273,7 +295,8 @@ async function goalRequiredForPeriod(
     `SELECT target_amount_cents, current_amount_cents,
             to_char(target_date, 'YYYY-MM-DD') AS target_date
        FROM savings_goals
-      WHERE target_date IS NOT NULL`,
+      WHERE target_date IS NOT NULL AND tenant_id = $1`,
+    [tenantId],
   );
   let total = 0;
   for (const g of goals.rows) {
@@ -324,6 +347,15 @@ function instancesIn(
 }
 
 export interface WizardInput {
+  /**
+   * 0.17.6 — tenant scope, REQUIRED. Pre-fix the wizard read
+   * bills/income/vehicles/routes/transactions across every
+   * tenant and INSERTed budget rows with tenant_id=NULL,
+   * making them invisible from /budgets. The route now passes
+   * the caller's tenantId; every helper joins through accounts
+   * or filters by tenant_id directly.
+   */
+  tenantId: string;
   periodType: WizardPeriodType;
   anchor: string;
   count: number;
@@ -345,8 +377,10 @@ export interface WizardInput {
 }
 
 export async function buildWizardPreview(input: WizardInput): Promise<WizardPreview> {
-  const groceriesWeekly = await weeklyGroceriesMedian();
-  const { fuelCents: fuelWeekly, tollsCents: tollsWeekly } = await routeDrivenWeekly();
+  const groceriesWeekly = await weeklyGroceriesMedian(input.tenantId);
+  const { fuelCents: fuelWeekly, tollsCents: tollsWeekly } = await routeDrivenWeekly(
+    input.tenantId,
+  );
 
   // Per-wizard-run overrides win over the global setting. Whole-number
   // percentages; outside-range values fall back to the global / default.
@@ -370,13 +404,15 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
   const bills = (
     await pool.query<BillRow>(
       `SELECT id, name, amount_cents, frequency, next_due_date
-         FROM bills WHERE active`,
+         FROM bills WHERE active AND tenant_id = $1`,
+      [input.tenantId],
     )
   ).rows;
   const income = (
     await pool.query<IncomeRow>(
       `SELECT id, name, amount_cents, frequency, next_expected_date
-         FROM recurring_income WHERE active`,
+         FROM recurring_income WHERE active AND tenant_id = $1`,
+      [input.tenantId],
     )
   ).rows;
 
@@ -397,7 +433,7 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
 
     // Savings suggestions — computed BEFORE the user's chosen value so
     // the four numbers are always visible.
-    const goalRequiredCents = await goalRequiredForPeriod(end, days);
+    const goalRequiredCents = await goalRequiredForPeriod(input.tenantId, end, days);
     const pctIncomeCents = Math.round(incomeTotal * (savingsIncomePct / 100));
     const preFlexCents =
       incomeTotal - billsTotal - groceriesCents - fuelCents - tollsCents - miscCents;
@@ -440,6 +476,7 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
   }
 
   return {
+    tenantId: input.tenantId,
     periodType: input.periodType,
     anchor: input.anchor,
     count: input.count,
@@ -461,9 +498,17 @@ export interface CommitResult {
 export async function commitWizard(
   preview: WizardPreview,
 ): Promise<CommitResult> {
+  // 0.17.6 — categories.tenant_id may be NULL (system-seeded defaults)
+  // OR the tenant's own. We want either match. The seeded defaults are
+  // the common case (every tenant starts with them), but tenants can
+  // create custom categories of the same name; in that case we prefer
+  // the tenant's own.
   const catLookup = await pool.query<{ name: string; id: string }>(
-    `SELECT lower(name) AS name, id FROM categories
-      WHERE lower(name) IN ('groceries', 'gas & fuel', 'tolls', 'miscellaneous', 'savings')`,
+    `SELECT DISTINCT ON (lower(name)) lower(name) AS name, id FROM categories
+      WHERE lower(name) IN ('groceries', 'gas & fuel', 'tolls', 'miscellaneous', 'savings')
+        AND (tenant_id = $1 OR tenant_id IS NULL)
+      ORDER BY lower(name), tenant_id NULLS LAST`,
+    [preview.tenantId],
   );
   const byName = new Map(catLookup.rows.map((r) => [r.name, r.id]));
   const groceriesCat = byName.get('groceries') ?? null;
@@ -492,21 +537,27 @@ export async function commitWizard(
     ];
     for (const e of editableInputs) {
       if (e.amount <= 0 || e.catId === null) continue;
+      // 0.17.6 — dup-check + INSERT now both tenant-scoped. Pre-fix
+      // the dup-check would falsely-positive across tenants (two
+      // households running the wizard on the same period would each
+      // create one and skip the other) and the INSERT would orphan
+      // the row with tenant_id=NULL.
       const existing = await pool.query(
         `SELECT 1 FROM budgets
-          WHERE period_month = $1::date
-            AND category_id = $2
+          WHERE tenant_id = $1
+            AND period_month = $2::date
+            AND category_id = $3
           LIMIT 1`,
-        [p.start, e.catId],
+        [preview.tenantId, p.start, e.catId],
       );
       if (existing.rowCount! > 0) {
         cSkipped++;
         continue;
       }
       await query(
-        `INSERT INTO budgets (period_month, period_type, category_id, amount_cents, note)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [p.start, preview.periodType, e.catId, e.amount, e.note],
+        `INSERT INTO budgets (tenant_id, period_month, period_type, category_id, amount_cents, note)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [preview.tenantId, p.start, preview.periodType, e.catId, e.amount, e.note],
       );
       cCreated++;
     }
@@ -515,17 +566,20 @@ export async function commitWizard(
       if (bill.amount_cents <= 0) continue;
       const existing = await pool.query(
         `SELECT 1 FROM budgets
-          WHERE period_month = $1::date AND bill_id = $2 LIMIT 1`,
-        [p.start, bill.id],
+          WHERE tenant_id = $1
+            AND period_month = $2::date
+            AND bill_id = $3
+          LIMIT 1`,
+        [preview.tenantId, p.start, bill.id],
       );
       if (existing.rowCount! > 0) {
         cSkipped++;
         continue;
       }
       await query(
-        `INSERT INTO budgets (period_month, period_type, bill_id, amount_cents)
-         VALUES ($1, $2, $3, $4)`,
-        [p.start, preview.periodType, bill.id, bill.amount_cents],
+        `INSERT INTO budgets (tenant_id, period_month, period_type, bill_id, amount_cents)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [preview.tenantId, p.start, preview.periodType, bill.id, bill.amount_cents],
       );
       cCreated++;
     }

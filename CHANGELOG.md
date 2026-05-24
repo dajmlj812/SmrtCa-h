@@ -9,11 +9,99 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.5 shipped. 0.17.5 makes the AI normalize button
-charge the AI-assistant quota counter (it wasn't, so /billing
-showed 0 even after thousands of normalize calls) and prompts
-the user before re-running AI on already-normalized rows
-instead of silently skipping them._
+_0.17.0–0.17.6 shipped. 0.17.6 fixes the AutoMagic budget
+wizard, which had been silently creating orphan budget rows
+with `tenant_id = NULL` since the 0.11.0 multi-tenant phase —
+invisible from any /budgets view. Also closes the related
+cross-tenant leak in the wizard's preview aggregations._
+
+---
+
+## [0.17.6] — 2026-05-24 — Fix: AutoMagic budget wizard tenant scoping
+
+The AutoMagic budget wizard (`/api/budgets/wizard/*`) predated
+the 0.11.0 multi-tenant phase and was missed in the 0.14.x
+isolation hardening. Bug surfaced on the smrtcash-test deploy
+when an operator ran the wizard, got "Created 61 budget rows",
+and couldn't find a single one on the /budgets page.
+
+### Three layered bugs
+
+1. **`commitWizard` INSERTed budgets without `tenant_id`**.
+   `budgets.tenant_id` was added as nullable in migration 017
+   and never made NOT NULL, so the INSERTs succeeded but
+   produced rows invisible to `/api/budgets` (which filters
+   `WHERE tenant_id = $1`). The 61 created rows were orphans.
+
+2. **`buildWizardPreview` cross-tenant leak**. The preview's
+   grocery-median calculation read `transactions` with no
+   tenant join; route-driven fuel + tolls read `vehicles`
+   and `commute_routes` without filtering by `tenant_id`;
+   bills and recurring_income were read with no filter
+   either. On a multi-tenant deploy tenant A's wizard would
+   include tenant B's data in the budget suggestions.
+
+3. **`goalRequiredForPeriod` cross-tenant leak**. Same shape —
+   `savings_goals` read without tenant filter.
+
+### Fix
+
+- `WizardInput` gains a required `tenantId` field. Threaded
+  through `buildWizardPreview` → all helpers
+  (`weeklyGroceriesMedian`, `routeDrivenWeekly`,
+  `goalRequiredForPeriod`) and into the resulting
+  `WizardPreview` so `commitWizard` reads it from the
+  preview object (single source of truth, no re-derive).
+- `commitWizard` dup-check + INSERTs now both tenant-scoped.
+  Categories lookup uses `(tenant_id = $1 OR tenant_id IS NULL)`
+  with DISTINCT ON to prefer the tenant's own custom category
+  over a system seed of the same name.
+- `budget-wizard.ts` route uses `requireTenant` on both
+  preview + commit and threads it into the input. `parseInput`
+  now returns `Omit<WizardInput, 'tenantId'>` so the parser
+  stays pure and tenant scope lives at the route layer.
+
+### Migration 034 — backfill orphans + NOT NULL
+
+- Single-tenant deploys (like smrtcash-test): the migration
+  backfills all `tenant_id = NULL` budget rows to the only
+  tenant. The 61 orphans on the test box become visible to
+  the Default tenant on apply.
+- Multi-tenant deploys: orphans are ambiguous (we'd be
+  guessing which tenant a wizard run was for), so the
+  migration `DELETE`s them. They were never reachable from
+  any UI; no in-app behavior changes.
+- Final step: `ALTER COLUMN tenant_id SET NOT NULL` — any
+  future regression of the same bug fails at INSERT time
+  instead of silently creating orphans.
+
+### Tests
+
+Two existing tests in `tests/integration/budget-wizard.test.ts`
+and one in `tests/integration/commute-routes.test.ts` were
+exploiting the cross-tenant leak — they seeded vehicles /
+routes / savings_goals without `tenant_id` and relied on the
+no-filter SELECT to find them. With the fix those SELECTs
+filter correctly, so the seeds had to be updated to include
+`tenant_id = (SELECT id FROM tenants WHERE slug='default')`.
+Full suite green: 743 server + 6 web.
+
+### Operator notes
+
+- After deploying 0.17.6, **your 61 orphan budgets become
+  visible** automatically (single-tenant deploy + migration
+  backfill). No re-running of AutoMagic needed; just navigate
+  to /budgets.
+- The /budgets page shows one month at a time. If your
+  AutoMagic run covered multiple weeks (e.g. `weekly` cadence
+  × 12), use the month picker to find each period. The
+  budget-vs-actual `asOf` mode picks the active period for
+  the selected date.
+- If your run created budgets for non-monthly periods (weekly,
+  biweekly, semimonthly), those still write to the same
+  `budgets` table; the budget-vs-actual route already handles
+  any `period_type`. They render on whatever month the
+  `period_month` anchor falls in.
 
 ---
 

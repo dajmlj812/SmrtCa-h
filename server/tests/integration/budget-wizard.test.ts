@@ -175,10 +175,14 @@ describe('AutoMagic budget wizard', () => {
 
   it('preview computes fuel cost from active vehicles + cached price', async () => {
     // 30 mpg, 250 weekly miles, regular gas at $3.50/gal.
+    // 0.17.6 — vehicle must be scoped to the test's default tenant
+    // since the wizard preview now joins via tenant_id (the old
+    // no-tenant-filter query was a cross-tenant leak).
     await pool.query(
       `INSERT INTO vehicles
-         (name, fuel_type, mpg, weekly_avg_miles)
-       VALUES ('Civic', 'regular', 30, 250)`,
+         (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ((SELECT id FROM tenants WHERE slug='default'),
+               'Civic', 'regular', 30, 250)`,
     );
     await pool.query(
       `INSERT INTO fuel_prices (fuel_type, price_cents_per_gallon, source)
@@ -196,17 +200,21 @@ describe('AutoMagic budget wizard', () => {
 
   it('preview sums tolls from active commute routes with assignments', async () => {
     // Two active routes, each with a per-crossing toll + a vehicle taking it.
+    // 0.17.6 — vehicles + routes must be tenant-scoped now.
     const vehicle = await pool.query<{ id: string }>(
-      `INSERT INTO vehicles (name, fuel_type, mpg, weekly_avg_miles)
-       VALUES ('Daily', 'regular', 30, 0) RETURNING id`,
+      `INSERT INTO vehicles (tenant_id, name, fuel_type, mpg, weekly_avg_miles)
+       VALUES ((SELECT id FROM tenants WHERE slug='default'),
+               'Daily', 'regular', 30, 0) RETURNING id`,
     );
     const r1 = await pool.query<{ id: string }>(
-      `INSERT INTO commute_routes (name, distance_miles, toll_per_crossing_cents)
-       VALUES ('Hwy 99', 20, 450) RETURNING id`, // $4.50 per crossing
+      `INSERT INTO commute_routes (tenant_id, name, distance_miles, toll_per_crossing_cents)
+       VALUES ((SELECT id FROM tenants WHERE slug='default'),
+               'Hwy 99', 20, 450) RETURNING id`,
     );
     const r2 = await pool.query<{ id: string }>(
-      `INSERT INTO commute_routes (name, distance_miles, toll_per_crossing_cents)
-       VALUES ('Bay Bridge', 10, 250) RETURNING id`, // $2.50 per crossing
+      `INSERT INTO commute_routes (tenant_id, name, distance_miles, toll_per_crossing_cents)
+       VALUES ((SELECT id FROM tenants WHERE slug='default'),
+               'Bay Bridge', 10, 250) RETURNING id`,
     );
     await pool.query(
       `INSERT INTO route_vehicle_assignments (route_id, vehicle_id, crossings_per_week)
@@ -215,8 +223,9 @@ describe('AutoMagic budget wizard', () => {
     );
     // Inactive route with toll should NOT contribute.
     await pool.query(
-      `INSERT INTO commute_routes (name, distance_miles, toll_per_crossing_cents, active)
-       VALUES ('Old route', 5, 9999, false)`,
+      `INSERT INTO commute_routes (tenant_id, name, distance_miles, toll_per_crossing_cents, active)
+       VALUES ((SELECT id FROM tenants WHERE slug='default'),
+               'Old route', 5, 9999, false)`,
     );
     const r = await app.inject({
       method: 'POST',

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { requireTenant } from '../auth/rbac.js';
 import {
   type WizardInput,
   type WizardPeriodType,
@@ -14,7 +15,10 @@ const TYPES: WizardPeriodType[] = [
   'monthly',
 ];
 
-function parseInput(body: unknown): WizardInput | { error: string } {
+// 0.17.6 — parser returns everything EXCEPT tenantId, which the route
+// adds before passing to buildWizardPreview. Keeps the parser pure
+// (input → input) and the tenant scoping at the route layer.
+function parseInput(body: unknown): Omit<WizardInput, 'tenantId'> | { error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
   const periodType = b.periodType as WizardPeriodType;
   if (!TYPES.includes(periodType)) {
@@ -77,20 +81,28 @@ function parseInput(body: unknown): WizardInput | { error: string } {
 
 export async function budgetWizardRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/budgets/wizard/preview', async (req, reply) => {
+    // 0.17.6 — tenant scope. Pre-fix the preview aggregated grocery
+    // medians + vehicle/route fuel + bills + recurring income across
+    // every tenant in the DB, and the commit INSERTed budget rows
+    // with tenant_id=NULL — invisible from /budgets.
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const parsed = parseInput(req.body);
     if ('error' in parsed) {
       return reply.code(400).send({ error: parsed.error });
     }
-    const preview = await buildWizardPreview(parsed);
+    const preview = await buildWizardPreview({ ...parsed, tenantId });
     return { preview };
   });
 
   app.post('/api/budgets/wizard/commit', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const parsed = parseInput(req.body);
     if ('error' in parsed) {
       return reply.code(400).send({ error: parsed.error });
     }
-    const preview = await buildWizardPreview(parsed);
+    const preview = await buildWizardPreview({ ...parsed, tenantId });
     const result = await commitWizard(preview);
     return { result };
   });
