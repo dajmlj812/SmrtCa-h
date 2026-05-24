@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
@@ -49,6 +49,7 @@ import { calendarRoutes } from './routes/calendar.js';
 import { portabilityRoutes } from './routes/portability.js';
 import { taxYearRoutes } from './routes/tax-year.js';
 import { anomalyRoutes } from './routes/anomalies.js';
+import { billingRoutes } from './routes/billing.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { startAutoSyncScheduler } from './domain/auto-sync.js';
@@ -79,6 +80,9 @@ const PUBLIC_PATHS = new Set<string>([
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/providers',
+  // 0.15.1: Stripe webhook posts here. No session cookie; auth is
+  // via Stripe-signature header which the route handler verifies.
+  '/api/billing/webhook',
 ]);
 const PUBLIC_PREFIXES = ['/api/auth/oidc/', '/api/invitations/'];
 
@@ -101,6 +105,28 @@ export async function buildApp(
   await applyBootSettings();
 
   const app = Fastify({ logger: opts.logger ?? true });
+
+  // 0.15.1: replace Fastify's default JSON parser with one that ALSO
+  // stashes the raw request body on `req.rawBody`. Required by the
+  // Stripe webhook route — `stripe.webhooks.constructEvent` verifies
+  // the HMAC signature against the original bytes, NOT the
+  // re-serialized JSON. Cost: one Buffer per JSON request, ~1 KB
+  // typical; negligible.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'buffer' },
+    (req, body, done) => {
+      try {
+        // Empty bodies are valid (some PATCH-without-body callers).
+        const buf = body as Buffer;
+        const parsed = buf.length === 0 ? {} : JSON.parse(buf.toString('utf8'));
+        (req as FastifyRequest & { rawBody?: Buffer }).rawBody = buf;
+        done(null, parsed);
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    },
+  );
 
   await app.register(cors, { origin: true, credentials: true });
   await app.register(cookie, { secret: config.auth.sessionSecret });
@@ -217,6 +243,7 @@ export async function buildApp(
   await app.register(portabilityRoutes);
   await app.register(taxYearRoutes);
   await app.register(anomalyRoutes);
+  await app.register(billingRoutes);
 
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.

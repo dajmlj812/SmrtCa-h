@@ -9,11 +9,147 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.15.x — SaaS pivot in progress. 0.15.0 ships the schema +
-entitlement core. Pricing and feature gating locked in
-`docs/SAAS_PLAN.md`. Slices 0.15.1 through 0.15.5 still pending
-(Stripe checkout/webhook, route gating, billing UI, dunning,
+_0.15.x — SaaS pivot in progress. 0.15.0 + 0.15.1 shipped (schema
++ entitlements + Stripe Checkout/webhook/portal). Slices 0.15.2
+through 0.15.5 still pending (route gating, billing UI, dunning,
 SaaS-readiness)._
+
+---
+
+## [0.15.1] — 2026-05-23 — SaaS pivot, slice 2: Stripe checkout + webhook + portal
+
+Second slice. Wires Stripe up against the entitlement core from
+0.15.0. After this slice:
+
+- A user can hit `POST /api/billing/checkout` and get a Stripe
+  Checkout URL with the right price + 14-day trial.
+- Stripe POSTs subscription events to `/api/billing/webhook`,
+  signature-verified, idempotent, dispatched to handlers that
+  UPSERT the `subscriptions` row.
+- A subscriber can hit `GET /api/billing/portal` and get
+  redirected to the Stripe Customer Portal (change plan, update
+  card, cancel).
+
+Routes still NOT gated — that's 0.15.2. This slice just gets the
+plumbing in place.
+
+### Dependencies
+
+- Added `stripe@^22.1.1` to server dependencies. SDK uses its
+  default API version (newest at install time); the webhook
+  handler reads `current_period_end` from the new location
+  (`subscription.items.data[0].current_period_end`) with a
+  fallback to the legacy top-level field.
+
+### New code
+
+- `server/src/billing/stripe.ts` — lazy-init Stripe client. No
+  throw at import time so tests + dev runs without Stripe
+  configured don't blow up.
+- `server/src/billing/plans.ts` — lookup_key → Plan + Cadence
+  map. Single source of truth (matches `scripts/stripe-setup.mjs`
+  output and Stripe dashboard exactly). `planFromLookupKey`,
+  `lookupKeyFor`, `isKnownLookupKey`, `ALL_LOOKUP_KEYS`.
+- `server/src/billing/webhook-handlers.ts` — pure functions that
+  apply Stripe events to our DB. Each handler:
+  - Reads `tenant_id` + `smrtcash_plan` from `subscription.metadata`
+    (set by checkout). Missing/invalid metadata = silent no-op.
+  - UPSERTs the row (subscription.created and subscription.updated
+    share a single handler — same shape).
+  - subscription.deleted flips status to `canceled` and preserves
+    `cancel_at_period_end` + `current_period_end` so the
+    "I paid through month-end" grace still works.
+- `server/src/routes/billing.ts`:
+  - `POST /api/billing/checkout` — accepts `{ lookupKey }`,
+    resolves Stripe price, creates a 14-day trial subscription
+    Checkout session with `payment_method_collection: 'if_required'`,
+    stamps `tenant_id` + `smrtcash_plan` into
+    `subscription_data.metadata`. Reuses existing
+    `stripe_customer_id` on upgrades; prefills `customer_email`
+    on first-time signups.
+  - `POST /api/billing/webhook` — public, signature-verified,
+    idempotent via `stripe_processed_events`. Dispatches to the
+    handlers. On handler error, rolls back the idempotency claim
+    so Stripe's retry can re-attempt.
+  - `GET /api/billing/portal` — Stripe Customer Portal redirect
+    using the tenant's `stripe_customer_id`.
+
+### app.ts changes
+
+- Custom JSON content-type parser that stashes the raw request
+  body on `req.rawBody`. Required for Stripe signature
+  verification — the SDK rejects re-serialized JSON. Cost:
+  one Buffer allocation per JSON request (~1 KB), negligible.
+- `/api/billing/webhook` added to `PUBLIC_PATHS` so it bypasses
+  the session-cookie auth gate. Stripe-signature is the auth.
+
+### Tests (+17)
+
+- `tests/unit/billing-plans.test.ts` (5): lookup-key round-trip,
+  unknown-key handling.
+- `tests/unit/billing-webhook-handlers.test.ts` (7): UPSERT from
+  hand-built Stripe event payloads (no SDK calls); missing
+  metadata = no-op; UPSERT is single-row per tenant; past_due
+  recorded verbatim; subscription.deleted preserves period_end.
+- `tests/integration/billing-routes.test.ts` (5): 503 when
+  Stripe not configured; 400 on missing/invalid signature with a
+  dummy webhook secret.
+
+Total: **672 tests pass** (655 + 17).
+
+### What's deliberately NOT here
+
+- The Stripe SDK is not driven against the live test-mode account
+  in tests — that's covered by manual smoke testing via
+  `stripe trigger customer.subscription.created` (see
+  docs/STRIPE_SETUP.md). Adding a `stripe-mock` integration is
+  premature optimization for a one-engineer team.
+- No `/api/billing/status` endpoint yet — the web UI in 0.15.3
+  will read the current plan via the entitlements layer.
+- No dunning, no grace timer, no downgrade-seat-cleanup — all
+  0.15.4.
+
+### Files
+
+```
+server/package.json                                  (+stripe ^22.1.1)
+server/src/billing/stripe.ts                         (new)
+server/src/billing/plans.ts                          (new)
+server/src/billing/webhook-handlers.ts               (new)
+server/src/routes/billing.ts                         (new — 3 routes)
+server/src/app.ts                                    (raw-body parser + register)
+server/tests/unit/billing-plans.test.ts              (new — 5)
+server/tests/unit/billing-webhook-handlers.test.ts   (new — 7)
+server/tests/integration/billing-routes.test.ts      (new — 5)
+package.json + server/package.json + web/package.json (0.15.0 → 0.15.1)
+```
+
+### Manual smoke test
+
+With Stripe CLI running (`stripe listen --forward-to localhost:4000/api/billing/webhook`):
+
+```sh
+# Trigger a subscription event and watch the DB.
+stripe trigger customer.subscription.created
+# (Use --override to inject our metadata for a real end-to-end
+# happy path — Stripe's default trigger doesn't know about our
+# tenant_id schema. See docs/STRIPE_SETUP.md.)
+```
+
+For a true end-to-end test, open the checkout URL from
+`POST /api/billing/checkout` and complete with test card
+`4242 4242 4242 4242`. Webhook should fire and a row should
+appear in `subscriptions` for the tenant.
+
+### Coming next
+
+- **0.15.2** — apply `requireFeature` to ~14 premium routes;
+  new test file `tests/security/entitlements.test.ts` verifies
+  each gate.
+- **0.15.3** — `/billing` page in web.
+- **0.15.4** — dunning + grace + cancellation UX.
+- **0.15.5** — SaaS readiness (signup, drop self-host docs,
+  KMS-backed per-tenant keys).
 
 ---
 
