@@ -146,6 +146,22 @@ a:hover {
   flex-direction: column;
   gap: 4px;
 }
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.nav-group:last-child { margin-bottom: 0; }
+.nav-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sidebar-muted);
+  opacity: 0.65;
+  padding: 6px 12px 2px;
+}
 .nav a {
   color: var(--sidebar-muted);
   padding: 10px 12px;
@@ -1852,6 +1868,13 @@ a:hover { color: var(--accent-hover); text-decoration: none; }
   -webkit-text-fill-color: transparent;
 }
 .nav { gap: 2px; padding: 0 4px; }
+.nav-group { gap: 1px; margin-bottom: 12px; }
+.nav-group:last-child { margin-bottom: 0; }
+.nav-group-label {
+  color: #6b7290;
+  opacity: 0.8;
+  padding: 8px 12px 4px;
+}
 .nav a {
   color: #aab2c5;
   padding: 8px 12px;

@@ -178,34 +178,52 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
           Smrt<span>Cash</span>
         </div>
         <nav className="nav">
-          <NavLink to="/" end>
-            Dashboard
-          </NavLink>
-          <NavLink to="/accounts">Accounts</NavLink>
-          <NavLink to="/transactions">Transactions</NavLink>
-          <NavLink to="/uncategorized">Uncategorized</NavLink>
-          <NavLink to="/transfers">Transfers</NavLink>
-          <NavLink to="/budgets">Budgets</NavLink>
-          <NavLink to="/goals">Goals</NavLink>
-          <NavLink to="/retirement">Retirement</NavLink>
-          <NavLink to="/bills">Bills</NavLink>
-          <NavLink to="/subscriptions">Subscriptions</NavLink>
-          <NavLink to="/vehicles">Vehicles</NavLink>
-          <NavLink to="/routes">Routes</NavLink>
-          <NavLink to="/categories">Categories</NavLink>
-          <NavLink to="/import">Import</NavLink>
-          <NavLink to="/connections">Connections</NavLink>
-          <NavLink to="/assistant">Assistant</NavLink>
-          <NavLink to="/sharing">Sharing</NavLink>
-          <NavLink to="/calendar">Calendar</NavLink>
-          <NavLink to="/tax">Tax</NavLink>
-          <NavLink to="/anomalies">Anomalies</NavLink>
-          <NavLink to="/reports">Reports</NavLink>
-          <NavLink to="/workspace">Workspace</NavLink>
+          <div className="nav-group">
+            <div className="nav-group-label">Overview</div>
+            <NavLink to="/" end>
+              Dashboard
+            </NavLink>
+            <NavLink to="/calendar">Calendar</NavLink>
+            <NavLink to="/assistant">Assistant</NavLink>
+          </div>
+          <div className="nav-group">
+            <div className="nav-group-label">Money</div>
+            <NavLink to="/accounts">Accounts</NavLink>
+            <NavLink to="/transactions">Transactions</NavLink>
+            <NavLink to="/uncategorized">Uncategorized</NavLink>
+            <NavLink to="/transfers">Transfers</NavLink>
+            <NavLink to="/categories">Categories</NavLink>
+          </div>
+          <div className="nav-group">
+            <div className="nav-group-label">Planning</div>
+            <NavLink to="/budgets">Budgets</NavLink>
+            <NavLink to="/goals">Goals</NavLink>
+            <NavLink to="/bills">Bills</NavLink>
+            <NavLink to="/subscriptions">Subscriptions</NavLink>
+            <NavLink to="/retirement">Retirement</NavLink>
+          </div>
+          <div className="nav-group">
+            <div className="nav-group-label">Insights</div>
+            <NavLink to="/reports">Reports</NavLink>
+            <NavLink to="/tax">Tax</NavLink>
+            <NavLink to="/anomalies">Anomalies</NavLink>
+          </div>
+          <div className="nav-group">
+            <div className="nav-group-label">Tools</div>
+            <NavLink to="/import">Import</NavLink>
+            <NavLink to="/connections">Connections</NavLink>
+            <NavLink to="/vehicles">Vehicles</NavLink>
+            <NavLink to="/routes">Routes</NavLink>
+          </div>
+          <div className="nav-group">
+            <div className="nav-group-label">Household</div>
+            <NavLink to="/sharing">Sharing</NavLink>
+            <NavLink to="/workspace">Workspace</NavLink>
+          </div>
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.9.5
+          SmrtCash · v0.13.6
           <button
             className="btn secondary logout-btn"
             type="button"
