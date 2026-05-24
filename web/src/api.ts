@@ -527,9 +527,14 @@ export interface NormalizationRule {
   normalized_merchant: string | null;
   category_id: string | null;
   source: 'manual' | 'ai';
+  /** 0.13.6: disable a noisy rule without deleting it. Defaults to true. */
+  enabled: boolean;
+  /** 0.13.6: higher wins on overlapping matches. Defaults to 0. */
+  priority: number;
   match_count: number;
   last_applied_at: string | null;
   created_at: string;
+  tenant_id: string;
 }
 
 export interface TransactionSplit {

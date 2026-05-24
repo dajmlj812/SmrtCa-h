@@ -9,10 +9,114 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.5 shipped. **Original backlog complete** except native
-mobile (deferred). Open backlog item: non-AI rules engine for
-auto-categorization. Future direction is whatever the user picks
-next._
+_0.13.0–0.13.6 shipped. **Original backlog fully complete** except
+native mobile (deferred — PWA covers it). Future direction is
+whatever the user picks next._
+
+---
+
+## [0.13.6] — 2026-05-23 — Non-AI rules engine completion (closes backlog)
+
+The last named backlog item. The Phase-6.2 `normalization_rules`
+table already had CRUD + manual apply + the "Apply to similar?"
+prompt — what was missing was running rules **automatically during
+import** (so freshly-imported transactions arrive categorized
+without a manual button click), plus tenant scoping (the table
+predated multi-tenant and was leaking across households).
+
+### Schema (migration 029)
+
+- `normalization_rules.tenant_id uuid REFERENCES tenants(id) ON
+  DELETE CASCADE` — existing rows backfilled to the Default tenant;
+  rows with no tenant get dropped (would be invisible under the
+  new model).
+- `normalization_rules.enabled boolean NOT NULL DEFAULT true` —
+  pause a noisy rule without deleting it.
+- `normalization_rules.priority int NOT NULL DEFAULT 0` — higher
+  wins on overlapping matches; the apply loop iterates ASC so the
+  highest-priority UPDATE runs last and its values overwrite.
+- Old `lower(pattern)` unique index replaced with composite
+  `(tenant_id, lower(pattern))` so two tenants can each register
+  the same pattern.
+- Partial index `(tenant_id, priority) WHERE enabled = true` keeps
+  the import-hot-path SELECT cheap as rule counts grow.
+
+### Server
+
+- **New `domain/rules-applier.ts`** — `applyRulesToTransactions
+  (tenantId, transactionIds[])` selects enabled rules for the
+  tenant in ASC priority order and runs one UPDATE per rule over
+  the given ids. Always skips rows where
+  `normalization_status='manual'`. Updates `match_count` +
+  `last_applied_at` so the rules list can show usage.
+- **`persistBatch()` hook** — after a successful import,
+  `applyRulesToTransactions` runs over the freshly-inserted ids
+  BEFORE the existing anomaly scan. Both hooks are awaited + try/
+  catch wrapped so a hook failure can't break the import itself.
+  Rules-before-anomaly ordering matters: the anomaly detector's
+  "unusual-at-merchant" rule groups by `normalized_merchant`, so
+  the rules pass cleaning the merchant name first means the
+  detector groups correctly.
+- **Tenant scoping on every route**:
+  - `GET /api/normalization-rules` filters by `req.user.tenantId`.
+  - `POST`/`PATCH`/`DELETE` all scope by tenant; POST inserts with
+    the user's active tenant_id automatically.
+  - `POST /preview` counts only the tenant's transactions (joins
+    via accounts).
+  - `POST /apply` selects only enabled rules for the tenant and
+    runs the UPDATE through an `accounts` join scoped to the same
+    tenant. Disabled rules are simply not selected.
+- **POST/PATCH accept `enabled` and `priority`** (both optional;
+  default to true/0).
+
+### Tests (+6 server)
+
+- `tests/integration/bulk-and-rules.test.ts` new `rules engine:
+  auto-apply on import + tenant scope (0.13.6)` describe:
+  - Auto-apply on import: a rule pre-exists, `persistBatch`
+    inserts a row, the row arrives with `normalized_merchant`,
+    `category_id`, and `normalization_status='normalized'` already
+    populated.
+  - Disabled rules do NOT fire on import.
+  - Rules engine never overwrites manual rows
+    (`applyRulesToTransactions` called directly).
+  - Higher-priority rule wins on overlapping matches.
+  - Tenant isolation: a rule on tenant B does not normalize
+    tenant A's imports.
+  - PATCH can toggle `enabled` + bump `priority`.
+- All 14 existing rules tests still pass under the new tenant
+  scoping (default test user is in the Default tenant, so they
+  Just Work).
+- Total: **571 tests** (565 server + 6 web), all green except 6
+  pre-existing portability failures (Windows-tar shell-out bug
+  in the dev environment — unchanged by this release).
+
+### Web
+
+- `web/src/api.ts` `NormalizationRule` interface extended with
+  `enabled`, `priority`, `tenant_id`. No new UI in this slice —
+  rules are still created via the existing "Apply to similar?"
+  prompt; the new toggles are reachable via the API directly.
+  A dedicated rules-management page is a candidate follow-up if
+  the usage warrants it.
+
+### Files
+
+```
+server/src/db/migrations/029_normalization_rules_tenant_scope.sql   (new)
+server/src/domain/rules-applier.ts                                  (new)
+server/src/import/importer.ts                                       (apply-rules hook)
+server/src/routes/normalization-rules.ts                            (tenant scope + enabled/priority)
+server/tests/integration/bulk-and-rules.test.ts                     (+6 tests)
+web/src/api.ts                                                      (interface fields)
+package.json + server/package.json + web/package.json               (0.13.5 → 0.13.6)
+```
+
+### What's next
+
+The original "Beyond — Backlog" list is now **fully complete**
+except for native mobile apps (still deferred — the PWA covers
+mobile). Future direction is whatever the user picks next.
 
 ---
 

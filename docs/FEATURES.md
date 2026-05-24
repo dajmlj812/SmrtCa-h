@@ -52,6 +52,7 @@ for phase detail and the [Changelog](../CHANGELOG.md) for per-release notes.
 | Bulk edits with optional "save as rule" | ✅ |
 | Bulk delete (with confirm) for cleanup | ✅ |
 | Learned normalization rules (manual edits become persistent patterns) | ✅ |
+| Non-AI rules engine auto-applies during import (tenant-scoped, with enable/priority) | ✅ |
 | Transaction splits (one transaction → multiple categories) | ✅ |
 | Dedicated uncategorized review queue with inline categorization | ✅ |
 | Transfer linking between your own accounts | ✅ |
@@ -148,7 +149,7 @@ for phase detail and the [Changelog](../CHANGELOG.md) for per-release notes.
 | Argon2id authentication | ✅ |
 | Encryption at rest (attachments & connection secrets AES-256-GCM; DB via host volume) | ✅ |
 | Hardened Docker container | ✅ |
-| Non-AI rules engine for auto-categorization | 💡 backlog |
+| Non-AI rules engine for auto-categorization (runs on import) | ✅ |
 
 ---
 

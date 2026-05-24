@@ -7,6 +7,8 @@ import {
   resetDb,
   seedAccount,
 } from '../setup/test-db.js';
+import { persistBatch } from '../../src/import/importer.js';
+import { applyRulesToTransactions } from '../../src/domain/rules-applier.js';
 
 async function seedTxn(opts: {
   accountId: string;
@@ -253,6 +255,212 @@ describe('Bulk edit + normalization rules + splits', () => {
         headers: { 'content-type': 'application/json' },
       });
       expect(r.statusCode).toBe(400);
+    });
+  });
+
+  // ── 0.13.6 — rules engine completion ─────────────────────────
+  describe('rules engine: auto-apply on import + tenant scope (0.13.6)', () => {
+    async function createRule(payload: {
+      pattern: string;
+      normalizedMerchant?: string;
+      categoryId?: string;
+      enabled?: boolean;
+      priority?: number;
+    }): Promise<string> {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/normalization-rules',
+        payload,
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(r.statusCode).toBe(201);
+      return r.json().rule.id;
+    }
+
+    function txn(date: string, amountCents: number, raw: string) {
+      return {
+        txnDate: date,
+        postDate: null,
+        amountCents,
+        rawDescription: raw,
+        sourceCategory: null,
+        sourceType: null,
+        memo: null,
+        balanceCents: null,
+      };
+    }
+
+    it('runs rules during persistBatch — imported rows arrive normalized', async () => {
+      await createRule({ pattern: 'ONSTAR', normalizedMerchant: 'OnStar', categoryId: groceries });
+      const result = await persistBatch(
+        accountId,
+        'test.csv',
+        'csv_generic',
+        [
+          txn('2026-05-01', -1500, 'POS DEBIT ONSTAR, LLC 888-4667827'),
+          txn('2026-05-02', -2500, 'TRADER JOES #523'),
+        ],
+        [],
+      );
+      expect(result.importedCount).toBe(2);
+
+      const rows = await pool.query<{
+        raw_description: string;
+        normalized_merchant: string | null;
+        category_id: string | null;
+        normalization_status: string;
+      }>(
+        `SELECT raw_description, normalized_merchant, category_id, normalization_status
+           FROM transactions WHERE account_id = $1 ORDER BY txn_date`,
+        [accountId],
+      );
+      const onstar = rows.rows.find((r) => r.raw_description.includes('ONSTAR'))!;
+      const tj = rows.rows.find((r) => r.raw_description.includes('TRADER'))!;
+      expect(onstar.normalized_merchant).toBe('OnStar');
+      expect(onstar.category_id).toBe(groceries);
+      expect(onstar.normalization_status).toBe('normalized');
+      // Trader Joes wasn't covered by any rule — stays as imported.
+      expect(tj.normalized_merchant).toBeNull();
+      expect(tj.normalization_status).toBe('pending');
+    });
+
+    it('disabled rules do NOT fire on import', async () => {
+      await createRule({
+        pattern: 'ONSTAR',
+        normalizedMerchant: 'OnStar',
+        enabled: false,
+      });
+      await persistBatch(
+        accountId,
+        'test.csv',
+        'csv_generic',
+        [txn('2026-05-01', -1500, 'ONSTAR LLC AUTOPAY')],
+        [],
+      );
+      const r = await pool.query<{ normalized_merchant: string | null }>(
+        `SELECT normalized_merchant FROM transactions WHERE account_id = $1`,
+        [accountId],
+      );
+      expect(r.rows[0]!.normalized_merchant).toBeNull();
+    });
+
+    it('rules engine does not overwrite manual rows', async () => {
+      // Seed a row with normalization_status='manual' that the user
+      // already named themselves. Then create a rule that would match
+      // and apply it directly — manual must survive.
+      const manualId = await seedTxn({
+        accountId,
+        date: '2026-05-01',
+        amountCents: -1500,
+        raw: 'ONSTAR LLC AUTOPAY',
+        status: 'manual',
+        merchant: 'My Custom Name',
+      });
+      const ruleId = await createRule({ pattern: 'ONSTAR', normalizedMerchant: 'OnStar' });
+      void ruleId;
+
+      const tenantR = await pool.query<{ id: string }>(
+        `SELECT id FROM tenants WHERE slug = 'default'`,
+      );
+      const out = await applyRulesToTransactions(tenantR.rows[0]!.id, [manualId]);
+      expect(out.updated).toBe(0);
+
+      const after = await pool.query<{ normalized_merchant: string }>(
+        `SELECT normalized_merchant FROM transactions WHERE id = $1`,
+        [manualId],
+      );
+      expect(after.rows[0]!.normalized_merchant).toBe('My Custom Name');
+    });
+
+    it('higher-priority rule wins on overlapping matches', async () => {
+      // Two rules both match "STARBUCKS" — priority 5 sets "Coffee",
+      // priority 1 sets "Restaurants". Priority 5 wins because the
+      // applier orders ASC and the LAST UPDATE overwrites.
+      const coffee = await pool.query<{ id: string }>(
+        `INSERT INTO categories (name) VALUES ('Coffee 0.13.6') RETURNING id`,
+      );
+      const coffeeId = coffee.rows[0]!.id;
+      await createRule({
+        pattern: 'STARBUCKS',
+        normalizedMerchant: 'Starbucks (generic)',
+        categoryId: restaurants,
+        priority: 1,
+      });
+      await createRule({
+        pattern: 'SBUX',
+        normalizedMerchant: 'Starbucks',
+        categoryId: coffeeId,
+        priority: 5,
+      });
+      await persistBatch(
+        accountId,
+        'test.csv',
+        'csv_generic',
+        [txn('2026-05-01', -650, 'SQ *SBUX STARBUCKS #4012 SEATTLE WA')],
+        [],
+      );
+      const r = await pool.query<{
+        normalized_merchant: string;
+        category_id: string;
+      }>(
+        `SELECT normalized_merchant, category_id FROM transactions WHERE account_id = $1`,
+        [accountId],
+      );
+      // Priority-5 rule wrote last → its merchant + category win.
+      expect(r.rows[0]!.normalized_merchant).toBe('Starbucks');
+      expect(r.rows[0]!.category_id).toBe(coffeeId);
+    });
+
+    it('tenant isolation — other tenants\' rules do not fire on this tenant\'s import', async () => {
+      // Create a second tenant + account + rule directly via SQL.
+      // The default-tenant test user has no rule, so the import
+      // should NOT be normalized.
+      const otherTenant = await pool.query<{ id: string }>(
+        `INSERT INTO tenants (name, slug) VALUES ('Other 0.13.6', 'other-0136')
+           RETURNING id`,
+      );
+      const otherAcct = await pool.query<{ id: string }>(
+        `INSERT INTO accounts (tenant_id, name, type, institution)
+           VALUES ($1, 'Other Acct', 'checking', 'X') RETURNING id`,
+        [otherTenant.rows[0]!.id],
+      );
+      void otherAcct;
+      await pool.query(
+        `INSERT INTO normalization_rules
+           (tenant_id, pattern, normalized_merchant)
+         VALUES ($1, 'ONSTAR', 'Other-Tenant OnStar')`,
+        [otherTenant.rows[0]!.id],
+      );
+
+      await persistBatch(
+        accountId,
+        'test.csv',
+        'csv_generic',
+        [txn('2026-05-01', -1500, 'ONSTAR LLC AUTOPAY')],
+        [],
+      );
+      const r = await pool.query<{ normalized_merchant: string | null }>(
+        `SELECT normalized_merchant FROM transactions WHERE account_id = $1`,
+        [accountId],
+      );
+      // Default tenant has no rule — must remain unnormalized.
+      expect(r.rows[0]!.normalized_merchant).toBeNull();
+    });
+
+    it('PATCH /api/normalization-rules/:id can toggle enabled + bump priority', async () => {
+      const ruleId = await createRule({
+        pattern: 'ONSTAR',
+        normalizedMerchant: 'OnStar',
+      });
+      const patch = await app.inject({
+        method: 'PATCH',
+        url: `/api/normalization-rules/${ruleId}`,
+        payload: { enabled: false, priority: 7 },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(patch.json().rule.enabled).toBe(false);
+      expect(patch.json().rule.priority).toBe(7);
     });
   });
 

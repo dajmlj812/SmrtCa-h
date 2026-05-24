@@ -242,14 +242,28 @@ export async function persistBatch(
     };
   });
 
-  // Run an anomaly scan over the freshly-imported rows. Awaited
-  // (not fire-and-forget) so concurrent vitest workers can't race
-  // each other's resetDb()'s — and so a real DB failure surfaces
-  // immediately instead of leaking. ANOMALY_ENABLED gates the work
-  // server-side; a real failure here is swallowed so the import
-  // still succeeds (the user wanted the rows persisted; an anomaly
-  // detection miss is recoverable via a manual scan).
+  // Post-commit hooks. Both are awaited (not fire-and-forget) so a
+  // failure surfaces immediately and concurrent vitest workers can't
+  // race each other's `resetDb()`s. Both are wrapped in try/catch so
+  // a hook failure cannot break the import itself — the user wanted
+  // the rows persisted, and the user can re-run either pass manually.
   if (result.tenantId && result.insertedIds.length > 0) {
+    // 0.13.6: apply this tenant's enabled normalization rules to
+    // the freshly-inserted rows BEFORE the anomaly scan. The scan
+    // benefits from the cleaned merchant names — "Starbucks" vs.
+    // "SQ *STARBUCKS #12 SEATTLE WA" both group correctly under
+    // the unusual-at-merchant detector once the rule has fired.
+    try {
+      const { applyRulesToTransactions } = await import(
+        '../domain/rules-applier.js'
+      );
+      await applyRulesToTransactions(result.tenantId, result.insertedIds);
+    } catch {
+      /* swallow — import wins; user can /api/normalization-rules/apply */
+    }
+
+    // 0.13.2: anomaly scan over the freshly-imported rows.
+    // ANOMALY_ENABLED gates the work server-side.
     try {
       const { scanTransactionsForAnomalies } = await import(
         '../domain/anomaly-detector.js'

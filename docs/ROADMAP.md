@@ -305,8 +305,8 @@ native mobile.
 
 - Multi-user / household mode with per-user permissions — ✅ **0.13.4** (per-account read/read_write tuning; 2026-05-23)
 - Tax-category tagging and year-end reports — ✅ **0.13.1** (2026-05-23)
-- Cryptocurrency tracking (Simplifi-style) — ✅ **0.13.3** (2026-05-23)
-- Non-AI rules engine for auto-categorization
+- Cryptocurrency tracking (Simplifi-style) — ✅ **0.13.3** + scheduled refresh ✅ **0.13.5** (2026-05-23)
+- Non-AI rules engine for auto-categorization — ✅ **0.13.6** (auto-apply on import + tenant scope + enable/priority; 2026-05-23)
 - Advanced cash-flow forecasting & spending-anomaly alerts — ✅ **0.13.2** (anomaly alerts; 2026-05-23)
 - Native mobile apps — only if the PWA proves insufficient (**deferred**)
 - Data export / portability tooling — ✅ **0.13.0** (2026-05-23)
