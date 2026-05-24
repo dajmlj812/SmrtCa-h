@@ -481,6 +481,19 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   "Payoff plan" view with snowball + avalanche calculators
   and projected payoff date based on current min payment +
   optional extra. Closes the YNAB gap.
+- **0.18.5** 📋 — **Branded HTML email shell + audit** (~1
+  day). Every outward email already returns both `text` and
+  `html` from its renderer (verification, password reset,
+  dunning, tenant + super-admin invitations), but the HTML
+  bodies are minimal and each renderer hand-codes its own
+  styling. Slice goal: a shared HTML wrapper
+  (`renderEmailShell({title, intro, ctaText, ctaUrl, body})`)
+  with a consistent BITS header, button styling, and footer,
+  used by all four renderers. Add a CI assertion that every
+  `tryMail()` call site receives an `html` field so a future
+  contributor can't ship a text-only email by accident.
+  Driven by the test-deploy finding that operators want
+  visually polished invitations, not raw monospace text.
 
 ### Deeper bench (slice TBD)
 

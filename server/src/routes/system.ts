@@ -10,6 +10,8 @@ import { getStripe, isStripeConfigured } from '../billing/stripe.js';
 import { handleSubscriptionUpsert } from '../billing/webhook-handlers.js';
 import { PLAN_FEATURES, type Plan } from '../auth/entitlements.js';
 import { rotateTenantKey } from '../attachments/tenant-keys.js';
+import { renderInvitationEmail, tryMail } from '../domain/mailer.js';
+import { getEffectiveValue } from '../domain/settings.js';
 
 /**
  * Super-admin console endpoints. Gated by `req.user.isSuperAdmin`.
@@ -505,6 +507,12 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
 
   // Token to bootstrap the first tenant admin: super_admin creates the
   // tenant + a one-time link for the new admin to redeem.
+  //
+  // 0.17.1 — also sends the invite by email when `emailHint` is set
+  // and SMTP is configured (mirrors the tenant-admin-driven invite
+  // flow in tenants.ts). Falls back to "here's the URL, give it to
+  // them yourself" when SMTP is unconfigured or no email was given —
+  // the UI uses the returned `email.sent` flag to switch banners.
   app.post<{ Params: { id: string } }>(
     '/api/system/tenants/:id/admin-invite',
     async (req, reply) => {
@@ -523,6 +531,44 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
          RETURNING id, token`,
         [req.params.id, emailHint, token, req.user!.id, expiresAt],
       );
+
+      // Best-effort email. Doesn't change the route's success status
+      // — the invitation row exists either way and the copy-link UI
+      // works as a fallback.
+      let emailResult: { sent: boolean; reason?: string } = {
+        sent: false,
+        reason: 'No email hint provided',
+      };
+      if (emailHint) {
+        try {
+          const tenantRes = await pool.query<{ name: string }>(
+            `SELECT name FROM tenants WHERE id = $1`,
+            [req.params.id],
+          );
+          const inviterRes = await pool.query<{
+            name: string | null;
+            email: string | null;
+          }>(`SELECT name, email FROM users WHERE id = $1`, [req.user!.id]);
+          const baseUrl = await resolveBaseUrl(req.headers);
+          const inviter =
+            inviterRes.rows[0]?.name || inviterRes.rows[0]?.email || 'Platform operator';
+          const rendered = renderInvitationEmail({
+            tenantName: tenantRes.rows[0]?.name ?? 'your workspace',
+            inviterName: inviter,
+            role: 'admin',
+            acceptUrl: `${baseUrl}/invite/${token}`,
+            expiresAt: expiresAt.toISOString().slice(0, 10),
+          });
+          const sendRes = await tryMail({ to: emailHint, ...rendered });
+          emailResult = { sent: sendRes.sent, reason: sendRes.reason };
+        } catch (err) {
+          emailResult = {
+            sent: false,
+            reason: err instanceof Error ? err.message : 'Send failed',
+          };
+        }
+      }
+
       await recordAudit({
         tenantId: req.params.id,
         actorUserId: req.user!.id,
@@ -530,7 +576,7 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
         action: 'tenant.admin_invite',
         targetKind: 'invitation',
         targetId: ins.rows[0]!.id,
-        details: { emailHint },
+        details: { emailHint, email_sent: emailResult.sent },
       });
       return reply.code(201).send({
         invitation: {
@@ -538,7 +584,32 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
           token: ins.rows[0]!.token,
           expires_at: expiresAt.toISOString(),
         },
+        email: emailResult,
       });
     },
   );
+}
+
+/**
+ * Mirror of the helper in tenants.ts. Kept local to avoid an
+ * inter-route import cycle — the function is small and the
+ * priority list is identical: APP_BASE_URL setting wins, then
+ * STRIPE_PUBLIC_BASE_URL (used elsewhere for outgoing links),
+ * then request headers, then dev default.
+ */
+async function resolveBaseUrl(headers: Record<string, unknown>): Promise<string> {
+  const fromAppBase = (await getEffectiveValue('APP_BASE_URL')).trim();
+  if (fromAppBase !== '') return fromAppBase.replace(/\/+$/, '');
+  const fromStripe = (await getEffectiveValue('STRIPE_PUBLIC_BASE_URL')).trim();
+  if (fromStripe !== '') return fromStripe.replace(/\/+$/, '');
+  const origin = headers['origin'];
+  if (typeof origin === 'string' && origin.startsWith('http')) {
+    return origin.replace(/\/+$/, '');
+  }
+  const proto = headers['x-forwarded-proto'] ?? 'http';
+  const host = headers['host'];
+  if (typeof host === 'string') {
+    return `${String(proto)}://${host}`.replace(/\/+$/, '');
+  }
+  return 'http://localhost:4000';
 }

@@ -9,9 +9,64 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0 shipped — documentation refresh + HTML build pipeline.
-Every primary doc reflects the v0.16.4 reality; the marketing
-site can now pull static HTML straight from `docs/html/`._
+_0.17.0–0.17.1 shipped. Documentation refresh + HTML build
+landed in 0.17.0; 0.17.1 fixed a missing email-send on the
+super-admin admin-invite flow (surfaced during the smrtcash-
+test deploy) and added a v0.18.5 roadmap slice for a branded
+HTML email shell across every outward email._
+
+---
+
+## [0.17.1] — 2026-05-24 — Fix: super-admin admin-invite was silent
+
+**Bug.** `POST /api/system/tenants/:id/admin-invite` created
+the invitation row + returned a token but **never called
+`tryMail`** — it was designed in Phase 8 as a copy-link-only
+flow and the SaaS-pivot work didn't revisit it. Operators who
+deployed against a configured SMTP server expected an email to
+go out; nothing did. Tenant-admin-driven invitations
+(`/api/tenants/:id/invitations`) were fine — that path has
+been emailing since 0.12.x.
+
+**Fix.** The super-admin route now mirrors the tenant flow:
+when `emailHint` is set, it renders the standard invitation
+email (`renderInvitationEmail`) and posts it through
+`tryMail()`. The response gains an `email` field with
+`{sent, reason}` so the UI can switch between "email sent" and
+"copy this link" banners. SMTP-unconfigured deployments + calls
+with no `emailHint` keep the copy-link fallback unchanged —
+the invitation row still gets created, the route still 201s,
+and the operator is told why no mail went out.
+
+Audit-log details now also carry `email_sent: boolean` so a
+super-admin can see at a glance whether the recipient got the
+mail or got a copy-paste link.
+
+### Behind the scenes
+
+- New `renderInvitationEmail` + `tryMail` imports in
+  `routes/system.ts`.
+- New local `resolveBaseUrl()` helper (mirrors the one in
+  `routes/tenants.ts`) for the accept URL. Priority:
+  `APP_BASE_URL` setting → `STRIPE_PUBLIC_BASE_URL` setting →
+  request headers → `http://localhost:4000`.
+
+### Tests
+
+Existing `system-subscriptions.test.ts` (11 cases) still
+passes. Dedicated tests for the new email path landed in the
+same change.
+
+### Roadmap
+
+Added **0.18.5 — Branded HTML email shell + audit** to the
+competitive-parity series. Driven by the same test-deploy
+finding: every outward email already sends both `text` and
+`html`, but the HTML is minimal and each renderer hand-codes
+styling. Slice will introduce a shared
+`renderEmailShell()` wrapper used by all four renderers
+(verification, password reset, dunning, invitations) + a CI
+assertion that no `tryMail()` call ever omits the `html` field.
 
 ---
 
