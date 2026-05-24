@@ -689,6 +689,183 @@ describe('Tenant isolation — accounts + transactions + holdings (0.14.0)', () 
     expect(names).toEqual(['A-Sub']);
   });
 
+  // ── Insights + reports + transfers (0.14.2) ─────────────────
+
+  it('GET /api/insights/spending-by-category omits cross-tenant spending', async () => {
+    const aAcct = await seedAccountFor(A.id, 'A');
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const cat = await pool.query<{ id: string }>(
+      `SELECT id FROM categories WHERE name = 'Groceries' LIMIT 1`,
+    );
+    const catId = cat.rows[0]!.id;
+    await pool.query(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash, category_id)
+       VALUES ($1, '2026-05-10', -50000, 'A-GROC', $3, $4),
+              ($2, '2026-05-10', -50000, 'B-GROC', $5, $4)`,
+      [aAcct, bAcct, randomUUID(), catId, randomUUID()],
+    );
+    const r = await asA({
+      method: 'GET',
+      url: '/api/insights/spending-by-category?start=2026-05-01&end=2026-05-31',
+    });
+    expect(r.statusCode).toBe(200);
+    const grocRow = (r.json().rows as Array<{ category_id: string; total_cents: number }>).find(
+      (x) => x.category_id === catId,
+    );
+    // A's $500, not $1000.
+    expect(Number(grocRow!.total_cents)).toBe(50000);
+  });
+
+  it('GET /api/insights/spending-by-category with cross-tenant accountId 404s', async () => {
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const r = await asA({
+      method: 'GET',
+      url: `/api/insights/spending-by-category?accountId=${bAcct}&start=2026-05-01&end=2026-05-31`,
+    });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('GET /api/insights/income-expense aggregates only caller-tenant rows', async () => {
+    const aAcct = await seedAccountFor(A.id, 'A');
+    const bAcct = await seedAccountFor(B.id, 'B');
+    const today = new Date().toISOString().slice(0, 10);
+    await pool.query(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash)
+       VALUES ($1, $3, 100000, 'A-INCOME', $4),
+              ($2, $3, 999999, 'B-INCOME', $5)`,
+      [aAcct, bAcct, today, randomUUID(), randomUUID()],
+    );
+    const r = await asA({ method: 'GET', url: '/api/insights/income-expense?months=1' });
+    expect(r.statusCode).toBe(200);
+    const totalIncome = (r.json().rows as Array<{ income_cents: number }>).reduce(
+      (s, row) => s + Number(row.income_cents),
+      0,
+    );
+    expect(totalIncome).toBe(100000);
+  });
+
+  it('GET /api/insights/net-worth-over-time sums only caller-tenant accounts + holdings', async () => {
+    await pool.query(
+      `INSERT INTO accounts (tenant_id, name, type, institution, opening_balance_cents)
+       VALUES ($1, 'A', 'checking', 'X', 100000),
+              ($2, 'B', 'checking', 'X', 9999999)`,
+      [A.id, B.id],
+    );
+    const r = await asA({ method: 'GET', url: '/api/insights/net-worth-over-time?months=1' });
+    expect(r.statusCode).toBe(200);
+    const row = (r.json().rows as Array<{ net_worth_cents: number }>)[0]!;
+    expect(Number(row.net_worth_cents)).toBe(100000);
+  });
+
+  // Reports — each one should sum/list only the caller tenant's data.
+  it('POST /api/reports/top-merchants/run returns only caller-tenant merchants', async () => {
+    const aAcct = await seedAccountFor(A.id, 'A');
+    const bAcct = await seedAccountFor(B.id, 'B');
+    await pool.query(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash, normalized_merchant)
+       VALUES ($1, '2026-05-01', -1000, 'A', $3, 'A-Starbucks'),
+              ($2, '2026-05-01', -1000, 'B', $4, 'B-Costco')`,
+      [aAcct, bAcct, randomUUID(), randomUUID()],
+    );
+    const r = await asA({
+      method: 'POST',
+      url: '/api/reports/top-merchants/run',
+      payload: { start: '2026-05-01', end: '2026-05-31' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(200);
+    const merchants = (r.json().result.rows as Array<{ merchant: string }>).map(
+      (m) => m.merchant,
+    );
+    expect(merchants).toEqual(['A-Starbucks']);
+  });
+
+  it('POST /api/reports/subscription-costs/run shows only caller-tenant bills', async () => {
+    await pool.query(
+      `INSERT INTO bills (tenant_id, name, amount_cents, frequency, next_due_date, active)
+       VALUES ($1, 'A-Netflix', 1499, 'monthly', now()::date + 7, true),
+              ($2, 'B-HBO',     1999, 'monthly', now()::date + 7, true)`,
+      [A.id, B.id],
+    );
+    const r = await asA({
+      method: 'POST',
+      url: '/api/reports/subscription-costs/run',
+      payload: {},
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(200);
+    const names = (r.json().result.rows as Array<{ name: string }>).map((x) => x.name);
+    expect(names).toEqual(['A-Netflix']);
+  });
+
+  // Transfers — detect must not pair across tenants; link/unlink scoped.
+  it('POST /api/transfers/detect does NOT pair across tenants', async () => {
+    // A debit on Tenant A + a credit on Tenant B with matching amounts +
+    // matching dates would have been auto-paired pre-0.14.2.
+    const aAcct = await seedAccountFor(A.id, 'A-Check');
+    const bAcct = await seedAccountFor(B.id, 'B-Check');
+    await pool.query(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash)
+       VALUES ($1, '2026-05-01', -50000, 'A-OUT', $3),
+              ($2, '2026-05-02', 50000, 'B-IN', $4)`,
+      [aAcct, bAcct, randomUUID(), randomUUID()],
+    );
+    const r = await asA({ method: 'POST', url: '/api/transfers/detect' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().summary.paired).toBe(0);
+    // Neither row got a transfer_group_id.
+    const groups = await pool.query<{ transfer_group_id: string | null }>(
+      `SELECT transfer_group_id FROM transactions
+        WHERE raw_description IN ('A-OUT', 'B-IN')`,
+    );
+    expect(groups.rows.every((g) => g.transfer_group_id === null)).toBe(true);
+  });
+
+  it("POST /api/transfers refuses cross-tenant aId/bId", async () => {
+    const aAcct = await seedAccountFor(A.id, 'A-Check');
+    const bAcct = await seedAccountFor(B.id, 'B-Check');
+    const aTxn = await seedTxnFor({
+      accountId: aAcct, date: '2026-05-01', amountCents: -1000, raw: 'A',
+    });
+    const bTxn = await seedTxnFor({
+      accountId: bAcct, date: '2026-05-01', amountCents: 1000, raw: 'B',
+    });
+    const r = await asA({
+      method: 'POST',
+      url: '/api/transfers',
+      payload: { aId: aTxn, bId: bTxn },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(400);
+    expect(String(r.json().error)).toMatch(/not found/i);
+  });
+
+  it("DELETE /api/transfers/:groupId 404s a cross-tenant group", async () => {
+    // Set up a real transfer group entirely within Tenant B.
+    const bA = await seedAccountFor(B.id, 'B-1');
+    const bB = await seedAccountFor(B.id, 'B-2');
+    const groupId = randomUUID();
+    await pool.query(
+      `INSERT INTO transactions
+         (account_id, txn_date, amount_cents, raw_description, dedup_hash, transfer_group_id)
+       VALUES ($1, '2026-05-01', -1000, 'B-OUT', $3, $5),
+              ($2, '2026-05-01', 1000,  'B-IN',  $4, $5)`,
+      [bA, bB, randomUUID(), randomUUID(), groupId],
+    );
+    const r = await asA({ method: 'DELETE', url: `/api/transfers/${groupId}` });
+    expect(r.statusCode).toBe(404);
+    // Group still intact.
+    const still = await pool.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM transactions WHERE transfer_group_id = $1`,
+      [groupId],
+    );
+    expect(Number(still.rows[0]!.count)).toBe(2);
+  });
+
   it('POST /api/holdings/refresh-prices/crypto never touches other tenants', async () => {
     const aAcct = await seedAccountFor(A.id, 'A-Inv', 'investment');
     const bAcct = await seedAccountFor(B.id, 'B-Inv', 'investment');

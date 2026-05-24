@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
 
 interface InsightsQuery {
   start?: string;
@@ -14,16 +15,26 @@ function isYmd(value: unknown): value is string {
 }
 
 /**
- * Insights endpoints (Phase 4). Every aggregation that summarizes
- * "spending" or "income" excludes transfers between own accounts — those
- * are internal moves, not flow in or out of the household. Net worth is
- * unaffected because a transfer's debit and credit cancel each other.
+ * Insights endpoints (Phase 4).
+ *
+ * 0.14.2 — every aggregation is now tenant-scoped via an accounts
+ * join. Pre-0.14.2 these routes happily summed every tenant's
+ * transactions, so a child on Tenant A could see how much Tenant B
+ * spent at Starbucks last month. When the caller passes an
+ * `accountId`, we verify it belongs to their tenant before using it
+ * (so a probe with another tenant's account UUID 404s instead of
+ * silently returning empty results).
+ *
+ * Every aggregation also excludes transfers between own accounts —
+ * those are internal moves, not flow in or out of the household.
  */
 export async function insightsRoutes(app: FastifyInstance): Promise<void> {
   // Spending by category over a date range.
   app.get<{ Querystring: InsightsQuery }>(
     '/api/insights/spending-by-category',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const { start, end, accountId } = req.query;
       if (start && !isYmd(start)) {
         return reply.code(400).send({ error: 'start must be YYYY-MM-DD' });
@@ -32,11 +43,14 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'end must be YYYY-MM-DD' });
       }
       const accountIdParam = accountId?.trim() || null;
-      if (accountIdParam && !isUuid(accountIdParam)) {
-        return reply.code(400).send({ error: 'Invalid accountId' });
+      if (accountIdParam) {
+        if (!isUuid(accountIdParam)) {
+          return reply.code(400).send({ error: 'Invalid accountId' });
+        }
+        const ok = await assertAccountInTenant(tenantId, accountIdParam);
+        if (!ok) return reply.code(404).send({ error: 'Account not found' });
       }
 
-      // Default range: first-of-current-month → today.
       const now = new Date();
       const defaultStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
       const defaultEnd = now.toISOString().slice(0, 10);
@@ -45,7 +59,9 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
 
       // Spending uses transaction_category_lines so split transactions
       // contribute per-category amounts instead of dumping everything
-      // into the transaction-level category.
+      // into the transaction-level category. The accounts join is the
+      // tenant gate — without it, a tenant would see every household's
+      // per-category spending.
       const result = await query(
         `SELECT l.category_id,
                 c.name      AS category_name,
@@ -54,16 +70,18 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
                 SUM(-l.amount_cents)::bigint AS total_cents,
                 COUNT(DISTINCT l.transaction_id)::int AS transaction_count
            FROM transaction_category_lines l
+           JOIN accounts a ON a.id = l.account_id
       LEFT JOIN categories c ON c.id = l.category_id
       LEFT JOIN categories p ON p.id = c.parent_id
-          WHERE l.amount_cents < 0
+          WHERE a.tenant_id = $1
+            AND l.amount_cents < 0
             AND l.transfer_group_id IS NULL
-            AND l.txn_date >= $1::date
-            AND l.txn_date <= $2::date
-            AND ($3::uuid IS NULL OR l.account_id = $3)
+            AND l.txn_date >= $2::date
+            AND l.txn_date <= $3::date
+            AND ($4::uuid IS NULL OR l.account_id = $4)
        GROUP BY l.category_id, c.name, c.parent_id, p.name
        ORDER BY total_cents DESC`,
-        [startParam, endParam, accountIdParam],
+        [tenantId, startParam, endParam, accountIdParam],
       );
       return {
         start: startParam,
@@ -77,13 +95,19 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: InsightsQuery }>(
     '/api/insights/income-expense',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const months = Math.min(
         Math.max(Number(req.query.months) || 12, 1),
         60,
       );
       const accountIdParam = req.query.accountId?.trim() || null;
-      if (accountIdParam && !isUuid(accountIdParam)) {
-        return reply.code(400).send({ error: 'Invalid accountId' });
+      if (accountIdParam) {
+        if (!isUuid(accountIdParam)) {
+          return reply.code(400).send({ error: 'Invalid accountId' });
+        }
+        const ok = await assertAccountInTenant(tenantId, accountIdParam);
+        if (!ok) return reply.code(404).send({ error: 'Account not found' });
       }
 
       const result = await query(
@@ -101,10 +125,15 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       LEFT JOIN transactions t
              ON date_trunc('month', t.txn_date)::date = s.month_start
             AND t.transfer_group_id IS NULL
-            AND ($2::uuid IS NULL OR t.account_id = $2)
+            AND EXISTS (
+              SELECT 1 FROM accounts a
+               WHERE a.id = t.account_id
+                 AND a.tenant_id = $2
+                 AND ($3::uuid IS NULL OR a.id = $3)
+            )
        GROUP BY s.month_start
        ORDER BY s.month_start`,
-        [months, accountIdParam],
+        [months, tenantId, accountIdParam],
       );
       return { months, rows: result.rows };
     },
@@ -114,18 +143,17 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: InsightsQuery }>(
     '/api/insights/net-worth-over-time',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const months = Math.min(
         Math.max(Number(req.query.months) || 12, 1),
         60,
       );
 
-      // For each month-end, sum across accounts of (opening_balance + post-
-      // opening txns up to that month-end). Investment accounts add the
-      // CURRENT market value of their holdings (we don't track historical
-      // prices yet, so the holding value is constant across the chart).
-      // Manual asset/liability accounts contribute their opening_balance_cents
-      // as-is — liabilities are stored negative by convention so they
-      // naturally reduce net worth in the SUM.
+      // Tenant-scoped on accounts AND holdings — pre-0.14.2 the
+      // holdings_value subquery summed every tenant's investment
+      // positions, so anyone with a session saw the household-wide
+      // crypto+stock total of every other household.
       const result = await query(
         `WITH series AS (
            SELECT generate_series(
@@ -140,8 +168,10 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
              FROM series
          ),
          holdings_value AS (
-           SELECT COALESCE(SUM(quantity * last_price_cents), 0)::bigint AS total
-             FROM holdings
+           SELECT COALESCE(SUM(h.quantity * h.last_price_cents), 0)::bigint AS total
+             FROM holdings h
+             JOIN accounts a ON a.id = h.account_id
+            WHERE a.tenant_id = $2
          )
          SELECT to_char(me.month_start, 'YYYY-MM') AS month,
                 (COALESCE(SUM(
@@ -158,9 +188,10 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
                 + (SELECT total FROM holdings_value))::bigint AS net_worth_cents
            FROM month_ends me
      CROSS JOIN accounts a
+          WHERE a.tenant_id = $2
        GROUP BY me.month_start
        ORDER BY me.month_start`,
-        [months],
+        [months, tenantId],
       );
       return { months, rows: result.rows };
     },

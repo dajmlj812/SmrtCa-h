@@ -4,12 +4,17 @@ import { pool } from '../db/pool.js';
  * Canned reports.
  *
  * Each report has a metadata block (id, label, description, params) and
- * a `run(params)` function that returns a { columns, rows } pair. The
- * route layer renders the JSON; the web side displays the table.
+ * a `run(params, tenantId)` function that returns a { columns, rows }
+ * pair. The route layer renders the JSON; the web side displays the
+ * table.
  *
- * Phase 7.6 ships a starter set of common queries. The AI-driven
- * natural-language path will arrive in a later slice and slot in as
- * another `ReportDefinition`-shape generator.
+ * 0.14.2 — every report is tenant-scoped end-to-end. The route layer
+ * MUST pass the caller's tenantId into `run`; each report joins
+ * through accounts (for transaction-derived data) or filters
+ * `tenant_id` directly (for bills) so the result reflects ONLY that
+ * tenant's data. Pre-0.14.2 every report aggregated across every
+ * tenant on the instance — a child on one tenant could see
+ * household-wide spending totals for every other household.
  */
 
 export interface ReportParamDef {
@@ -39,7 +44,11 @@ export interface ReportDefinition {
   label: string;
   description: string;
   params: ReportParamDef[];
-  run(params: Record<string, string>): Promise<ReportResult>;
+  /**
+   * Execute the report. `tenantId` is the active tenant from the
+   * request; every SQL inside must scope by it.
+   */
+  run(params: Record<string, string>, tenantId: string): Promise<ReportResult>;
 }
 
 function isoDate(d: Date): string {
@@ -84,7 +93,7 @@ const spendingByCategory: ReportDefinition = {
     { name: 'start', label: 'Start date', type: 'date', default: yearAgoIso() },
     { name: 'end', label: 'End date', type: 'date', default: todayIso() },
   ],
-  async run(params) {
+  async run(params, tenantId) {
     const start = dateOr(params, 'start', yearAgoIso());
     const end = dateOr(params, 'end', todayIso());
     const r = await pool.query<{
@@ -99,14 +108,16 @@ const spendingByCategory: ReportDefinition = {
          SUM(l.amount_cents)::bigint        AS total_cents,
          COUNT(*)::bigint                   AS txn_count
        FROM transaction_category_lines l
+       JOIN accounts a ON a.id = l.account_id
   LEFT JOIN categories c ON c.id = l.category_id
   LEFT JOIN categories p ON p.id = c.parent_id
-      WHERE l.amount_cents < 0
+      WHERE a.tenant_id = $1
+        AND l.amount_cents < 0
         AND l.transfer_group_id IS NULL
-        AND l.txn_date BETWEEN $1 AND $2
+        AND l.txn_date BETWEEN $2 AND $3
    GROUP BY c.name, p.name
    ORDER BY SUM(l.amount_cents) ASC`,
-      [start, end],
+      [tenantId, start, end],
     );
     const total = r.rows.reduce((sum, row) => sum + Number(row.total_cents), 0);
     return {
@@ -133,7 +144,7 @@ const topMerchants: ReportDefinition = {
     { name: 'end', label: 'End date', type: 'date', default: todayIso() },
     { name: 'limit', label: 'Show top N', type: 'int', default: '25' },
   ],
-  async run(params) {
+  async run(params, tenantId) {
     const start = dateOr(params, 'start', yearAgoIso());
     const end = dateOr(params, 'end', todayIso());
     const limit = Math.min(intOr(params, 'limit', 25), 200);
@@ -143,17 +154,19 @@ const topMerchants: ReportDefinition = {
       txn_count: number;
     }>(
       `SELECT
-         COALESCE(normalized_merchant, raw_description) AS merchant,
-         SUM(amount_cents)::bigint                       AS total_cents,
-         COUNT(*)::bigint                                AS txn_count
-       FROM transactions
-      WHERE amount_cents < 0
-        AND transfer_group_id IS NULL
-        AND txn_date BETWEEN $1 AND $2
+         COALESCE(t.normalized_merchant, t.raw_description) AS merchant,
+         SUM(t.amount_cents)::bigint                         AS total_cents,
+         COUNT(*)::bigint                                    AS txn_count
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+      WHERE a.tenant_id = $1
+        AND t.amount_cents < 0
+        AND t.transfer_group_id IS NULL
+        AND t.txn_date BETWEEN $2 AND $3
    GROUP BY merchant
-   ORDER BY SUM(amount_cents) ASC
-      LIMIT $3`,
-      [start, end, limit],
+   ORDER BY SUM(t.amount_cents) ASC
+      LIMIT $4`,
+      [tenantId, start, end, limit],
     );
     return {
       columns: [
@@ -175,7 +188,7 @@ const monthlyIncomeExpense: ReportDefinition = {
   params: [
     { name: 'months', label: 'Months back', type: 'int', default: '12' },
   ],
-  async run(params) {
+  async run(params, tenantId) {
     const months = Math.min(intOr(params, 'months', 12), 60);
     const r = await pool.query<{
       month: string;
@@ -184,16 +197,18 @@ const monthlyIncomeExpense: ReportDefinition = {
       net_cents: number;
     }>(
       `SELECT
-         to_char(date_trunc('month', txn_date), 'YYYY-MM')             AS month,
-         COALESCE(SUM(amount_cents) FILTER (WHERE amount_cents > 0), 0)::bigint AS income_cents,
-         COALESCE(SUM(amount_cents) FILTER (WHERE amount_cents < 0), 0)::bigint AS expense_cents,
-         COALESCE(SUM(amount_cents), 0)::bigint                                  AS net_cents
-       FROM transactions
-      WHERE transfer_group_id IS NULL
-        AND txn_date >= (date_trunc('month', now()) - make_interval(months => $1::int))
+         to_char(date_trunc('month', t.txn_date), 'YYYY-MM')                       AS month,
+         COALESCE(SUM(t.amount_cents) FILTER (WHERE t.amount_cents > 0), 0)::bigint AS income_cents,
+         COALESCE(SUM(t.amount_cents) FILTER (WHERE t.amount_cents < 0), 0)::bigint AS expense_cents,
+         COALESCE(SUM(t.amount_cents), 0)::bigint                                   AS net_cents
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+      WHERE a.tenant_id = $1
+        AND t.transfer_group_id IS NULL
+        AND t.txn_date >= (date_trunc('month', now()) - make_interval(months => $2::int))
    GROUP BY 1
    ORDER BY 1 DESC`,
-      [months],
+      [tenantId, months],
     );
     return {
       columns: [
@@ -219,7 +234,8 @@ const subscriptionCosts: ReportDefinition = {
   description:
     'Every active recurring bill with its per-cycle and annualized cost. Quick view of what you\'re paying for.',
   params: [],
-  async run() {
+  async run(_params, tenantId) {
+    // `bills` has its own tenant_id column — direct filter, no join needed.
     const r = await pool.query<{
       name: string;
       frequency: string;
@@ -240,8 +256,11 @@ const subscriptionCosts: ReportDefinition = {
          END)::bigint AS annual_cents,
          review_status
        FROM bills
-      WHERE active AND frequency <> 'one-time'
+      WHERE tenant_id = $1
+        AND active
+        AND frequency <> 'one-time'
    ORDER BY annual_cents DESC`,
+      [tenantId],
     );
     const total = r.rows.reduce((sum, row) => sum + Number(row.annual_cents), 0);
     return {
@@ -273,7 +292,7 @@ const largestTransactions: ReportDefinition = {
     { name: 'end', label: 'End date', type: 'date', default: todayIso() },
     { name: 'limit', label: 'Show top N', type: 'int', default: '50' },
   ],
-  async run(params) {
+  async run(params, tenantId) {
     const start = dateOr(params, 'start', yearAgoIso());
     const end = dateOr(params, 'end', todayIso());
     const limit = Math.min(intOr(params, 'limit', 50), 500);
@@ -293,12 +312,13 @@ const largestTransactions: ReportDefinition = {
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
   LEFT JOIN categories c ON c.id = t.category_id
-      WHERE t.amount_cents < 0
+      WHERE a.tenant_id = $1
+        AND t.amount_cents < 0
         AND t.transfer_group_id IS NULL
-        AND t.txn_date BETWEEN $1 AND $2
+        AND t.txn_date BETWEEN $2 AND $3
    ORDER BY t.amount_cents ASC
-      LIMIT $3`,
-      [start, end, limit],
+      LIMIT $4`,
+      [tenantId, start, end, limit],
     );
     return {
       columns: [
@@ -322,7 +342,7 @@ const netWorthByMonth: ReportDefinition = {
   params: [
     { name: 'months', label: 'Months back', type: 'int', default: '24' },
   ],
-  async run(params) {
+  async run(params, tenantId) {
     const months = Math.min(intOr(params, 'months', 24), 120);
     const r = await pool.query<{
       month: string;
@@ -336,7 +356,9 @@ const netWorthByMonth: ReportDefinition = {
          )::date AS m
        ),
        openings AS (
-         SELECT id, opening_balance_cents, opening_balance_date FROM accounts
+         SELECT id, opening_balance_cents, opening_balance_date
+           FROM accounts
+          WHERE tenant_id = $2
        )
        SELECT to_char(m.m, 'YYYY-MM') AS month,
               COALESCE(SUM(o.opening_balance_cents +
@@ -352,7 +374,7 @@ const netWorthByMonth: ReportDefinition = {
          CROSS JOIN openings o
      GROUP BY m.m
      ORDER BY m.m DESC`,
-      [months],
+      [months, tenantId],
     );
     return {
       columns: [

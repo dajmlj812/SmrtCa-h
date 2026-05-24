@@ -9,10 +9,109 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.6 + 0.14.0–0.14.1 shipped. Multi-tenant isolation
-hardening continues — slices 0.14.2 (insights/reports/transfers),
-0.14.3 (attachments/splits/suggestions), and 0.14.4 (vehicles/
-commute/fuel/normalize) still pending._
+_0.13.0–0.13.6 + 0.14.0–0.14.2 shipped. Multi-tenant isolation
+hardening continues — slices 0.14.3 (attachments/splits/suggestions)
+and 0.14.4 (vehicles/commute/fuel/normalize) still pending._
+
+---
+
+## [0.14.2] — 2026-05-23 — Tenant isolation hardening, slice 3: insights + reports + transfers (domain layer too)
+
+Slice 3 of the multi-tenant hardening pass. This was the
+highest-risk remaining slice because **the domain layer**
+(`domain/reports.ts`, `domain/transfers.ts`) had zero references
+to `tenantId` at all — pre-0.14.2, the six canned report runners
+walked every tenant's transactions, and the transfer detector
+happily paired a debit from Tenant A with a credit from Tenant B,
+creating cross-tenant "transfer groups" that broke both
+households' spending totals and leaked merchant strings across.
+
+### Scope
+
+`routes/insights.ts`, `routes/reports.ts` + `domain/reports.ts`,
+`routes/transfers.ts` + `domain/transfers.ts`.
+
+### Server — `routes/insights.ts`
+
+- All 3 handlers gated by `requireTenant`. Optional `accountId`
+  validated via `assertAccountInTenant` (404 on cross-tenant).
+- `spending-by-category`: `transaction_category_lines → accounts`
+  join with `a.tenant_id = $1`.
+- `income-expense`: EXISTS clause on accounts to scope the
+  outer-joined transactions.
+- `net-worth-over-time`: holdings_value CTE and the cross-join
+  on accounts both filter `tenant_id` — pre-0.14.2 the holdings
+  total was the sum of every household's investment positions.
+
+### Server — `domain/reports.ts` + `routes/reports.ts`
+
+- `ReportDefinition.run` signature now requires `tenantId` as
+  the second argument. The route's `requireTenant` provides it.
+- Every report's raw SQL gets a tenant filter:
+  - `spending-by-category`, `top-merchants`, `monthly-income-
+    expense`, `largest-transactions` — all join `accounts` on
+    `tenant_id`.
+  - `subscription-costs` — filters `bills.tenant_id` directly
+    (no accounts join needed).
+  - `net-worth-by-month` — `openings` CTE constrained to
+    caller-tenant accounts.
+
+### Server — `domain/transfers.ts` + `routes/transfers.ts`
+
+- `detectTransfers({tenantId, accountId?})` — `tenantId` now
+  required (not optional). Candidate self-join requires BOTH
+  accounts in the caller's tenant. A debit on Tenant A and a
+  credit on Tenant B with matching amount/date are NO LONGER
+  paired.
+- `linkTransfer(aId, bId, tenantId)` — lookup joins accounts on
+  tenant_id; either leg in another tenant produces "not found"
+  identical to a stale id, so cross-tenant probes can't
+  enumerate.
+- `unlinkTransfer(groupId, tenantId)` — UPDATE joins accounts
+  so legs from another tenant are invisible; a group from
+  Tenant B returns rowCount=0 → 404, same shape as unknown id.
+- Route: all 4 handlers gated by `requireTenant`; detect
+  validates `accountId` against tenant; list filters via
+  accounts join.
+
+### Tests (+9 cross-tenant isolation tests)
+
+- Insights spending-by-category omits cross-tenant rows on a
+  shared global category; cross-tenant accountId 404s.
+- Insights income-expense and net-worth-over-time aggregate
+  only caller-tenant data.
+- `reports/top-merchants/run` returns only caller-tenant
+  merchants; `reports/subscription-costs/run` only caller-tenant
+  bills.
+- Transfers detect does NOT pair across tenants (matching
+  debit/credit on different tenants stays unpaired).
+- POST /api/transfers with cross-tenant aId/bId returns 400
+  with "not found" message.
+- DELETE /api/transfers/:groupId 404s for a cross-tenant group
+  and leaves the group intact.
+
+Total: **43 tenant-isolation tests** (34 from 0.14.0+1 + 9 new).
+Each new one would have failed against pre-0.14.2 code.
+
+- Total: **607 tests** (601 server + 6 web). Same 6 pre-existing
+  portability tar failures unchanged.
+
+### Files
+
+```
+server/src/routes/insights.ts                        (rewrote)
+server/src/routes/reports.ts                         (rewrote — tiny)
+server/src/routes/transfers.ts                       (rewrote)
+server/src/domain/reports.ts                         (rewrote — every report)
+server/src/domain/transfers.ts                       (rewrote — tenant arg required)
+server/tests/security/tenant-isolation.test.ts       (+9 tests)
+package.json + server/package.json + web/package.json (0.14.1 → 0.14.2)
+```
+
+### Coming next
+
+- **0.14.3** — attachments (file-disclosure risk), splits, suggestions, tenants member-list permission tighten
+- **0.14.4** — vehicles, commute-routes, fuel-prices, normalize, projections NULL hatch
 
 ---
 
