@@ -9,9 +9,141 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.6 shipped. **Original backlog fully complete** except
-native mobile (deferred — PWA covers it). Future direction is
-whatever the user picks next._
+_0.13.0–0.13.6 + 0.14.0 shipped. Original backlog fully complete
+except native mobile (deferred). **0.14.0 begins a multi-slice
+multi-tenant isolation hardening pass** after an audit found ~17
+route files with no tenant scoping. Slices 0.14.1 → 0.14.4 will
+cover budgets/bills, insights/reports, attachments/splits, and
+the long-tail (vehicles, fuel, etc.)._
+
+---
+
+## [0.14.0] — 2026-05-23 — Tenant isolation hardening: accounts + transactions + holdings
+
+A focused audit of every route under `server/src/routes/` found
+that most of the API surface had **no tenant scoping** despite the
+multi-tenant model that shipped in Phase 8. In practice nothing
+had leaked because every install was solo on the Default tenant,
+but anyone running multi-tenant would have seen (and could have
+mutated) every other tenant's data through ~17 endpoints.
+
+There is no Postgres RLS and no central middleware that injects a
+tenant filter — every route must scope its own queries. This
+release is the first slice of a multi-release hardening pass.
+
+### Scope of this slice
+
+The three foundational tables: `accounts`, `transactions`,
+`holdings`. Future slices: budgets/bills/recurring (0.14.1),
+insights/reports/transfers (0.14.2), attachments/splits/suggestions
++ tenants member-list (0.14.3), vehicles/commute/fuel/normalize
+(0.14.4).
+
+### Server — new helpers (`auth/rbac.ts`)
+
+- `assertAccountInTenant(tenantId, accountId)` — single SELECT,
+  returns boolean. Used before any mutation that accepts an
+  `accountId` in the body.
+- `assertTransactionInTenant(tenantId, transactionId)` — joins via
+  accounts so cross-tenant transactions are invisible.
+- `assertHoldingInTenant(tenantId, holdingId)` — same shape.
+- `assertCategoryUsableByTenant(tenantId, categoryId)` — categories
+  may be global (`tenant_id IS NULL`) or per-tenant; this returns
+  true for either as long as the per-tenant ones match the caller.
+
+All four use **404 on miss, not 403**, so cross-tenant probes
+can't enumerate ids via status-code diffing.
+
+### Server — `routes/accounts.ts`
+
+- New per-file `requireTenant(req, reply)` (same pattern as
+  `anomalies.ts` / `normalization-rules.ts`). Super-admin sessions
+  (no active tenant) get 403 instead of seeing every tenant's
+  accounts.
+- `GET /api/accounts` filters `WHERE a.tenant_id = $1`. Child role
+  still scoped to `account_user_access` ids on top.
+- `GET /api/accounts/:id` adds `AND a.tenant_id = $2` so a probe
+  for someone else's account id 404s identically to a non-existent
+  one.
+- `POST /api/accounts` writes `tenant_id` from `req.user.tenantId`
+  (was previously omitted entirely, leaving rows tenant-less).
+- `PATCH/DELETE /api/accounts/:id` filter by tenant_id in the
+  WHERE clause; rowCount=0 returns 404.
+
+### Server — `routes/transactions.ts`
+
+- `GET /api/transactions` adds an `accounts` join with
+  `a.tenant_id = $X` on both the inner and outer queries plus the
+  count query. Child role's `scopedIds` still layered on top.
+- `GET /api/transactions/export` same pattern.
+- `PATCH /api/transactions/:id` owner lookup now joins through
+  `accounts.tenant_id`; `categoryId` (when supplied) must pass
+  `assertCategoryUsableByTenant`.
+- `POST /api/transactions/bulk-delete` uses `DELETE ... USING
+  accounts WHERE a.tenant_id = $1` so cross-tenant ids are
+  silently filtered (deleted count reflects only the caller's
+  ids). Same shape protects against id-enumeration.
+- `PATCH /api/transactions/bulk` same `UPDATE ... FROM accounts`
+  shape; `categoryId` validated against tenant.
+
+### Server — `routes/holdings.ts`
+
+- `GET /api/holdings` joins `accounts` and filters tenant_id.
+- `POST /api/holdings` replaces the type-only `assertInvestmentAccount`
+  with a combined `assertInvestmentAccountInTenant` that checks
+  ownership AND account-type in one SELECT. INSERT now writes
+  `holdings.tenant_id` explicitly (was Phase-8 column but never
+  populated by this route).
+- `PATCH /api/holdings/:id` calls `assertHoldingInTenant` before
+  building the UPDATE.
+- `DELETE /api/holdings/:id` uses `DELETE ... USING accounts
+  WHERE a.tenant_id = $1` (single statement).
+- `POST /api/holdings/refresh-prices/crypto` already CLEAN per the
+  audit; tightened the `requireTenant` to share the same helper
+  shape as the rest of the file.
+
+### Tests — new (`tests/security/tenant-isolation.test.ts`)
+
+17 cross-tenant tests, each of which would have FAILED against
+pre-0.14.0 code:
+
+- Accounts: GET list, GET single, PATCH, DELETE all 404/empty on
+  cross-tenant ids; POST ignores a tenant_id supplied in the body
+  and uses the session's tenant.
+- Transactions: GET list + export omit other tenants' rows; cross-
+  tenant `accountId` query returns empty; PATCH single 404s;
+  bulk-delete and bulk-PATCH silently filter cross-tenant ids;
+  PATCH single rejects a categoryId from another tenant.
+- Holdings: GET list filtered; POST 404s for cross-tenant
+  accountId; PATCH 404s for cross-tenant holding; DELETE 404s;
+  crypto refresh never touches other tenants' rows.
+
+Two pre-existing tests in `tests/integration/fx.test.ts` were
+updated to seed accounts with the Default tenant id (they were
+relying on the unscoped GET path that's now gone).
+
+- Total: **587 tests** (581 server + 6 web), 575 of 581 pass
+  (the 6 portability failures are the pre-existing Windows-tar
+  bug, unchanged by this release).
+
+### Files
+
+```
+server/src/auth/rbac.ts                              (+4 helpers)
+server/src/routes/accounts.ts                        (rewrote)
+server/src/routes/transactions.ts                    (5 handlers fixed)
+server/src/routes/holdings.ts                        (rewrote)
+server/tests/security/tenant-isolation.test.ts       (new — 17 tests)
+server/tests/integration/fx.test.ts                  (tenant_id on direct INSERTs)
+package.json + server/package.json + web/package.json (0.13.6 → 0.14.0)
+```
+
+### Coming next
+
+- **0.14.1** — budgets, bills, recurring, subscriptions, cash-flow
+- **0.14.2** — insights, reports + `domain/reports.ts`, transfers + `domain/transfers.ts`
+- **0.14.3** — attachments, splits, suggestions, tenants member-list permission tighten
+- **0.14.4** — vehicles, commute-routes, fuel-prices, normalize, projections NULL hatch
 
 ---
 

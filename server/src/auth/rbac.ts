@@ -207,3 +207,90 @@ export function requireSuperAdmin(
   }
   return true;
 }
+
+/**
+ * 0.14.0 — multi-tenant isolation hardening.
+ *
+ * The audit found that many routes accept an entity id (account_id,
+ * transaction_id, holding_id) in the request body or URL and then
+ * mutate without checking whether the id belongs to the caller's
+ * tenant. These helpers are the cheap single-SELECT check that every
+ * such route should run BEFORE the mutation:
+ *
+ *   const ok = await assertAccountInTenant(tenantId, accountId);
+ *   if (!ok) return reply.code(404).send({ error: 'Account not found' });
+ *
+ * 404 (not 403) is intentional: a cross-tenant probe shouldn't be
+ * able to distinguish "this id exists on another tenant" from "this
+ * id doesn't exist anywhere" — the response shape is the same as a
+ * truly-unknown id, which prevents id-enumeration via timing/status.
+ */
+export async function assertAccountInTenant(
+  tenantId: string,
+  accountId: string,
+): Promise<boolean> {
+  const r = await pool.query(
+    'SELECT 1 FROM accounts WHERE id = $1 AND tenant_id = $2',
+    [accountId, tenantId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * A transaction belongs to a tenant via its account. Joining through
+ * `accounts` keeps a single source of truth for ownership even though
+ * `transactions` has no `tenant_id` column of its own.
+ */
+export async function assertTransactionInTenant(
+  tenantId: string,
+  transactionId: string,
+): Promise<boolean> {
+  const r = await pool.query(
+    `SELECT 1 FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+      WHERE t.id = $1 AND a.tenant_id = $2`,
+    [transactionId, tenantId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Holdings have their own `tenant_id` column (added in 0.13.3), but
+ * we check via the account join as well to defend against rows whose
+ * `holdings.tenant_id` is NULL (older rows, manual SQL inserts). One
+ * extra join is cheap; the alternative is silent leakage if the
+ * column is missing or wrong.
+ */
+export async function assertHoldingInTenant(
+  tenantId: string,
+  holdingId: string,
+): Promise<boolean> {
+  const r = await pool.query(
+    `SELECT 1 FROM holdings h
+       JOIN accounts a ON a.id = h.account_id
+      WHERE h.id = $1 AND a.tenant_id = $2`,
+    [holdingId, tenantId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Categories are sometimes global (tenant_id IS NULL) and sometimes
+ * per-tenant (Phase 8 added the column nullable). A reference from a
+ * tenant route is valid if the category is global OR belongs to this
+ * tenant. Without this check, a route that accepts `categoryId` in
+ * the body lets one tenant attach another tenant's category to its
+ * own transactions, leaking the category name through every query
+ * that joins back to `categories`.
+ */
+export async function assertCategoryUsableByTenant(
+  tenantId: string,
+  categoryId: string,
+): Promise<boolean> {
+  const r = await pool.query(
+    `SELECT 1 FROM categories
+      WHERE id = $1 AND (tenant_id IS NULL OR tenant_id = $2)`,
+    [categoryId, tenantId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}

@@ -1,11 +1,24 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import {
   assertAccountWriteAccess,
+  assertCategoryUsableByTenant,
   loadUserContext,
   scopedAccountIds,
 } from '../auth/rbac.js';
+
+function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null {
+  if (!req.user) {
+    reply.code(401).send({ error: 'Not authenticated' });
+    return null;
+  }
+  if (!req.user.tenantId) {
+    reply.code(403).send({ error: 'No active tenant' });
+    return null;
+  }
+  return req.user.tenantId;
+}
 
 interface TransactionQuery {
   accountId?: string;
@@ -50,7 +63,15 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
   // Bulk-delete. Removes the listed transactions; splits and attachments
   // cascade via FK. transfer_group_id partners become lone rows — that's
   // a display quirk but not a correctness issue.
+  //
+  // 0.14.0 hardening: the DELETE joins through accounts to verify EVERY
+  // id belongs to the caller's tenant. Ids that belong to another
+  // tenant (or don't exist) are silently filtered — same response shape
+  // as a stale id, so an attacker can't enumerate cross-tenant ids by
+  // diffing the `deleted` count.
   app.post('/api/transactions/bulk-delete', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as { ids?: unknown };
     if (!Array.isArray(body.ids) || body.ids.length === 0) {
       return reply.code(400).send({ error: 'ids must be a non-empty array' });
@@ -63,8 +84,13 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       ids.push(id);
     }
     const r = await query(
-      `DELETE FROM transactions WHERE id = ANY($1::uuid[]) RETURNING id`,
-      [ids],
+      `DELETE FROM transactions t
+        USING accounts a
+        WHERE a.id = t.account_id
+          AND a.tenant_id = $1
+          AND t.id = ANY($2::uuid[])
+       RETURNING t.id`,
+      [tenantId, ids],
     );
     return { deleted: r.rowCount ?? 0 };
   });
@@ -72,7 +98,16 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
   // Bulk-edit. The body lists transaction ids and the fields to apply
   // uniformly. All matched rows flip to normalization_status='manual'
   // because the user is making an explicit assignment.
+  //
+  // 0.14.0 hardening: UPDATE joins through accounts on the caller's
+  // tenant_id; ids belonging to other tenants are silently skipped.
+  // If a categoryId is supplied, it must be either global (tenant_id
+  // IS NULL) or belong to this tenant — otherwise reject the whole
+  // batch with 400 (a single batched UPDATE can't conditionally
+  // accept some rows and reject others).
   app.patch('/api/transactions/bulk', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as {
       ids?: unknown;
       updates?: { categoryId?: unknown; merchant?: unknown };
@@ -89,7 +124,7 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
     }
     const updates = body.updates ?? {};
     const setClauses: string[] = [];
-    const params: unknown[] = [];
+    const params: unknown[] = [tenantId];
 
     if (updates.merchant !== undefined) {
       const m = asString(updates.merchant) || null;
@@ -100,6 +135,10 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       if (updates.categoryId === null) {
         params.push(null);
       } else if (typeof updates.categoryId === 'string' && isUuid(updates.categoryId)) {
+        const ok = await assertCategoryUsableByTenant(tenantId, updates.categoryId);
+        if (!ok) {
+          return reply.code(400).send({ error: 'Invalid categoryId' });
+        }
         params.push(updates.categoryId);
       } else {
         return reply.code(400).send({ error: 'Invalid categoryId' });
@@ -113,9 +152,13 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
     setClauses.push(`normalization_status = 'manual'`);
     params.push(ids);
     const r = await query(
-      `UPDATE transactions SET ${setClauses.join(', ')}
-        WHERE id = ANY($${params.length}::uuid[])
-     RETURNING id`,
+      `UPDATE transactions t
+          SET ${setClauses.join(', ')}
+         FROM accounts a
+        WHERE a.id = t.account_id
+          AND a.tenant_id = $1
+          AND t.id = ANY($${params.length}::uuid[])
+     RETURNING t.id`,
       params,
     );
     return { updated: r.rowCount ?? 0, ids: r.rows.map((row) => (row as { id: string }).id) };
@@ -126,27 +169,30 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/transactions/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid transaction id' });
       }
-      // 0.13.4: per-account write gate. Look up the transaction's
-      // account, then ask rbac whether this user can write to it.
+      // 0.13.4: per-account write gate. 0.14.0: the owner lookup now
+      // joins on accounts.tenant_id so cross-tenant edits surface as
+      // 404 (same shape as a non-existent id — no id enumeration).
       const owner = await query<{ account_id: string }>(
-        `SELECT account_id FROM transactions WHERE id = $1`,
-        [req.params.id],
+        `SELECT t.account_id FROM transactions t
+           JOIN accounts a ON a.id = t.account_id
+          WHERE t.id = $1 AND a.tenant_id = $2`,
+        [req.params.id, tenantId],
       );
       if (owner.rowCount === 0) {
         return reply.code(404).send({ error: 'Transaction not found' });
       }
-      if (req.user) {
-        const ctx = await loadUserContext(req.user.id, req.user.tenantId);
-        const denied = await assertAccountWriteAccess(
-          ctx,
-          owner.rows[0]!.account_id,
-        );
-        if (denied) {
-          return reply.code(denied.status).send({ error: denied.error });
-        }
+      const ctx = await loadUserContext(req.user!.id, tenantId);
+      const denied = await assertAccountWriteAccess(
+        ctx,
+        owner.rows[0]!.account_id,
+      );
+      if (denied) {
+        return reply.code(denied.status).send({ error: denied.error });
       }
       const body = (req.body ?? {}) as Record<string, unknown>;
 
@@ -166,6 +212,10 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
           typeof body.categoryId === 'string' &&
           isUuid(body.categoryId)
         ) {
+          const ok = await assertCategoryUsableByTenant(tenantId, body.categoryId);
+          if (!ok) {
+            return reply.code(400).send({ error: 'Invalid categoryId' });
+          }
           params.push(body.categoryId);
         } else {
           return reply.code(400).send({ error: 'Invalid categoryId' });
@@ -201,6 +251,8 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: TransactionQuery }>(
     '/api/transactions',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const accountId = req.query.accountId?.trim() || null;
       if (accountId && !isUuid(accountId)) {
         return reply.code(400).send({ error: 'Invalid accountId' });
@@ -217,15 +269,14 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       if (endDate && !isoDate.test(endDate)) {
         return reply.code(400).send({ error: 'endDate must be YYYY-MM-DD' });
       }
-      // Child role: scope to accounts the admin assigned. If they
-      // asked for a specific account they don't have access to, return
-      // an empty page rather than 403 — the inline filter wouldn't
-      // have surfaced it on the frontend in the first place.
-      let scopedIds: string[] | null = null;
-      if (req.user) {
-        const ctx = await loadUserContext(req.user.id, req.user.tenantId);
-        scopedIds = await scopedAccountIds(ctx);
-      }
+      // Tenant gate (0.14.0) + role-aware account scope. Children get
+      // the explicit account_user_access ids; admins + spouses get
+      // every account in their tenant via the accounts join below.
+      // A child with zero assignments returns an empty page rather
+      // than 403 — the frontend nav wouldn't have surfaced the route
+      // anyway.
+      const ctx = await loadUserContext(req.user!.id, tenantId);
+      const scopedIds = await scopedAccountIds(ctx);
       if (scopedIds) {
         if (scopedIds.length === 0) {
           return { transactions: [], total: 0, limit, offset };
@@ -247,6 +298,9 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       // full account history, ignoring the search filter) so the value is
       // correct independent of how the outer view is filtered. NULL for
       // transactions that pre-date opening_balance_date.
+      // 0.14.0: every query joins accounts and filters by
+      // a.tenant_id, so cross-tenant ids never appear in results
+      // even if the body specifies them.
       const rows = await query(
         `SELECT t.id, t.account_id, t.txn_date, t.post_date, t.amount_cents,
                 t.raw_description, t.source_category, t.source_type, t.memo,
@@ -276,6 +330,7 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
                FROM transactions t
                JOIN accounts a ON a.id = t.account_id
           LEFT JOIN categories c ON c.id = t.category_id
+              WHERE a.tenant_id = $9
            ) t
          WHERE ($1::uuid IS NULL OR t.account_id = $1)
            AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')
@@ -289,13 +344,15 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
            AND ($8::date IS NULL OR t.txn_date <= $8)
          ORDER BY t.txn_date DESC, t.created_at DESC
          LIMIT $3 OFFSET $4`,
-        [accountId, search, limit, offset, uncategorized, scopedIds, startDate, endDate],
+        [accountId, search, limit, offset, uncategorized, scopedIds, startDate, endDate, tenantId],
       );
 
       const count = await query<{ total: number }>(
         `SELECT COUNT(*)::bigint AS total
          FROM transactions t
-         WHERE ($1::uuid IS NULL OR t.account_id = $1)
+         JOIN accounts a ON a.id = t.account_id
+         WHERE a.tenant_id = $7
+           AND ($1::uuid IS NULL OR t.account_id = $1)
            AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')
            AND ($3::boolean = FALSE OR (
              (t.category_id IS NULL
@@ -305,7 +362,7 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
            AND ($4::uuid[] IS NULL OR t.account_id = ANY($4::uuid[]))
            AND ($5::date IS NULL OR t.txn_date >= $5)
            AND ($6::date IS NULL OR t.txn_date <= $6)`,
-        [accountId, search, uncategorized, scopedIds, startDate, endDate],
+        [accountId, search, uncategorized, scopedIds, startDate, endDate, tenantId],
       );
 
       return {
@@ -323,6 +380,8 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: ExportQuery }>(
     '/api/transactions/export',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const accountId = req.query.accountId?.trim() || null;
       if (accountId && !isUuid(accountId)) {
         return reply.code(400).send({ error: 'Invalid accountId' });
@@ -375,12 +434,13 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
            FROM transactions t
            JOIN accounts a ON a.id = t.account_id
       LEFT JOIN categories c ON c.id = t.category_id
-          WHERE ($1::uuid IS NULL OR t.account_id = $1)
+          WHERE a.tenant_id = $5
+            AND ($1::uuid IS NULL OR t.account_id = $1)
             AND ($2::text IS NULL OR t.raw_description ILIKE '%' || $2 || '%')
             AND ($3::date IS NULL OR t.txn_date >= $3)
             AND ($4::date IS NULL OR t.txn_date <= $4)
        ORDER BY t.txn_date DESC, t.created_at DESC`,
-        [accountId, search, start, end],
+        [accountId, search, start, end, tenantId],
       );
 
       const header = [

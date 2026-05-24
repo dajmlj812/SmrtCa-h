@@ -87,11 +87,17 @@ describe('Exchange rates + display-currency projection (0.10.0)', () => {
   it('accounts list projects balances into the display currency', async () => {
     // Seed two accounts: one USD, one EUR. USD opening 100000 cents
     // ($1000), EUR opening 50000 cents (€500). No transactions.
+    // 0.14.0: tenant-scoped GET /api/accounts requires tenant_id.
+    const t = await pool.query<{ id: string }>(
+      `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+    );
+    const tenantId = t.rows[0]!.id;
     await pool.query(
-      `INSERT INTO accounts (name, institution, type, last4, currency, opening_balance_cents)
+      `INSERT INTO accounts (tenant_id, name, institution, type, last4, currency, opening_balance_cents)
        VALUES
-         ('US Checking', 'Bank', 'checking', '0000', 'USD', 100000),
-         ('EU Checking', 'Bank', 'checking', '0000', 'EUR', 50000)`,
+         ($1, 'US Checking', 'Bank', 'checking', '0000', 'USD', 100000),
+         ($1, 'EU Checking', 'Bank', 'checking', '0000', 'EUR', 50000)`,
+      [tenantId],
     );
     // Display currency is USD; set a USD→EUR rate of 0.5 — so EUR
     // 500 should project to USD 1000 (€500 / 0.5 = $1000) via the
@@ -113,9 +119,13 @@ describe('Exchange rates + display-currency projection (0.10.0)', () => {
   });
 
   it('rate_known=false when there is no FX pair for an account currency', async () => {
+    const t = await pool.query<{ id: string }>(
+      `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+    );
     await pool.query(
-      `INSERT INTO accounts (name, institution, type, last4, currency, opening_balance_cents)
-       VALUES ('JP Checking', 'Bank', 'checking', '0000', 'JPY', 100000)`,
+      `INSERT INTO accounts (tenant_id, name, institution, type, last4, currency, opening_balance_cents)
+       VALUES ($1, 'JP Checking', 'Bank', 'checking', '0000', 'JPY', 100000)`,
+      [t.rows[0]!.id],
     );
     const r = await app.inject({ method: 'GET', url: '/api/accounts' });
     const row = r.json().accounts[0];

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { query } from '../db/pool.js';
 import { ACCOUNT_TYPES, type AccountType } from '../import/types.js';
 import { isUuid } from '../util.js';
@@ -8,6 +8,25 @@ import { convert, getDisplayCurrency, loadRatesSnapshot } from '../domain/fx.js'
 /** Coerce an unknown request-body field to a trimmed string (or ''). */
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * 0.14.0 — tenant guard.
+ *
+ * Every account route is per-tenant. Sessions without an active tenant
+ * (super-admin sessions hitting tenant data; freshly-created users with
+ * no membership yet) get 403 instead of seeing every tenant's accounts.
+ */
+function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null {
+  if (!req.user) {
+    reply.code(401).send({ error: 'Not authenticated' });
+    return null;
+  }
+  if (!req.user.tenantId) {
+    reply.code(403).send({ error: 'No active tenant' });
+    return null;
+  }
+  return req.user.tenantId;
 }
 
 // True balance: opening_balance_cents + sum of amounts on/after opening date
@@ -37,24 +56,25 @@ const HOLDINGS_VALUE = `
 `;
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
-  // List accounts with computed balance + transaction count. Children
-  // see only the accounts the admin assigned to them via the per-account
-  // ACL (account_user_access); admins + spouses see everything.
-  app.get('/api/accounts', async (req) => {
-    let scopedIds: string[] | null = null;
-    if (req.user) {
-      const ctx = await loadUserContext(req.user.id, req.user.tenantId);
-      scopedIds = await scopedAccountIds(ctx);
-    }
+  // List accounts with computed balance + transaction count. Tenant-
+  // scoped + role-aware: children see only the accounts the admin
+  // assigned to them via account_user_access; admins + spouses see
+  // every account WITHIN THEIR TENANT (the new tenant filter prevents
+  // the pre-0.14.0 leak where any logged-in user saw every tenant's
+  // accounts).
+  app.get('/api/accounts', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const ctx = await loadUserContext(req.user!.id, tenantId);
+    const scopedIds = await scopedAccountIds(ctx);
     if (scopedIds && scopedIds.length === 0) {
-      // Child with no assigned accounts — empty list, not "all".
-      return { accounts: [] };
+      return { accounts: [], display_currency: await getDisplayCurrency() };
     }
-    const params: unknown[] = [];
-    let scopeClause = '';
+    const params: unknown[] = [tenantId];
+    let scopeClause = `WHERE a.tenant_id = $1`;
     if (scopedIds && scopedIds.length > 0) {
       params.push(scopedIds);
-      scopeClause = `WHERE a.id = ANY($${params.length}::uuid[])`;
+      scopeClause += ` AND a.id = ANY($${params.length}::uuid[])`;
     }
     const result = await query<{
       id: string;
@@ -83,10 +103,6 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       ORDER BY a.created_at`,
       params,
     );
-    // Multi-currency (0.10.0): tag each row with its display-currency
-    // value so the dashboard can sum cross-account net worth correctly.
-    // rate_known=false means we have no FX pair for that currency — UI
-    // can surface "set a rate" affordance.
     const display = await getDisplayCurrency();
     const snapshot = await loadRatesSnapshot();
     const accounts = result.rows.map((row) => {
@@ -104,9 +120,13 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>(
     '/api/accounts/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid account id' });
       }
+      // tenant_id in the WHERE means cross-tenant probes 404 just like
+      // a truly-unknown id — no id-enumeration leak.
       const result = await query(
         `SELECT a.id, a.name, a.institution, a.type, a.last4, a.currency,
                 a.created_at,
@@ -116,9 +136,9 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
                 COUNT(t.id)::bigint                    AS transaction_count
          FROM accounts a
          LEFT JOIN transactions t ON t.account_id = a.id
-         WHERE a.id = $1
+         WHERE a.id = $1 AND a.tenant_id = $2
          GROUP BY a.id`,
-        [req.params.id],
+        [req.params.id, tenantId],
       );
       if (result.rowCount === 0) {
         return reply.code(404).send({ error: 'Account not found' });
@@ -128,7 +148,8 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.post('/api/accounts', async (req, reply) => {
-    // Treat the body defensively — fields may be missing or the wrong type.
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     const name = asString(body.name);
@@ -146,10 +167,10 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     const currency = asString(body.currency) || 'USD';
 
     const result = await query(
-      `INSERT INTO accounts (name, institution, type, last4, currency)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO accounts (tenant_id, name, institution, type, last4, currency)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, institution, type, last4, currency, created_at`,
-      [name, institution, type, last4, currency],
+      [tenantId, name, institution, type, last4, currency],
     );
     return reply.code(201).send({ account: result.rows[0] });
   });
@@ -158,6 +179,8 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/accounts/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid account id' });
       }
@@ -215,9 +238,12 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       }
 
       params.push(req.params.id);
+      const idIdx = params.length;
+      params.push(tenantId);
+      const tenantIdx = params.length;
       const result = await query(
         `UPDATE accounts SET ${updates.join(', ')}
-          WHERE id = $${params.length}
+          WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
        RETURNING id, name, institution, type, last4, currency, created_at,
                  opening_balance_cents, opening_balance_date`,
         params,
@@ -232,12 +258,15 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/accounts/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid account id' });
       }
-      const result = await query('DELETE FROM accounts WHERE id = $1', [
-        req.params.id,
-      ]);
+      const result = await query(
+        'DELETE FROM accounts WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, tenantId],
+      );
       if (result.rowCount === 0) {
         return reply.code(404).send({ error: 'Account not found' });
       }
