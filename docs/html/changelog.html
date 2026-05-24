@@ -161,9 +161,91 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.4 shipped. 0.17.4 adds a live progress indicator
-to the AI normalize flow — long runs now show &quot;X of Y&quot; with a
-progress bar instead of a silent &quot;Normalizing…&quot; button.</em></p>
+<p><em>0.17.0–0.17.5 shipped. 0.17.5 makes the AI normalize button
+charge the AI-assistant quota counter (it wasn&#39;t, so /billing
+showed 0 even after thousands of normalize calls) and prompts
+the user before re-running AI on already-normalized rows
+instead of silently skipping them.</em></p>
+<hr>
+<h2 id="0175-2026-05-24-meter-normalize-re-normalize-prompt">[0.17.5] — 2026-05-24 — Meter normalize + re-normalize prompt<a class="heading-anchor" href="#0175-2026-05-24-meter-normalize-re-normalize-prompt">#</a></h2>
+<p>Two bugs surfaced during the smrtcash-test deploy after the
+0.17.4 progress-indicator ship made it easy to hammer
+Normalize:</p>
+<h3 id="bug-1-billing-meter-stuck-at-0">Bug 1 — billing meter stuck at 0<a class="heading-anchor" href="#bug-1-billing-meter-stuck-at-0">#</a></h3>
+<p><strong>Symptom.</strong> 155 normalize batches in 4 hours, /billing&#39;s
+&quot;AI assistant calls&quot; stuck at 0.</p>
+<p><strong>Cause.</strong> The normalize route never called
+<code>checkAndIncrementQuota</code>. Only <code>/api/assistant/chat</code> did.
+AI compute was happening (≈10 LLM calls per batch) but the
+meter never moved — operators couldn&#39;t see usage and Plus
+tenants could over-normalize past their cap.</p>
+<p><strong>Fix.</strong> <code>POST /api/normalize</code> now calls
+<code>checkAndIncrementQuota(tenantId, FEATURES.AI_ASSISTANT, limit)</code>
+before doing any work. The same monthly cap that protects
+Plus from runaway chat usage now applies to normalize too;
+Family stays unlimited but the counter ticks so /billing
+shows real usage. Charge is <code>limit</code> (the chunk size) per
+batch — close enough for cap enforcement, slightly over-counts
+errors. Pre-work check refuses with 402 if a batch would
+exceed the cap.</p>
+<h3 id="bug-2-already-normalized-rows-silently-skipped">Bug 2 — already-normalized rows silently skipped<a class="heading-anchor" href="#bug-2-already-normalized-rows-silently-skipped">#</a></h3>
+<p><strong>Symptom.</strong> Click Normalize after everything&#39;s done →
+button does nothing visible. No feedback, no prompt to redo.</p>
+<p><strong>Cause.</strong> The route&#39;s SELECT only picked <code>status=&#39;pending&#39;</code>
+rows; already-normalized rows were silently filtered out.</p>
+<p><strong>Fix.</strong> Three pieces:</p>
+<ul>
+<li><code>POST /api/normalize</code> accepts a new <code>mode: &#39;pending&#39; | &#39;all&#39;</code>
+body param. <code>&#39;pending&#39;</code> = legacy behavior (default).
+<code>&#39;all&#39;</code> includes already-normalized rows in the SELECT and
+in the UPDATE&#39;s WHERE. <code>&#39;manual&#39;</code> rows are never touched
+in either mode — those are user choices the AI doesn&#39;t
+override.</li>
+<li>New <code>GET /api/normalize/counts</code> returns
+<code>{ pending, normalized, manual }</code> in one round-trip.</li>
+<li><code>TransactionsPage.runNormalize()</code> fetches counts first
+and shows the right confirmation prompt:<ul>
+<li><code>pending &gt; 0, normalized = 0</code> → run silently (default
+case)</li>
+<li><code>pending = 0, normalized = 0</code> → &quot;nothing to do&quot; banner</li>
+<li><code>pending = 0, normalized &gt; 0</code> → &quot;Nothing pending. Re-run
+AI on the N already-normalized? This counts against
+your monthly AI quota.&quot;</li>
+<li><code>pending &gt; 0, normalized &gt; 0</code> → &quot;N pending. Also re-run
+AI on the M already-normalized? OK = redo all · Cancel
+= pending only.&quot;</li>
+</ul>
+</li>
+</ul>
+<h3 id="server-changes">Server changes<a class="heading-anchor" href="#server-changes">#</a></h3>
+<ul>
+<li><code>server/src/ai/normalize-service.ts</code> — <code>mode</code> param on
+<code>NormalizePendingOptions</code> + <code>fetchPendingTransactions</code>;
+new <code>countByNormalizationStatus(tenantId, accountId?)</code>
+export. UPDATE WHERE changed from <code>status = &#39;pending&#39;</code>
+to <code>status &lt;&gt; &#39;manual&#39;</code> so the &#39;all&#39; mode actually
+rewrites normalized rows.</li>
+<li><code>server/src/routes/normalize.ts</code> — quota check before
+work; new <code>GET /api/normalize/counts</code> route; <code>mode</code>
+validation on POST.</li>
+</ul>
+<h3 id="web-changes">Web changes<a class="heading-anchor" href="#web-changes">#</a></h3>
+<ul>
+<li><code>web/src/api.ts</code> — <code>mode</code> parameter on <code>api.normalize()</code>;
+new <code>api.normalizeCounts()</code>.</li>
+<li><code>web/src/pages/TransactionsPage.tsx</code> — pre-run counts
+fetch + 4-way decision tree → <code>window.confirm()</code> prompts
+for the redo cases; <code>mode</code> plumbed through the chunked
+loop.</li>
+</ul>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>All 743 server + 6 web tests still pass. One pre-existing
+normalize test (<code>normalizes pending transactions after an import</code>) caught an SQL-precedence regression in my first
+draft of the mode-aware SELECT — explicit parens around the
+two mode branches fixed it. Worth calling out: AND &gt; OR
+binding <em>is</em> the SQL standard, but with two parameterized
+type casts (<code>$4::text =</code>) in adjacent branches, explicit
+parens are clearer and safer.</p>
 <hr>
 <h2 id="0174-2026-05-24-normalize-progress-indicator">[0.17.4] — 2026-05-24 — Normalize progress indicator<a class="heading-anchor" href="#0174-2026-05-24-normalize-progress-indicator">#</a></h2>
 <p>Surfaced during the smrtcash-test deploy when running AI
@@ -5514,7 +5596,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 19:07:35 UTC · commit a438742</span>
+  <span>Generated 2026-05-24 20:15:22 UTC · commit 6e1be09</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
