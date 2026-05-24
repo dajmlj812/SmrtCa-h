@@ -161,10 +161,62 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.10 shipped. 0.17.10 stacks one Period Overview
-card per committed period above the budget-vs-actual table —
-when AutoMagic creates 5 weekly periods, you now see 5 cards
-instead of one.</em></p>
+<p><em>0.17.0–0.17.11 shipped. 0.17.11 makes &quot;removing an account
+from the wizard&quot; actually remove that account&#39;s transactions
+from the budget actuals — each budget row now stores its
+account scope and the actuals SQL filters by it.</em></p>
+<hr>
+<h2 id="01711-2026-05-24-per-budget-account-scope-on-actuals">[0.17.11] — 2026-05-24 — Per-budget account scope on actuals<a class="heading-anchor" href="#01711-2026-05-24-per-budget-account-scope-on-actuals">#</a></h2>
+<p>After 0.17.8 added an &quot;Include accounts&quot; checklist to the
+wizard, an operator noticed the deselected accounts were
+filtered out of the wizard&#39;s median calculations BUT NOT out
+of the budget-vs-actual section that compares actuals to
+those wizard-set amounts. Net effect: &quot;Groceries budgeted
+$200/week from my personal checking only&quot; got compared to
+&quot;$350 spent on groceries across personal + business&quot; — off
+by an entire account.</p>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<p>Each budget row remembers the account scope it was
+created with:</p>
+<ul>
+<li><strong>Migration 035</strong> adds <code>budgets.included_account_ids uuid[]</code>,
+nullable. Existing rows keep <code>NULL</code> (legacy &quot;all accounts&quot;
+behavior); new rows from AutoMagic write the wizard&#39;s
+account selection.</li>
+<li><strong><code>commitWizard</code></strong> writes the scope to each row at INSERT.
+Null when the wizard ran against every account (no scope
+needed) so we don&#39;t waste DB space on a no-op array.</li>
+<li><strong><code>/api/budgets/actual</code></strong> SELECTs filter actuals by the
+row&#39;s scope: <code>($N::uuid[] IS NULL OR a.id = ANY($N))</code>.
+The same guard appears in both the per-category branch
+and the flex-pool branch.</li>
+<li><strong><code>/api/budgets/periods</code></strong> carries the period scope through
+to the response. Each period summary&#39;s
+<code>included_account_ids</code> echoes the scope so the UI can
+render it.</li>
+</ul>
+<h3 id="web">Web<a class="heading-anchor" href="#web">#</a></h3>
+<p><code>PeriodOverview</code> cards show a small <strong>&quot;Includes accounts: …&quot;</strong>
+line under the period range when the scope is set, with each
+account&#39;s display name resolved via <code>api.listAccounts()</code>.
+Removed accounts (the rare case where an account in the
+scope was later deleted) render as <code>(removed)</code>.</p>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>14 budget + wizard tests still pass. No new tests in this
+slice — the change is a column add + a SQL filter add + a
+field surface; the wizard tests already cover the
+account-filter path on the wizard side, and the
+budget-vs-actual tests cover the per-row computation.</p>
+<h3 id="operator-notes">Operator notes<a class="heading-anchor" href="#operator-notes">#</a></h3>
+<ul>
+<li>Existing budget rows from earlier wizard runs (pre-0.17.11)
+have <code>included_account_ids = NULL</code>. They keep the legacy
+&quot;all accounts count&quot; behavior. To pick up scoping on those
+rows, re-run AutoMagic with the desired account selection;
+the new commit will overwrite (where duplicates are
+detected by the existing constraint) or supplement (where
+not).</li>
+</ul>
 <hr>
 <h2 id="01710-2026-05-24-stacked-period-overviews">[0.17.10] — 2026-05-24 — Stacked period overviews<a class="heading-anchor" href="#01710-2026-05-24-stacked-period-overviews">#</a></h2>
 <p>Operator feedback after 0.17.9:</p>
@@ -5914,7 +5966,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 21:41:19 UTC · commit 11dae7c</span>
+  <span>Generated 2026-05-24 21:52:25 UTC · commit 05df7f2</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

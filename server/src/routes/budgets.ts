@@ -367,14 +367,15 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         category_name: string | null;
         bill_name: string | null;
         bill_next_due_date: string | null;
+        included_account_ids: string[] | null;
       }>(
         useAsOf
-          ? `SELECT ${BUDGET_COLUMNS}
+          ? `SELECT ${BUDGET_COLUMNS}, b.included_account_ids
                FROM budgets b
           LEFT JOIN categories c ON c.id = b.category_id
           LEFT JOIN bills      bl ON bl.id = b.bill_id
               WHERE b.tenant_id = $1`
-          : `SELECT ${BUDGET_COLUMNS}
+          : `SELECT ${BUDGET_COLUMNS}, b.included_account_ids
                FROM budgets b
           LEFT JOIN categories c ON c.id = b.category_id
           LEFT JOIN bills      bl ON bl.id = b.bill_id
@@ -421,6 +422,11 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
           // Tenant filter via accounts join — spending from another
           // tenant's transactions cannot contribute to this tenant's
           // per-category totals even if the category_id is shared.
+          //
+          // 0.17.11 — if the budget row has an account scope
+          // (`included_account_ids`), only transactions from those
+          // accounts count. NULL scope keeps the legacy "all
+          // accounts in tenant" behavior.
           const r = await query<{ total: number }>(
             `SELECT COALESCE(SUM(-l.amount_cents), 0)::bigint AS total
                FROM transaction_category_lines l
@@ -430,12 +436,14 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
                 AND l.amount_cents < 0
                 AND l.transfer_group_id IS NULL
                 AND l.txn_date >= $3::date
-                AND l.txn_date < $4::date`,
-            [tenantId, b.category_id, period.start, period.end],
+                AND l.txn_date < $4::date
+                AND ($5::uuid[] IS NULL OR a.id = ANY($5::uuid[]))`,
+            [tenantId, b.category_id, period.start, period.end, b.included_account_ids],
           );
           actualCents = Number(r.rows[0]!.total);
         } else {
           // Flex pool: every spending line that isn't explicitly budgeted.
+          // 0.17.11 — same account-scope filter when the row has one.
           const r = await query<{ total: number }>(
             `SELECT COALESCE(SUM(-l.amount_cents), 0)::bigint AS total
                FROM transaction_category_lines l
@@ -445,8 +453,9 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
                 AND l.transfer_group_id IS NULL
                 AND l.txn_date >= $2::date
                 AND l.txn_date < $3::date
-                AND (l.category_id IS NULL OR l.category_id <> ALL($4::uuid[]))`,
-            [tenantId, period.start, period.end, explicitCategoryIds],
+                AND (l.category_id IS NULL OR l.category_id <> ALL($4::uuid[]))
+                AND ($5::uuid[] IS NULL OR a.id = ANY($5::uuid[]))`,
+            [tenantId, period.start, period.end, explicitCategoryIds, b.included_account_ids],
           );
           actualCents = Number(r.rows[0]!.total);
         }
@@ -619,6 +628,8 @@ interface BudgetRowSummary {
   amount_cents: number;
   category_name: string | null;
   bill_name: string | null;
+  /** 0.17.11 — see migration 035. NULL = include every account. */
+  included_account_ids: string[] | null;
 }
 
 interface PeriodCtx {
@@ -637,6 +648,7 @@ async function fetchPeriodCtx(tenantId: string): Promise<PeriodCtx> {
     query<BudgetRowSummary>(
       `SELECT b.id, b.period_month, b.period_type, b.period_end,
               b.category_id, b.bill_id, b.amount_cents,
+              b.included_account_ids,
               c.name AS category_name,
               bl.name AS bill_name
          FROM budgets b
@@ -724,16 +736,22 @@ function buildPeriodSummary(
   };
   totals.net_cents = totals.income_cents - totals.bills_cents - totals.editable_cents;
 
+  // 0.17.11 — period-level account scope. All rows in a wizard
+  // run share the same scope by construction; we surface the
+  // first row's scope as the period's. NULL = no scope (every
+  // account counts).
+  const periodScope =
+    activeRows.find((r) => r.included_account_ids !== null)?.included_account_ids ??
+    null;
+
   return {
     period: window,
     income: incomeEvents,
     bills: billEvents,
     editable,
     totals,
-    // 0.17.9 — true when at least one committed budget row covers
-    // this window. False means "wizard hasn't run for this
-    // period" — the UI shows the CTA in the set-aside section.
     has_committed_budgets: activeRows.length > 0,
+    included_account_ids: periodScope,
   };
 }
 

@@ -568,6 +568,14 @@ export interface BudgetPeriodSummary {
    * CTA; bills still render from the master bills table either way.
    */
   has_committed_budgets: boolean;
+  /**
+   * 0.17.11 — the account scope the wizard ran with for this
+   * period (one entry per included account). null means "no
+   * scope set — every account in the tenant counts toward this
+   * period's actuals." UI can use this to render
+   * "Includes accounts: …" on the card.
+   */
+  included_account_ids: string[] | null;
 }
 
 export interface NormalizationRule {

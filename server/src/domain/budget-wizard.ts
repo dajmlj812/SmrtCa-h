@@ -138,6 +138,14 @@ export interface PeriodPreview {
 export interface WizardPreview {
   /** 0.17.6 — carries from buildWizardPreview() into commitWizard() so the latter doesn't re-derive scope. */
   tenantId: string;
+  /**
+   * 0.17.11 — same accountIds the wizard input carried. Written to
+   * each committed budget row as `included_account_ids` so later
+   * actuals calculations filter transactions by the same scope the
+   * wizard used. Undefined or empty = no scope (every account
+   * counts; legacy behavior).
+   */
+  accountIds?: string[];
   periodType: WizardPeriodType;
   anchor: string;
   count: number;
@@ -523,6 +531,10 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
 
   return {
     tenantId: input.tenantId,
+    // 0.17.11 — pass through to commit so the scope lands on each row.
+    ...(input.accountIds && input.accountIds.length > 0
+      ? { accountIds: input.accountIds }
+      : {}),
     periodType: input.periodType,
     anchor: input.anchor,
     count: input.count,
@@ -600,10 +612,18 @@ export async function commitWizard(
         cSkipped++;
         continue;
       }
+      // 0.17.11 — store the wizard's account scope on each row.
+      // Null when the wizard ran across every account (or no
+      // accountIds were passed in) so the actuals route keeps
+      // its legacy "all accounts" behavior for rows pre-0.17.11.
+      const scope =
+        preview.accountIds && preview.accountIds.length > 0
+          ? preview.accountIds
+          : null;
       await query(
-        `INSERT INTO budgets (tenant_id, period_month, period_type, category_id, amount_cents, note)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [preview.tenantId, p.start, preview.periodType, e.catId, e.amount, e.note],
+        `INSERT INTO budgets (tenant_id, period_month, period_type, category_id, amount_cents, note, included_account_ids)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[])`,
+        [preview.tenantId, p.start, preview.periodType, e.catId, e.amount, e.note, scope],
       );
       cCreated++;
     }
@@ -622,10 +642,14 @@ export async function commitWizard(
         cSkipped++;
         continue;
       }
+      const scope =
+        preview.accountIds && preview.accountIds.length > 0
+          ? preview.accountIds
+          : null;
       await query(
-        `INSERT INTO budgets (tenant_id, period_month, period_type, bill_id, amount_cents)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [preview.tenantId, p.start, preview.periodType, bill.id, bill.amount_cents],
+        `INSERT INTO budgets (tenant_id, period_month, period_type, bill_id, amount_cents, included_account_ids)
+         VALUES ($1, $2, $3, $4, $5, $6::uuid[])`,
+        [preview.tenantId, p.start, preview.periodType, bill.id, bill.amount_cents, scope],
       );
       cCreated++;
     }

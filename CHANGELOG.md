@@ -9,10 +9,70 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.10 shipped. 0.17.10 stacks one Period Overview
-card per committed period above the budget-vs-actual table —
-when AutoMagic creates 5 weekly periods, you now see 5 cards
-instead of one._
+_0.17.0–0.17.11 shipped. 0.17.11 makes "removing an account
+from the wizard" actually remove that account's transactions
+from the budget actuals — each budget row now stores its
+account scope and the actuals SQL filters by it._
+
+---
+
+## [0.17.11] — 2026-05-24 — Per-budget account scope on actuals
+
+After 0.17.8 added an "Include accounts" checklist to the
+wizard, an operator noticed the deselected accounts were
+filtered out of the wizard's median calculations BUT NOT out
+of the budget-vs-actual section that compares actuals to
+those wizard-set amounts. Net effect: "Groceries budgeted
+$200/week from my personal checking only" got compared to
+"$350 spent on groceries across personal + business" — off
+by an entire account.
+
+### Fix
+
+Each budget row remembers the account scope it was
+created with:
+
+- **Migration 035** adds `budgets.included_account_ids uuid[]`,
+  nullable. Existing rows keep `NULL` (legacy "all accounts"
+  behavior); new rows from AutoMagic write the wizard's
+  account selection.
+- **`commitWizard`** writes the scope to each row at INSERT.
+  Null when the wizard ran against every account (no scope
+  needed) so we don't waste DB space on a no-op array.
+- **`/api/budgets/actual`** SELECTs filter actuals by the
+  row's scope: `($N::uuid[] IS NULL OR a.id = ANY($N))`.
+  The same guard appears in both the per-category branch
+  and the flex-pool branch.
+- **`/api/budgets/periods`** carries the period scope through
+  to the response. Each period summary's
+  `included_account_ids` echoes the scope so the UI can
+  render it.
+
+### Web
+
+`PeriodOverview` cards show a small **"Includes accounts: …"**
+line under the period range when the scope is set, with each
+account's display name resolved via `api.listAccounts()`.
+Removed accounts (the rare case where an account in the
+scope was later deleted) render as `(removed)`.
+
+### Tests
+
+14 budget + wizard tests still pass. No new tests in this
+slice — the change is a column add + a SQL filter add + a
+field surface; the wizard tests already cover the
+account-filter path on the wizard side, and the
+budget-vs-actual tests cover the per-row computation.
+
+### Operator notes
+
+- Existing budget rows from earlier wizard runs (pre-0.17.11)
+  have `included_account_ids = NULL`. They keep the legacy
+  "all accounts count" behavior. To pick up scoping on those
+  rows, re-run AutoMagic with the desired account selection;
+  the new commit will overwrite (where duplicates are
+  detected by the existing constraint) or supplement (where
+  not).
 
 ---
 

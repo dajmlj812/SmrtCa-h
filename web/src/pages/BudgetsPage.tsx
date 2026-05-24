@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   api,
+  type Account,
   type BudgetPeriodSummary,
   type BudgetPeriodType,
   type BudgetVsActualRow,
@@ -47,6 +48,8 @@ export function BudgetsPage() {
   // per period. Empty array → one calendar-month fallback so the
   // empty-state CTA still has somewhere to render.
   const [periods, setPeriods] = useState<BudgetPeriodSummary[]>([]);
+  // 0.17.11 — accounts list for resolving included_account_ids → names
+  const [accountsList, setAccountsList] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,15 +67,19 @@ export function BudgetsPage() {
       // 0.17.10 — use the plural endpoint so we get every
       // committed period stacked. The month picker still controls
       // budget-vs-actual below; the period cards are all-of-them.
-      const [actuals, cats, periodsArr] = await Promise.all([
+      // 0.17.11 — accounts list lets each card render the names
+      // of its scoped accounts ("Includes accounts: …").
+      const [actuals, cats, periodsArr, accts] = await Promise.all([
         api.budgetActuals(asOf),
         api.listCategories(),
         api.budgetPeriods(),
+        api.listAccounts(),
       ]);
       setRows(actuals.rows);
       setTotals(actuals.totals);
       setCategories(cats);
       setPeriods(periodsArr);
+      setAccountsList(accts);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load budgets');
     } finally {
@@ -188,6 +195,7 @@ export function BudgetsPage() {
         <PeriodOverview
           key={`${p.period.start}-${p.period.end}-${p.period.type}`}
           summary={p}
+          accounts={accountsList}
           onRunWizard={() => setShowWizard(true)}
         />
       ))}
@@ -450,14 +458,24 @@ function BudgetAddForm({
  */
 function PeriodOverview({
   summary,
+  accounts,
   onRunWizard,
 }: {
   summary: BudgetPeriodSummary;
+  /** 0.17.11 — used to map included_account_ids → names for display. */
+  accounts: Account[];
   onRunWizard: () => void;
 }) {
   const { period, income, bills, editable, totals } = summary;
   const periodLabel = PERIOD_LABELS[period.type];
   const overextended = totals.net_cents < 0;
+  // 0.17.11 — when this period has an account scope, render the
+  // names inline so the user can see which accounts contribute
+  // actuals to this period's budget rows.
+  const scopedAccountNames =
+    summary.included_account_ids
+      ?.map((id) => accounts.find((a) => a.id === id)?.name ?? '(removed)')
+      ?? null;
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="page-section-head">
@@ -466,6 +484,11 @@ function PeriodOverview({
           {periodLabel} · {formatDate(period.start)} → {formatDate(period.end)}
         </span>
       </div>
+      {scopedAccountNames && scopedAccountNames.length > 0 && (
+        <div className="muted small" style={{ marginTop: 4 }}>
+          Includes accounts: <strong>{scopedAccountNames.join(', ')}</strong>
+        </div>
+      )}
 
       {/* Income */}
       <h3 style={{ marginTop: 16, marginBottom: 8 }}>
