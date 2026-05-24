@@ -247,6 +247,7 @@ describe('Budget wizard with route-driven fuel + misc + savings', () => {
       method: 'POST',
       url: '/api/budgets/wizard/commit',
       payload: {
+        name: 'Test plan',
         periodType: 'weekly',
         anchor: '2026-06-01',
         count: 1,

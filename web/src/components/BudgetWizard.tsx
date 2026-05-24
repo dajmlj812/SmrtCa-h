@@ -13,7 +13,7 @@ const PERIOD_LABELS: Record<PeriodType, string> = {
 interface Props {
   onClose: () => void;
   /** Called after commit so the parent can refresh the budget list. */
-  onCommitted: (result: { created: number; skipped: number }) => void;
+  onCommitted: (result: { planId: string; created: number; skipped: number }) => void;
 }
 
 function todayYmd(): string {
@@ -29,6 +29,9 @@ function sumIncome(p: WizardPreview['periods'][number]): number {
 }
 
 export function BudgetWizard({ onClose, onCommitted }: Props) {
+  // 0.17.16 — every wizard run produces a NAMED plan. Required;
+  // the commit button stays disabled until the user types one.
+  const [planName, setPlanName] = useState('');
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
   const [anchor, setAnchor] = useState(todayYmd());
   const [count, setCount] = useState(5);
@@ -199,6 +202,7 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
           ? Array.from(selectedAccountIds)
           : undefined;
       const r = await api.budgetWizardCommit({
+        name: planName.trim(),
         periodType,
         anchor,
         count,
@@ -212,7 +216,7 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         savingsIncomePctOverride: parsePct(incomePctOverride),
         savingsLeftoverPctOverride: parsePct(leftoverPctOverride),
       });
-      onCommitted({ created: r.created, skipped: r.skipped });
+      onCommitted({ planId: r.planId, created: r.created, skipped: r.skipped });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Commit failed');
     } finally {
@@ -247,6 +251,24 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         {error && <div className="banner error">{error}</div>}
 
         <form className="wizard-controls" onSubmit={inputsHeader}>
+          {/*
+            * 0.17.16 — plan name. Required for commit (server
+            * rejects empty/duplicate names with 409). The
+            * cadence + anchor + accounts all hang off this
+            * named plan.
+            */}
+          <div className="field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="wiz-name">Plan name</label>
+            <input
+              id="wiz-name"
+              type="text"
+              placeholder="e.g. Chase-5793 paycheck cycle"
+              value={planName}
+              onChange={(e) => setPlanName(e.target.value)}
+              maxLength={120}
+              required
+            />
+          </div>
           <div className="field">
             <label htmlFor="wiz-period">Period</label>
             <select
@@ -467,8 +489,13 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
           <button
             className="btn"
             type="button"
-            disabled={!preview || committing}
+            disabled={!preview || committing || planName.trim().length === 0}
             onClick={() => void commit()}
+            title={
+              planName.trim().length === 0
+                ? 'Enter a plan name first'
+                : undefined
+            }
           >
             {committing
               ? 'Committing…'

@@ -9,10 +9,84 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.15 shipped. 0.17.15 aggregates the Monthly
-Budget section to one line per category and one per bill,
-summing the wizard's weekly/biweekly allotments into a
-monthly total instead of repeating them._
+_0.17.0–0.17.16 shipped. 0.17.16 introduces per-account
+budget plans — tenants can run AutoMagic multiple times,
+each producing a named plan scoped to its own accounts and
+paycheck cadence. The Paycheck-to-Paycheck section groups
+its cards by plan; the Monthly Budget rolls all plans up
+into one combined view._
+
+---
+
+## [0.17.16] — 2026-05-24 — Per-account budget plans
+
+Pre-0.17.16 a tenant effectively had one budget — the wizard
+created a flat set of `budgets` rows sharing a cadence and
+optional account scope. That breaks when different accounts
+get paid on different paycheck cycles (Chase weekly, Savings
+monthly) — the user wants each account to have its own
+budget.
+
+### Model
+
+New `budget_plans` table: one row per paycheck cycle,
+carrying `name`, `period_type`, `anchor_date`, and the
+`account_ids` it scopes. Each `budgets` row hangs off it via
+`plan_id` (ON DELETE CASCADE — removing a plan removes its
+per-period lines).
+
+Invariant: each account belongs to at most one plan per
+tenant (validated at the route layer before insert; 409 on
+conflict). Plan names must be unique within a tenant.
+
+Migration 037 backfills one plan per existing
+`(tenant_id, period_type)` cluster named
+`"Imported budget (<cadence>)"` and stamps `plan_id` on the
+existing rows. Pre-existing tenants don't need to re-run the
+wizard.
+
+### Wizard
+
+- New required `name` field on commit (sent through to the
+  plan row). Preview defaults the name to a placeholder so
+  pre-commit previews still work.
+- Server validates name + account overlap before insert.
+  Returns 409 on either conflict.
+- `commitWizard` returns the new `planId` so the UI can
+  follow up on the just-created plan.
+
+### Paycheck-to-Paycheck section
+
+Cards are now grouped by plan. Each group renders a header
+with the plan name, cadence, anchor date, and account list,
+plus a "Delete plan" button. The PeriodOverview cards stack
+underneath as before.
+
+`/api/budgets/periods` groups by `(plan_id, window)` and
+includes `plan_id` + `plan_name` on each entry.
+
+### Monthly Budget
+
+The asOf aggregation already collapsed per-category lines
+across periods; it now also collapses across PLANS — one
+combined "Groceries" line summing Plan A's $400 (Chase
+weekly) + Plan B's $200 (Savings monthly) = $600 budgeted.
+
+Actuals are computed against the UNION of all member plans'
+`account_ids`. If any member row carries a NULL scope
+(pre-0.17.11 legacy), the combined scope becomes NULL
+(include every account) — preserving legacy semantics.
+
+### Tests
+
+3 new wizard tests:
+
+- commit returns planId + stamps plan_id on every row
+- duplicate plan name returns 409
+- second commit with a new name creates a second plan with
+  its own row set (no skip-as-dup)
+
+15 budget + wizard tests pass. Full suite green at 744/744.
 
 ---
 

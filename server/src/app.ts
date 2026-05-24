@@ -31,6 +31,7 @@ import { vehicleRoutes } from './routes/vehicles.js';
 import { commuteRouteRoutes } from './routes/commute-routes.js';
 import { fuelPriceRoutes } from './routes/fuel-prices.js';
 import { budgetWizardRoutes } from './routes/budget-wizard.js';
+import { budgetPlansRoutes } from './routes/budget-plans.js';
 import { settingsRoutes } from './routes/settings.js';
 import { healthRoutes } from './routes/health.js';
 import { backupRoutes } from './routes/backups.js';
@@ -237,6 +238,7 @@ export async function buildApp(
   await app.register(commuteRouteRoutes);
   await app.register(fuelPriceRoutes);
   await app.register(budgetWizardRoutes);
+  await app.register(budgetPlansRoutes);
   await app.register(settingsRoutes);
   await app.register(healthRoutes);
   await app.register(backupRoutes);

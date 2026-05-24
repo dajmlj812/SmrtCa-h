@@ -130,6 +130,7 @@ describe('AutoMagic budget wizard', () => {
       method: 'POST',
       url: '/api/budgets/wizard/commit',
       payload: {
+        name: 'Test plan A',
         periodType: 'monthly',
         anchor: '2026-06-01',
         count: 2,
@@ -143,34 +144,66 @@ describe('AutoMagic budget wizard', () => {
     const result = r.json().result;
     // 2 periods × 3 editable + 2 bill instances = 8 rows.
     expect(result.created).toBe(8);
+    // 0.17.16 — commit returns the plan_id it created.
+    expect(typeof result.planId).toBe('string');
 
     const rows = await pool.query(
-      `SELECT period_month, category_id, bill_id, amount_cents
+      `SELECT period_month, category_id, bill_id, amount_cents, plan_id
          FROM budgets ORDER BY period_month, category_id, bill_id`,
     );
     expect(rows.rowCount).toBe(8);
+    // Every row stamped with the new plan_id.
+    expect(new Set(rows.rows.map((r) => r.plan_id)).size).toBe(1);
+    expect(rows.rows[0]!.plan_id).toBe(result.planId);
     const billRows = rows.rows.filter((r) => r.bill_id === billId);
     expect(billRows).toHaveLength(2);
     expect(billRows[0]!.amount_cents).toBe(8000);
   });
 
-  it('commit re-run skips duplicates', async () => {
-    await app.inject({
+  it('0.17.16 — duplicate plan name is rejected with 409', async () => {
+    const first = await app.inject({
       method: 'POST',
       url: '/api/budgets/wizard/commit',
-      payload: { periodType: 'monthly', anchor: '2026-06-01', count: 1, groceriesOverrideCents: { 0: 50000 }, fuelOverrideCents: { 0: 20000 }, tollsOverrideCents: { 0: 8000 } },
+      payload: { name: 'Dup name', periodType: 'monthly', anchor: '2026-06-01', count: 1, groceriesOverrideCents: { 0: 50000 }, fuelOverrideCents: { 0: 20000 }, tollsOverrideCents: { 0: 8000 } },
       headers: { 'content-type': 'application/json' },
     });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().result.created).toBe(3);
+
     const second = await app.inject({
       method: 'POST',
       url: '/api/budgets/wizard/commit',
-      payload: { periodType: 'monthly', anchor: '2026-06-01', count: 1, groceriesOverrideCents: { 0: 50000 }, fuelOverrideCents: { 0: 20000 }, tollsOverrideCents: { 0: 8000 } },
+      payload: { name: 'Dup name', periodType: 'monthly', anchor: '2026-06-01', count: 1, groceriesOverrideCents: { 0: 50000 }, fuelOverrideCents: { 0: 20000 }, tollsOverrideCents: { 0: 8000 } },
       headers: { 'content-type': 'application/json' },
     });
-    expect(second.json().result.created).toBe(0);
-    expect(second.json().result.skipped).toBe(3);
+    expect(second.statusCode).toBe(409);
 
     void [groceries, gasFuel, tolls]; // suppress unused
+  });
+
+  it('0.17.16 — second commit with new name creates a second plan', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/budgets/wizard/commit',
+      payload: { name: 'Plan one', periodType: 'monthly', anchor: '2026-06-01', count: 1, groceriesOverrideCents: { 0: 50000 }, fuelOverrideCents: { 0: 20000 }, tollsOverrideCents: { 0: 8000 } },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(first.json().result.created).toBe(3);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/budgets/wizard/commit',
+      payload: { name: 'Plan two', periodType: 'monthly', anchor: '2026-06-01', count: 1, groceriesOverrideCents: { 0: 50000 }, fuelOverrideCents: { 0: 20000 }, tollsOverrideCents: { 0: 8000 } },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(second.statusCode).toBe(200);
+    // Each plan is its own row set — same period_month/category combo
+    // is allowed once per plan.
+    expect(second.json().result.created).toBe(3);
+    expect(second.json().result.skipped).toBe(0);
+    expect(second.json().result.planId).not.toBe(first.json().result.planId);
+
+    void [groceries, gasFuel, tolls];
   });
 
   it('preview computes fuel cost from active vehicles + cached price', async () => {

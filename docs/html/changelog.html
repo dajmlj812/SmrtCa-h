@@ -161,10 +161,69 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.15 shipped. 0.17.15 aggregates the Monthly
-Budget section to one line per category and one per bill,
-summing the wizard&#39;s weekly/biweekly allotments into a
-monthly total instead of repeating them.</em></p>
+<p><em>0.17.0–0.17.16 shipped. 0.17.16 introduces per-account
+budget plans — tenants can run AutoMagic multiple times,
+each producing a named plan scoped to its own accounts and
+paycheck cadence. The Paycheck-to-Paycheck section groups
+its cards by plan; the Monthly Budget rolls all plans up
+into one combined view.</em></p>
+<hr>
+<h2 id="01716-2026-05-24-per-account-budget-plans">[0.17.16] — 2026-05-24 — Per-account budget plans<a class="heading-anchor" href="#01716-2026-05-24-per-account-budget-plans">#</a></h2>
+<p>Pre-0.17.16 a tenant effectively had one budget — the wizard
+created a flat set of <code>budgets</code> rows sharing a cadence and
+optional account scope. That breaks when different accounts
+get paid on different paycheck cycles (Chase weekly, Savings
+monthly) — the user wants each account to have its own
+budget.</p>
+<h3 id="model">Model<a class="heading-anchor" href="#model">#</a></h3>
+<p>New <code>budget_plans</code> table: one row per paycheck cycle,
+carrying <code>name</code>, <code>period_type</code>, <code>anchor_date</code>, and the
+<code>account_ids</code> it scopes. Each <code>budgets</code> row hangs off it via
+<code>plan_id</code> (ON DELETE CASCADE — removing a plan removes its
+per-period lines).</p>
+<p>Invariant: each account belongs to at most one plan per
+tenant (validated at the route layer before insert; 409 on
+conflict). Plan names must be unique within a tenant.</p>
+<p>Migration 037 backfills one plan per existing
+<code>(tenant_id, period_type)</code> cluster named
+<code>&quot;Imported budget (&lt;cadence&gt;)&quot;</code> and stamps <code>plan_id</code> on the
+existing rows. Pre-existing tenants don&#39;t need to re-run the
+wizard.</p>
+<h3 id="wizard">Wizard<a class="heading-anchor" href="#wizard">#</a></h3>
+<ul>
+<li>New required <code>name</code> field on commit (sent through to the
+plan row). Preview defaults the name to a placeholder so
+pre-commit previews still work.</li>
+<li>Server validates name + account overlap before insert.
+Returns 409 on either conflict.</li>
+<li><code>commitWizard</code> returns the new <code>planId</code> so the UI can
+follow up on the just-created plan.</li>
+</ul>
+<h3 id="paycheck-to-paycheck-section">Paycheck-to-Paycheck section<a class="heading-anchor" href="#paycheck-to-paycheck-section">#</a></h3>
+<p>Cards are now grouped by plan. Each group renders a header
+with the plan name, cadence, anchor date, and account list,
+plus a &quot;Delete plan&quot; button. The PeriodOverview cards stack
+underneath as before.</p>
+<p><code>/api/budgets/periods</code> groups by <code>(plan_id, window)</code> and
+includes <code>plan_id</code> + <code>plan_name</code> on each entry.</p>
+<h3 id="monthly-budget">Monthly Budget<a class="heading-anchor" href="#monthly-budget">#</a></h3>
+<p>The asOf aggregation already collapsed per-category lines
+across periods; it now also collapses across PLANS — one
+combined &quot;Groceries&quot; line summing Plan A&#39;s $400 (Chase
+weekly) + Plan B&#39;s $200 (Savings monthly) = $600 budgeted.</p>
+<p>Actuals are computed against the UNION of all member plans&#39;
+<code>account_ids</code>. If any member row carries a NULL scope
+(pre-0.17.11 legacy), the combined scope becomes NULL
+(include every account) — preserving legacy semantics.</p>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>3 new wizard tests:</p>
+<ul>
+<li>commit returns planId + stamps plan_id on every row</li>
+<li>duplicate plan name returns 409</li>
+<li>second commit with a new name creates a second plan with
+its own row set (no skip-as-dup)</li>
+</ul>
+<p>15 budget + wizard tests pass. Full suite green at 744/744.</p>
 <hr>
 <h2 id="01715-2026-05-24-monthly-budget-one-row-per-category">[0.17.15] — 2026-05-24 — Monthly Budget: one row per category<a class="heading-anchor" href="#01715-2026-05-24-monthly-budget-one-row-per-category">#</a></h2>
 <p>The Monthly Budget section (bottom of /budgets) was showing
@@ -6141,7 +6200,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 22:29:00 UTC · commit 77ea1fd</span>
+  <span>Generated 2026-05-24 23:14:36 UTC · commit f88c092</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

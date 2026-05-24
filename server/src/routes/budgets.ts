@@ -426,6 +426,14 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
 
       // Group key: category_id ("c:<uuid>"), bill_id
       // ("b:<uuid>"), or flex pool ("flex").
+      //
+      // 0.17.16 — same category can now come from multiple plans
+      // with DIFFERENT account scopes (Plan A [Chase] vs Plan B
+      // [Savings] both budget Groceries). The aggregated row's
+      // scope is the UNION across member rows. If ANY member row
+      // has a NULL scope (pre-0.17.11 "all accounts"), the
+      // aggregated scope becomes NULL too — i.e. include
+      // everything, since one of the inputs already said so.
       interface Group {
         category_id: string | null;
         category_name: string | null;
@@ -433,8 +441,9 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         bill_name: string | null;
         bill_next_due_date: string | null;
         budgeted_cents: number;
-        member_row_id: string;  // for the API's `id` field — pick one
+        member_row_id: string;
         included_account_ids: string[] | null;
+        hasUnscopedMember: boolean;
       }
       const groups = new Map<string, Group>();
       for (const b of inMonth) {
@@ -447,6 +456,17 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         const existing = groups.get(key);
         if (existing) {
           existing.budgeted_cents += Number(b.amount_cents);
+          if (b.included_account_ids === null) {
+            existing.hasUnscopedMember = true;
+            existing.included_account_ids = null;
+          } else if (!existing.hasUnscopedMember) {
+            // Union member scopes; drop duplicates.
+            const merged = new Set([
+              ...(existing.included_account_ids ?? []),
+              ...b.included_account_ids,
+            ]);
+            existing.included_account_ids = Array.from(merged);
+          }
         } else {
           groups.set(key, {
             category_id: b.category_id,
@@ -457,9 +477,8 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
             bill_next_due_date: b.bill_next_due_date,
             budgeted_cents: Number(b.amount_cents),
             member_row_id: b.id,
-            // All wizard-committed rows in the same group share
-            // a scope by construction. The first one wins.
             included_account_ids: b.included_account_ids,
+            hasUnscopedMember: b.included_account_ids === null,
           });
         }
       }
@@ -619,13 +638,18 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     if (!tenantId) return;
     const ctx = await fetchPeriodCtx(tenantId);
 
-    // Group budget rows by distinct window. Window is computed
-    // from each row's (anchor, type, period_end) — the wizard
-    // creates rows at distinct anchors per period, so the
-    // groupings collapse naturally.
+    // 0.17.16 — group by (plan_id, window). Same window across
+    // two plans (e.g. both weekly anchored on the same Monday)
+    // still produces TWO cards, one per plan, because each plan
+    // owns its own bills/income/categories.
+    //
+    // Rows without a plan_id (legacy pre-0.17.16) collapse to a
+    // single "Unassigned" bucket — the UI labels it accordingly.
     const groups = new Map<
       string,
       {
+        planId: string | null;
+        planName: string | null;
         window: { start: string; end: string; type: PeriodType };
         rows: typeof ctx.budgets;
       }
@@ -639,12 +663,15 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         // for THIS row, not whatever cadence-step covers today.
         asOf: b.period_month,
       });
-      const key = `${win.start}|${win.end}|${b.period_type}`;
+      const planKey = b.plan_id ?? '__legacy__';
+      const key = `${planKey}|${win.start}|${win.end}|${b.period_type}`;
       const existing = groups.get(key);
       if (existing) {
         existing.rows.push(b);
       } else {
         groups.set(key, {
+          planId: b.plan_id,
+          planName: b.plan_name,
           window: { start: win.start, end: win.end, type: b.period_type },
           rows: [b],
         });
@@ -661,16 +688,29 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       const end = nextMonthStart(start);
       const window = { start, end, type: 'monthly' as PeriodType };
       return {
-        periods: [{ ...buildPeriodSummary(window, [], ctx), asOf: today }],
+        periods: [{
+          ...buildPeriodSummary(window, [], ctx),
+          asOf: today,
+          plan_id: null,
+          plan_name: null,
+        }],
       };
     }
 
     const periods = Array.from(groups.values())
-      .map(({ window, rows }) => ({
+      .map(({ planId, planName, window, rows }) => ({
         ...buildPeriodSummary(window, rows, ctx),
         asOf: window.start,
+        plan_id: planId,
+        plan_name: planName,
       }))
-      .sort((a, b) => a.period.start.localeCompare(b.period.start));
+      .sort((a, b) => {
+        // Sort by plan name first (so cards group together),
+        // then by period start within each plan.
+        const planCmp = (a.plan_name ?? '~').localeCompare(b.plan_name ?? '~');
+        if (planCmp !== 0) return planCmp;
+        return a.period.start.localeCompare(b.period.start);
+      });
     return { periods };
   });
 
@@ -690,6 +730,9 @@ interface BudgetRowSummary {
   bill_name: string | null;
   /** 0.17.11 — see migration 035. NULL = include every account. */
   included_account_ids: string[] | null;
+  /** 0.17.16 — FK to the plan that owns this row; NULL for pre-0.17.16 legacy rows. */
+  plan_id: string | null;
+  plan_name: string | null;
 }
 
 interface PeriodCtx {
@@ -709,11 +752,14 @@ async function fetchPeriodCtx(tenantId: string): Promise<PeriodCtx> {
       `SELECT b.id, b.period_month, b.period_type, b.period_end,
               b.category_id, b.bill_id, b.amount_cents,
               b.included_account_ids,
+              b.plan_id,
+              p.name AS plan_name,
               c.name AS category_name,
               bl.name AS bill_name
          FROM budgets b
-    LEFT JOIN categories c ON c.id = b.category_id
-    LEFT JOIN bills      bl ON bl.id = b.bill_id
+    LEFT JOIN categories   c  ON c.id  = b.category_id
+    LEFT JOIN bills        bl ON bl.id = b.bill_id
+    LEFT JOIN budget_plans p  ON p.id  = b.plan_id
         WHERE b.tenant_id = $1`,
       [tenantId],
     ),

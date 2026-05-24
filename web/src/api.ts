@@ -576,6 +576,26 @@ export interface BudgetPeriodSummary {
    * "Includes accounts: …" on the card.
    */
   included_account_ids: string[] | null;
+  /**
+   * 0.17.16 — which budget plan owns this period. null for
+   * legacy pre-0.17.16 rows that were imported without a plan,
+   * or for the empty-state placeholder card.
+   */
+  plan_id: string | null;
+  plan_name: string | null;
+}
+
+/**
+ * 0.17.16 — a single paycheck-to-paycheck cycle. The tenant can
+ * have many; each is scoped to a disjoint set of accounts.
+ */
+export interface BudgetPlan {
+  id: string;
+  name: string;
+  period_type: BudgetPeriodType;
+  anchor_date: string;
+  account_ids: string[];
+  created_at: string;
 }
 
 export interface NormalizationRule {
@@ -2243,6 +2263,8 @@ export const api = {
     }).then((r) => r.preview),
 
   budgetWizardCommit: (input: {
+    /** 0.17.16 — plan name; required on commit. */
+    name: string;
     periodType: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
     anchor: string;
     count: number;
@@ -2259,6 +2281,7 @@ export const api = {
   }) =>
     http<{
       result: {
+        planId: string;
         created: number;
         skipped: number;
         perPeriod: Array<{ index: number; created: number; skipped: number }>;
@@ -2268,6 +2291,20 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }).then((r) => r.result),
+
+  // ── Budget plans (0.17.16) ───────────────────────────────
+  listBudgetPlans: () =>
+    http<{ plans: BudgetPlan[] }>('/api/budget-plans').then((r) => r.plans),
+
+  deleteBudgetPlan: (id: string) =>
+    http<void>(`/api/budget-plans/${id}`, { method: 'DELETE' }),
+
+  renameBudgetPlan: (id: string, name: string) =>
+    http<{ plan: BudgetPlan }>(`/api/budget-plans/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).then((r) => r.plan),
 
   // ── Settings (Phase 7.2) ─────────────────────────────────
   listSettings: () =>

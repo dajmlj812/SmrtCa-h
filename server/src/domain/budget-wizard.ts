@@ -142,6 +142,8 @@ export interface PeriodPreview {
 export interface WizardPreview {
   /** 0.17.6 — carries from buildWizardPreview() into commitWizard() so the latter doesn't re-derive scope. */
   tenantId: string;
+  /** 0.17.16 — plan name; commitWizard creates the plan row before per-period budgets. */
+  name: string;
   /**
    * 0.17.11 — same accountIds the wizard input carried. Written to
    * each committed budget row as `included_account_ids` so later
@@ -386,6 +388,12 @@ export interface WizardInput {
    */
   tenantId: string;
   /**
+   * 0.17.16 — name for the plan this wizard run creates.
+   * Required; uniqueness enforced at DB layer via
+   * `(tenant_id, name)`.
+   */
+  name: string;
+  /**
    * 0.17.8 — optional list of account IDs to INCLUDE. When set,
    * the wizard only considers bills, recurring_income, and
    * grocery transactions associated with these accounts. Bills
@@ -535,6 +543,7 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
 
   return {
     tenantId: input.tenantId,
+    name: input.name,
     // 0.17.11 — pass through to commit so the scope lands on each row.
     ...(input.accountIds && input.accountIds.length > 0
       ? { accountIds: input.accountIds }
@@ -552,9 +561,40 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
 }
 
 export interface CommitResult {
+  /** 0.17.16 — the plan_id created for this wizard run. */
+  planId: string;
   created: number;
   skipped: number;
   perPeriod: Array<{ index: number; created: number; skipped: number }>;
+}
+
+/**
+ * 0.17.16 — invariant check before the wizard creates a plan:
+ * none of the accounts the new plan claims may already belong
+ * to another plan in this tenant. Throws on overlap so the
+ * route layer can turn it into a 409.
+ */
+export async function ensureAccountsUnclaimed(
+  tenantId: string,
+  accountIds: string[],
+): Promise<void> {
+  if (accountIds.length === 0) return;
+  const r = await pool.query<{ name: string; conflicting: string[] }>(
+    `SELECT name, ARRAY(
+       SELECT a FROM unnest(account_ids) AS a
+        WHERE a = ANY($2::uuid[])
+     ) AS conflicting
+       FROM budget_plans
+      WHERE tenant_id = $1
+        AND account_ids && $2::uuid[]`,
+    [tenantId, accountIds],
+  );
+  if (r.rowCount! > 0) {
+    const first = r.rows[0]!;
+    throw new Error(
+      `Account already in plan "${first.name}"; each account can belong to at most one plan.`,
+    );
+  }
 }
 
 export async function commitWizard(
@@ -579,6 +619,23 @@ export async function commitWizard(
   const miscCat = byName.get('miscellaneous') ?? null;
   const savingsCat = byName.get('savings') ?? null;
 
+  // 0.17.16 — every wizard run creates its plan row first. The
+  // per-period `budgets` rows then carry plan_id so the API
+  // layer can render one Paycheck-to-Paycheck card per plan.
+  // Validate account uniqueness up front so we don't insert a
+  // plan only to fail on a downstream constraint.
+  const scope = preview.accountIds && preview.accountIds.length > 0
+    ? preview.accountIds
+    : [];
+  await ensureAccountsUnclaimed(preview.tenantId, scope);
+  const planInsert = await query<{ id: string }>(
+    `INSERT INTO budget_plans (tenant_id, name, period_type, anchor_date, account_ids)
+     VALUES ($1, $2, $3, $4::date, $5::uuid[])
+     RETURNING id`,
+    [preview.tenantId, preview.name, preview.periodType, preview.anchor, scope],
+  );
+  const planId = planInsert.rows[0]!.id;
+
   let created = 0;
   let skipped = 0;
   const perPeriod: Array<{ index: number; created: number; skipped: number }> = [];
@@ -599,35 +656,36 @@ export async function commitWizard(
     ];
     for (const e of editableInputs) {
       if (e.amount <= 0 || e.catId === null) continue;
-      // 0.17.6 — dup-check + INSERT now both tenant-scoped. Pre-fix
-      // the dup-check would falsely-positive across tenants (two
-      // households running the wizard on the same period would each
-      // create one and skip the other) and the INSERT would orphan
-      // the row with tenant_id=NULL.
+      // 0.17.16 — dup check is now plan-scoped. Each wizard run
+      // creates a NEW plan_id, so this is effectively always
+      // empty during a normal flow — kept defensively so a
+      // future "re-commit into the same plan" path can land
+      // idempotently.
       const existing = await pool.query(
         `SELECT 1 FROM budgets
           WHERE tenant_id = $1
-            AND period_month = $2::date
-            AND category_id = $3
+            AND plan_id = $2
+            AND period_month = $3::date
+            AND category_id = $4
           LIMIT 1`,
-        [preview.tenantId, p.start, e.catId],
+        [preview.tenantId, planId, p.start, e.catId],
       );
       if (existing.rowCount! > 0) {
         cSkipped++;
         continue;
       }
-      // 0.17.11 — store the wizard's account scope on each row.
-      // Null when the wizard ran across every account (or no
-      // accountIds were passed in) so the actuals route keeps
-      // its legacy "all accounts" behavior for rows pre-0.17.11.
-      const scope =
+      // 0.17.11 — store the wizard's account scope on each row
+      // (kept for the actuals route's legacy lookup path; the
+      // plan also carries the same accounts on `account_ids`).
+      // 0.17.16 — stamp plan_id so the row belongs to its plan.
+      const rowScope =
         preview.accountIds && preview.accountIds.length > 0
           ? preview.accountIds
           : null;
       await query(
-        `INSERT INTO budgets (tenant_id, period_month, period_type, category_id, amount_cents, note, included_account_ids)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[])`,
-        [preview.tenantId, p.start, preview.periodType, e.catId, e.amount, e.note, scope],
+        `INSERT INTO budgets (tenant_id, plan_id, period_month, period_type, category_id, amount_cents, note, included_account_ids)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[])`,
+        [preview.tenantId, planId, p.start, preview.periodType, e.catId, e.amount, e.note, rowScope],
       );
       cCreated++;
     }
@@ -637,23 +695,24 @@ export async function commitWizard(
       const existing = await pool.query(
         `SELECT 1 FROM budgets
           WHERE tenant_id = $1
-            AND period_month = $2::date
-            AND bill_id = $3
+            AND plan_id = $2
+            AND period_month = $3::date
+            AND bill_id = $4
           LIMIT 1`,
-        [preview.tenantId, p.start, bill.id],
+        [preview.tenantId, planId, p.start, bill.id],
       );
       if (existing.rowCount! > 0) {
         cSkipped++;
         continue;
       }
-      const scope =
+      const rowScope =
         preview.accountIds && preview.accountIds.length > 0
           ? preview.accountIds
           : null;
       await query(
-        `INSERT INTO budgets (tenant_id, period_month, period_type, bill_id, amount_cents, included_account_ids)
-         VALUES ($1, $2, $3, $4, $5, $6::uuid[])`,
-        [preview.tenantId, p.start, preview.periodType, bill.id, bill.amount_cents, scope],
+        `INSERT INTO budgets (tenant_id, plan_id, period_month, period_type, bill_id, amount_cents, included_account_ids)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[])`,
+        [preview.tenantId, planId, p.start, preview.periodType, bill.id, bill.amount_cents, rowScope],
       );
       cCreated++;
     }
@@ -663,5 +722,5 @@ export async function commitWizard(
     skipped += cSkipped;
   }
 
-  return { created, skipped, perPeriod };
+  return { planId, created, skipped, perPeriod };
 }

@@ -31,6 +31,12 @@ function parseInput(body: unknown): Omit<WizardInput, 'tenantId'> | { error: str
   if (!Number.isInteger(count) || count < 1 || count > 24) {
     return { error: 'count must be 1..24' };
   }
+  // 0.17.16 — plan name is required on commit, but the preview
+  // route doesn't need it (it's purely a projection). Accept a
+  // missing name on preview by defaulting to a placeholder;
+  // commit revalidates below before INSERT.
+  const rawName = typeof b.name === 'string' ? b.name.trim() : '';
+  const name = rawName || 'Untitled plan';
   function readOverrides(field: string): Record<number, number> | undefined {
     const raw = b[field];
     if (raw === undefined || raw === null) return undefined;
@@ -84,6 +90,7 @@ function parseInput(body: unknown): Omit<WizardInput, 'tenantId'> | { error: str
     periodType,
     anchor: b.anchor,
     count,
+    name,
     accountIds,
     groceriesOverrideCents: readOverrides('groceriesOverrideCents'),
     fuelOverrideCents: readOverrides('fuelOverrideCents'),
@@ -119,8 +126,25 @@ export async function budgetWizardRoutes(app: FastifyInstance): Promise<void> {
     if ('error' in parsed) {
       return reply.code(400).send({ error: parsed.error });
     }
-    const preview = await buildWizardPreview({ ...parsed, tenantId });
-    const result = await commitWizard(preview);
-    return { result };
+    // 0.17.16 — commit requires a real name (not the preview default).
+    const rawName =
+      typeof (req.body as { name?: unknown } | undefined)?.name === 'string'
+        ? ((req.body as { name?: string }).name ?? '').trim()
+        : '';
+    if (!rawName) {
+      return reply.code(400).send({ error: 'name is required' });
+    }
+    const preview = await buildWizardPreview({ ...parsed, name: rawName, tenantId });
+    try {
+      const result = await commitWizard(preview);
+      return { result };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Commit failed';
+      // Account-overlap or unique-name conflict.
+      const isConflict =
+        msg.includes('already in plan') ||
+        msg.includes('budget_plans_tenant_id_name_key');
+      return reply.code(isConflict ? 409 : 500).send({ error: msg });
+    }
   });
 }

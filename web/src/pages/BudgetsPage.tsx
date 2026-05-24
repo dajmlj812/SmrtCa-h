@@ -4,6 +4,7 @@ import {
   type Account,
   type BudgetPeriodSummary,
   type BudgetPeriodType,
+  type BudgetPlan,
   type BudgetVsActualRow,
   type Category,
 } from '../api';
@@ -50,6 +51,9 @@ export function BudgetsPage() {
   const [periods, setPeriods] = useState<BudgetPeriodSummary[]>([]);
   // 0.17.11 — accounts list for resolving included_account_ids → names
   const [accountsList, setAccountsList] = useState<Account[]>([]);
+  // 0.17.16 — list of plans, used to render the per-plan
+  // headers and the delete button.
+  const [plans, setPlans] = useState<BudgetPlan[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,17 +73,19 @@ export function BudgetsPage() {
       // budget-vs-actual below; the period cards are all-of-them.
       // 0.17.11 — accounts list lets each card render the names
       // of its scoped accounts ("Includes accounts: …").
-      const [actuals, cats, periodsArr, accts] = await Promise.all([
+      const [actuals, cats, periodsArr, accts, plansArr] = await Promise.all([
         api.budgetActuals(asOf),
         api.listCategories(),
         api.budgetPeriods(),
         api.listAccounts(),
+        api.listBudgetPlans(),
       ]);
       setRows(actuals.rows);
       setTotals(actuals.totals);
       setCategories(cats);
       setPeriods(periodsArr);
       setAccountsList(accts);
+      setPlans(plansArr);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load budgets');
     } finally {
@@ -127,6 +133,18 @@ export function BudgetsPage() {
       await load(month);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  }
+
+  async function onDeletePlan(plan: BudgetPlan) {
+    if (!confirm(
+      `Delete budget plan "${plan.name}"?\n\nAll periods, bills, and category allowances under this plan will be removed. Transactions are not affected.`,
+    )) return;
+    try {
+      await api.deleteBudgetPlan(plan.id);
+      await load(month);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Plan delete failed');
     }
   }
 
@@ -179,7 +197,7 @@ export function BudgetsPage() {
           onCommitted={(r) => {
             setShowWizard(false);
             setWizardSummary(
-              `Created ${r.created} budget row${r.created === 1 ? '' : 's'}` +
+              `Plan created with ${r.created} budget row${r.created === 1 ? '' : 's'}` +
                 (r.skipped > 0 ? `, skipped ${r.skipped} duplicate(s).` : '.'),
             );
             void load(month);
@@ -190,31 +208,62 @@ export function BudgetsPage() {
       {error && <div className="banner error">{error}</div>}
 
       {/* ── Paycheck-to-Paycheck Budgeting ──────────────────────
-        * 0.17.10 — one PeriodOverview card per committed period.
-        * Stacked in ascending period.start order. When nothing is
-        * committed yet, the server returns a single calendar-
-        * month placeholder so the CTA still has a card to render.
-        * 0.17.13 — renamed section. The cards plan each income
-        * window through to leftover; that's "paycheck-to-paycheck"
-        * in user language.
+        * 0.17.16 — cards are grouped by plan. Each plan gets a
+        * heading with its name + cadence + scoped accounts +
+        * delete button; then its periods stack below.
         */}
       <div className="page-section">
         <div className="page-section-head">
           <div>
             <h2 style={{ margin: 0 }}>Paycheck-to-Paycheck Budgeting</h2>
             <div className="muted small">
-              One card per income period — income, bills, set-aside, net.
+              One plan per paycheck cycle — income, bills, set-aside, net per period.
             </div>
           </div>
         </div>
-        {periods.map((p) => (
-          <PeriodOverview
-            key={`${p.period.start}-${p.period.end}-${p.period.type}`}
-            summary={p}
-            accounts={accountsList}
-            onRunWizard={() => setShowWizard(true)}
-          />
-        ))}
+        {(() => {
+          // Group periods by plan_id (null = legacy/empty placeholder).
+          const byPlan = new Map<string, BudgetPeriodSummary[]>();
+          for (const p of periods) {
+            const key = p.plan_id ?? '__none__';
+            const arr = byPlan.get(key) ?? [];
+            arr.push(p);
+            byPlan.set(key, arr);
+          }
+          // Render ordering: plans (in their listed order), then
+          // any "no plan" bucket at the bottom.
+          const planOrder: Array<{
+            key: string;
+            plan: BudgetPlan | null;
+            list: BudgetPeriodSummary[];
+          }> = [];
+          for (const plan of plans) {
+            const list = byPlan.get(plan.id);
+            if (list && list.length > 0) {
+              planOrder.push({ key: plan.id, plan, list });
+            }
+          }
+          const noneList = byPlan.get('__none__');
+          if (noneList && noneList.length > 0) {
+            planOrder.push({ key: '__none__', plan: null, list: noneList });
+          }
+          if (planOrder.length === 0) {
+            // No plans + no placeholder — shouldn't happen since the
+            // server emits a placeholder when periods is empty, but
+            // guard anyway.
+            return null;
+          }
+          return planOrder.map(({ key, plan, list }) => (
+            <PlanBlock
+              key={key}
+              plan={plan}
+              periods={list}
+              accounts={accountsList}
+              onRunWizard={() => setShowWizard(true)}
+              onDeletePlan={onDeletePlan}
+            />
+          ));
+        })()}
       </div>
 
       {/* ── Monthly Budget (budget-vs-actual) ────────────────── */}
@@ -475,6 +524,85 @@ function BudgetAddForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * 0.17.16 — one block per budget plan. Header carries the plan
+ * name + cadence + account list + delete; the periods stack
+ * underneath as the existing PeriodOverview cards.
+ *
+ * When `plan` is null we render the "no plan yet / legacy"
+ * grouping — typically the empty-state placeholder card that
+ * the server emits when no commits exist.
+ */
+function PlanBlock({
+  plan,
+  periods,
+  accounts,
+  onRunWizard,
+  onDeletePlan,
+}: {
+  plan: BudgetPlan | null;
+  periods: BudgetPeriodSummary[];
+  accounts: Account[];
+  onRunWizard: () => void;
+  onDeletePlan: (plan: BudgetPlan) => void;
+}) {
+  const planAccountNames = plan
+    ? plan.account_ids.map(
+        (id) => accounts.find((a) => a.id === id)?.name ?? '(removed)',
+      )
+    : null;
+  const cadenceLabel = plan
+    ? PERIOD_LABELS[plan.period_type]
+    : null;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {plan && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            gap: 12,
+            margin: '12px 0 8px',
+          }}
+        >
+          <div>
+            <h3 style={{ margin: 0 }}>{plan.name}</h3>
+            <div className="muted small" style={{ marginTop: 2 }}>
+              {cadenceLabel} · anchor {formatDate(plan.anchor_date)}
+              {planAccountNames && planAccountNames.length > 0 && (
+                <>
+                  {' · '}
+                  Accounts: <strong>{planAccountNames.join(', ')}</strong>
+                </>
+              )}
+              {planAccountNames && planAccountNames.length === 0 && (
+                <> · All accounts</>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-link danger"
+            onClick={() => onDeletePlan(plan)}
+            title="Remove this plan and its periods"
+          >
+            Delete plan
+          </button>
+        </div>
+      )}
+      {periods.map((p) => (
+        <PeriodOverview
+          key={`${p.period.start}-${p.period.end}-${p.period.type}`}
+          summary={p}
+          accounts={accounts}
+          onRunWizard={onRunWizard}
+        />
+      ))}
+    </div>
   );
 }
 
