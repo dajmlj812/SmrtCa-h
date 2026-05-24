@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   api,
+  type BudgetPeriodSummary,
   type BudgetPeriodType,
   type BudgetVsActualRow,
   type Category,
@@ -42,6 +43,7 @@ export function BudgetsPage() {
   const [month, setMonth] = useState<string>(() => firstOfMonth(new Date()));
   const [rows, setRows] = useState<BudgetVsActualRow[]>([]);
   const [totals, setTotals] = useState({ budgeted_cents: 0, actual_cents: 0 });
+  const [period, setPeriod] = useState<BudgetPeriodSummary | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,13 +56,18 @@ export function BudgetsPage() {
     try {
       // Pass the 15th of the month so the monthly period covers it cleanly.
       const asOf = m.replace(/-01$/, '-15');
-      const [actuals, cats] = await Promise.all([
+      // 0.17.7 — fetch the period cash-flow summary alongside the
+      // budget-vs-actual table. The summary renders above; the
+      // table renders below (kept for actuals review).
+      const [actuals, cats, periodSummary] = await Promise.all([
         api.budgetActuals(asOf),
         api.listCategories(),
+        api.budgetPeriod(asOf),
       ]);
       setRows(actuals.rows);
       setTotals(actuals.totals);
       setCategories(cats);
+      setPeriod(periodSummary);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load budgets');
     } finally {
@@ -166,6 +173,15 @@ export function BudgetsPage() {
       )}
 
       {error && <div className="banner error">{error}</div>}
+
+      {/* 0.17.7 — period cash-flow overview. Income with dates,
+        * bills line-per-bill, modifiable budgets, net. Renders
+        * above the budget-vs-actual table (which is kept below
+        * for spot-checking actuals against budgets).
+        */}
+      {period && (period.income.length > 0 || period.bills.length > 0 || period.editable.length > 0) && (
+        <PeriodOverview summary={period} />
+      )}
 
       {!loading && rows.length === 0 && (
         <div className="card empty-card">
@@ -412,5 +428,146 @@ function BudgetAddForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * 0.17.7 — period cash-flow overview. The "what's expected to
+ * happen this week/month" view the user actually wants: income
+ * with dates, bills line-per-bill with vendor + amount + due
+ * date, modifiable budgets with a "manually move to savings"
+ * flag on Savings, and a leftover/overextended net at the
+ * bottom.
+ */
+function PeriodOverview({ summary }: { summary: BudgetPeriodSummary }) {
+  const { period, income, bills, editable, totals } = summary;
+  const periodLabel = PERIOD_LABELS[period.type];
+  const overextended = totals.net_cents < 0;
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="page-section-head">
+        <h2 style={{ margin: 0 }}>Period overview</h2>
+        <span className="muted small">
+          {periodLabel} · {formatDate(period.start)} → {formatDate(period.end)}
+        </span>
+      </div>
+
+      {/* Income */}
+      <h3 style={{ marginTop: 16, marginBottom: 8 }}>
+        Income — <strong className="pos">{formatCents(totals.income_cents)}</strong>
+      </h3>
+      {income.length === 0 ? (
+        <p className="muted small">No income events in this period.</p>
+      ) : (
+        <table className="txn-table">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th className="nowrap">Expected</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {income.map((i) => (
+              <tr key={i.id + i.date}>
+                <td>{i.name}</td>
+                <td className="nowrap">{formatDate(i.date)}</td>
+                <td className="num pos">+{formatCents(i.amount_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Bills */}
+      <h3 style={{ marginTop: 16, marginBottom: 8 }}>
+        Bills — <strong className="neg">{formatCents(totals.bills_cents)}</strong>
+      </h3>
+      {bills.length === 0 ? (
+        <p className="muted small">No bills due in this period.</p>
+      ) : (
+        <table className="txn-table">
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th className="nowrap">Due</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bills.map((b) => (
+              <tr key={b.budget_id}>
+                <td>{b.name}</td>
+                <td className="nowrap">{b.date ? formatDate(b.date) : <span className="muted">—</span>}</td>
+                <td className="num neg">−{formatCents(b.amount_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Modifiable / editable categories */}
+      <h3 style={{ marginTop: 16, marginBottom: 8 }}>
+        Set aside — <strong className="neg">{formatCents(totals.editable_cents)}</strong>
+      </h3>
+      {editable.length === 0 ? (
+        <p className="muted small">No modifiable categories set for this period.</p>
+      ) : (
+        <table className="txn-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Action</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {editable.map((e) => (
+              <tr key={e.budget_id}>
+                <td>{e.category_name}</td>
+                <td className="muted small">
+                  {e.requires_manual_action
+                    ? 'Manually transfer to savings'
+                    : 'Spending allowance'}
+                </td>
+                <td className="num neg">−{formatCents(e.amount_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Net */}
+      <div
+        style={{
+          marginTop: 20,
+          paddingTop: 12,
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          fontSize: '1.05em',
+        }}
+      >
+        <span>
+          <strong>{overextended ? 'Overextended by' : 'Leftover'}</strong>
+          <div className="muted small">
+            Income − bills − set-aside ={' '}
+            {formatCents(totals.income_cents)} − {formatCents(totals.bills_cents)} −{' '}
+            {formatCents(totals.editable_cents)}
+          </div>
+        </span>
+        <strong className={overextended ? 'neg' : 'pos'} style={{ fontSize: '1.3em' }}>
+          {overextended ? '−' : '+'}
+          {formatCents(Math.abs(totals.net_cents))}
+        </strong>
+      </div>
+      {overextended && (
+        <p className="muted small" style={{ marginTop: 8 }}>
+          You'll need to cover this gap — either by reducing one of the modifiable
+          allowances above or by accepting that some bills will roll forward.
+        </p>
+      )}
+    </div>
   );
 }

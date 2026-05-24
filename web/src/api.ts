@@ -521,6 +521,45 @@ export interface BudgetVsActualRow {
   actual_cents: number;
 }
 
+/**
+ * 0.17.7 — period cash-flow summary. Powers the new "Period
+ * overview" section on the Budgets page. The shape is per-period
+ * income + bills + modifiable budgets + net, not the
+ * budget-vs-actual table the same page also renders.
+ */
+export interface BudgetPeriodSummary {
+  asOf: string;
+  period: { start: string; end: string; type: BudgetPeriodType };
+  income: Array<{
+    id: string;
+    name: string;
+    amount_cents: number;
+    date: string;
+  }>;
+  bills: Array<{
+    budget_id: string;
+    bill_id: string;
+    name: string;
+    amount_cents: number;
+    date: string | null;
+  }>;
+  editable: Array<{
+    budget_id: string;
+    category_id: string;
+    category_name: string;
+    amount_cents: number;
+    /** True for Savings — the user has to physically move money. */
+    requires_manual_action: boolean;
+  }>;
+  totals: {
+    income_cents: number;
+    bills_cents: number;
+    editable_cents: number;
+    /** Positive = leftover; negative = overextended for the period. */
+    net_cents: number;
+  };
+}
+
 export interface NormalizationRule {
   id: string;
   pattern: string;
@@ -1730,6 +1769,13 @@ export const api = {
       rows: BudgetVsActualRow[];
       totals: { budgeted_cents: number; actual_cents: number };
     }>(`/api/budgets/actual?asOf=${encodeURIComponent(asOf)}`),
+
+  // 0.17.7 — period cash-flow shape. Income events + bill events
+  // with dates + modifiable budgets + net for whatever period
+  // covers `asOf`. Renders the "Period overview" section on
+  // /budgets.
+  budgetPeriod: (asOf: string) =>
+    http<BudgetPeriodSummary>(`/api/budgets/period?asOf=${encodeURIComponent(asOf)}`),
 
   // ── Goals ────────────────────────────────────────────────
   listGoals: () =>

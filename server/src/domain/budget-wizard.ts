@@ -94,7 +94,7 @@ export function periodRange(
   return { start, end: addDays(start, 1) };
 }
 
-interface BillRow {
+export interface BillRow {
   id: string;
   name: string;
   amount_cents: number;
@@ -102,7 +102,7 @@ interface BillRow {
   next_due_date: string;
 }
 
-interface IncomeRow {
+export interface IncomeRow {
   id: string;
   name: string;
   amount_cents: number;
@@ -313,7 +313,13 @@ function scaleToPeriod(weeklyCents: number, days: number): number {
   return Math.round(weeklyCents * (days / 7));
 }
 
-function instancesIn(
+/**
+ * 0.17.7 — exported so the new /api/budgets/period endpoint can
+ * compute income + bill instances in the same way the wizard
+ * preview does. The shape is intentionally identical so the
+ * cash-flow view on /budgets matches what the wizard previewed.
+ */
+export function instancesIn(
   rows: Array<BillRow | IncomeRow>,
   start: string,
   end: string,

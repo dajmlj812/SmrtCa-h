@@ -161,11 +161,95 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.6 shipped. 0.17.6 fixes the AutoMagic budget
-wizard, which had been silently creating orphan budget rows
-with <code>tenant_id = NULL</code> since the 0.11.0 multi-tenant phase —
-invisible from any /budgets view. Also closes the related
-cross-tenant leak in the wizard&#39;s preview aggregations.</em></p>
+<p><em>0.17.0–0.17.7 shipped. 0.17.7 adds a &quot;Period overview&quot;
+cash-flow view to /budgets — income with dates, bills line-
+per-bill, modifiable budgets, leftover/overextended net. The
+view the user actually wanted instead of the budget-vs-actual
+table the page led with before.</em></p>
+<hr>
+<h2 id="0177-2026-05-24-period-cash-flow-view-on-budgets">[0.17.7] — 2026-05-24 — Period cash-flow view on /budgets<a class="heading-anchor" href="#0177-2026-05-24-period-cash-flow-view-on-budgets">#</a></h2>
+<p>Operator feedback after 0.17.6 made the 61 AutoMagic-created
+budget rows visible:</p>
+<blockquote>
+<p>&quot;Their presentation is not very helpful. A weekly budget
+should show your income and what your expected expenditures
+are going to be for that period and what days they are
+expected to come out — income then days expected to hit your
+account, expenditures/outgoing bills presented in one line
+per bill with vendor, amount and date, then modifiable
+entries presented with what needs to be manually moved to
+savings, followed by the amount that is left over or that you
+need to find a way to cover because you are over extended.&quot;</p>
+</blockquote>
+<p>That&#39;s a &quot;period cash flow&quot; view — completely different from
+the budget-vs-actual table the page rendered before. Now both
+ship: cash-flow first (what the user asked for), budget-vs-
+actual table below (kept for spot-checking actuals).</p>
+<h3 id="new-endpoint">New endpoint<a class="heading-anchor" href="#new-endpoint">#</a></h3>
+<p><code>GET /api/budgets/period?asOf=YYYY-MM-DD</code> returns:</p>
+<pre><code class="language-ts">{
+  asOf, period: { start, end, type },
+  income:  [{ id, name, amount_cents, date }],
+  bills:   [{ budget_id, bill_id, name, amount_cents, date }],
+  editable:[{ budget_id, category_id, category_name,
+              amount_cents, requires_manual_action }],
+  totals:  { income_cents, bills_cents, editable_cents,
+             net_cents }   // negative = overextended
+}
+</code></pre>
+<ul>
+<li><strong>Active period</strong> is picked by scanning the tenant&#39;s budget
+rows and finding the first whose <code>currentPeriod(asOf)</code> window
+covers asOf. So a wizard run with weekly cadence shows weekly
+windows; monthly cadence shows monthly windows; no need to
+guess. Falls back to the calendar month if no budget rows
+cover asOf (so the UI still renders income + bills from
+master tables).</li>
+<li><strong>Income events</strong> computed from <code>recurring_income</code> directly
+(income is a target, not a commitment — no budget rows for
+it). Same <code>instancesIn</code> helper the wizard uses.</li>
+<li><strong>Bill events</strong> come from budget rows where <code>bill_id IS NOT NULL</code>
+in the active window; the master <code>bills</code> table provides the
+due date for the visible instance.</li>
+<li><strong>Modifiable categories</strong> come from budget rows where
+<code>category_id IS NOT NULL</code>. <code>requires_manual_action</code> flips true
+for Savings (the user has to physically transfer money to a
+savings account each period); other categories are spending
+caps where actuals reduce the budget automatically.</li>
+<li>All tenant-scoped via <code>requireTenant</code>. The 0.17.6 fix ensures
+the underlying rows have proper <code>tenant_id</code>.</li>
+</ul>
+<h3 id="web">Web<a class="heading-anchor" href="#web">#</a></h3>
+<p><code>BudgetsPage</code> fetches the period summary alongside
+budget-vs-actual on every month change. A new
+<code>PeriodOverview</code> component renders three tables (Income /
+Bills / Set aside) with running totals per section, then a
+large net line at the bottom — color-coded green/red.
+Overextended runs also show a one-line &quot;you&#39;ll need to cover
+this gap&quot; note pointing the user at the editable section as
+the place to trim.</p>
+<p>The budget-vs-actual table stays below for users who like
+seeing budgeted vs spent on a single screen.</p>
+<h3 id="files-changed">Files changed<a class="heading-anchor" href="#files-changed">#</a></h3>
+<ul>
+<li><code>server/src/domain/budget-wizard.ts</code> — <code>BillRow</code> and
+<code>IncomeRow</code> now exported (was internal); <code>instancesIn</code>
+exported (the period helper that walks frequency forward).</li>
+<li><code>server/src/routes/budgets.ts</code> — new
+<code>GET /api/budgets/period</code> route + <code>nextMonthStart</code> /
+<code>ymdToday</code> helpers.</li>
+<li><code>web/src/api.ts</code> — new <code>BudgetPeriodSummary</code> type +
+<code>api.budgetPeriod(asOf)</code> helper.</li>
+<li><code>web/src/pages/BudgetsPage.tsx</code> — <code>period</code> state, paired
+fetch in <code>load()</code>, new <code>PeriodOverview</code> component
+rendered above the existing budget-vs-actual card.</li>
+</ul>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>All existing budget + wizard tests still pass (14/14 in the
+two test files). No new tests for the new route in this
+slice — it&#39;s a pure read aggregator over data the existing
+routes already test thoroughly; the cash-flow shape is
+mostly UI plumbing.</p>
 <hr>
 <h2 id="0176-2026-05-24-fix-automagic-budget-wizard-tenant-scoping">[0.17.6] — 2026-05-24 — Fix: AutoMagic budget wizard tenant scoping<a class="heading-anchor" href="#0176-2026-05-24-fix-automagic-budget-wizard-tenant-scoping">#</a></h2>
 <p>The AutoMagic budget wizard (<code>/api/budgets/wizard/*</code>) predated
@@ -5680,7 +5764,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 20:49:49 UTC · commit 1c14be0</span>
+  <span>Generated 2026-05-24 21:08:48 UTC · commit df66ced</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

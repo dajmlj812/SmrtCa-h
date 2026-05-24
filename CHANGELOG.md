@@ -9,11 +9,106 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.6 shipped. 0.17.6 fixes the AutoMagic budget
-wizard, which had been silently creating orphan budget rows
-with `tenant_id = NULL` since the 0.11.0 multi-tenant phase —
-invisible from any /budgets view. Also closes the related
-cross-tenant leak in the wizard's preview aggregations._
+_0.17.0–0.17.7 shipped. 0.17.7 adds a "Period overview"
+cash-flow view to /budgets — income with dates, bills line-
+per-bill, modifiable budgets, leftover/overextended net. The
+view the user actually wanted instead of the budget-vs-actual
+table the page led with before._
+
+---
+
+## [0.17.7] — 2026-05-24 — Period cash-flow view on /budgets
+
+Operator feedback after 0.17.6 made the 61 AutoMagic-created
+budget rows visible:
+
+> "Their presentation is not very helpful. A weekly budget
+> should show your income and what your expected expenditures
+> are going to be for that period and what days they are
+> expected to come out — income then days expected to hit your
+> account, expenditures/outgoing bills presented in one line
+> per bill with vendor, amount and date, then modifiable
+> entries presented with what needs to be manually moved to
+> savings, followed by the amount that is left over or that you
+> need to find a way to cover because you are over extended."
+
+That's a "period cash flow" view — completely different from
+the budget-vs-actual table the page rendered before. Now both
+ship: cash-flow first (what the user asked for), budget-vs-
+actual table below (kept for spot-checking actuals).
+
+### New endpoint
+
+`GET /api/budgets/period?asOf=YYYY-MM-DD` returns:
+
+```ts
+{
+  asOf, period: { start, end, type },
+  income:  [{ id, name, amount_cents, date }],
+  bills:   [{ budget_id, bill_id, name, amount_cents, date }],
+  editable:[{ budget_id, category_id, category_name,
+              amount_cents, requires_manual_action }],
+  totals:  { income_cents, bills_cents, editable_cents,
+             net_cents }   // negative = overextended
+}
+```
+
+- **Active period** is picked by scanning the tenant's budget
+  rows and finding the first whose `currentPeriod(asOf)` window
+  covers asOf. So a wizard run with weekly cadence shows weekly
+  windows; monthly cadence shows monthly windows; no need to
+  guess. Falls back to the calendar month if no budget rows
+  cover asOf (so the UI still renders income + bills from
+  master tables).
+- **Income events** computed from `recurring_income` directly
+  (income is a target, not a commitment — no budget rows for
+  it). Same `instancesIn` helper the wizard uses.
+- **Bill events** come from budget rows where `bill_id IS NOT NULL`
+  in the active window; the master `bills` table provides the
+  due date for the visible instance.
+- **Modifiable categories** come from budget rows where
+  `category_id IS NOT NULL`. `requires_manual_action` flips true
+  for Savings (the user has to physically transfer money to a
+  savings account each period); other categories are spending
+  caps where actuals reduce the budget automatically.
+- All tenant-scoped via `requireTenant`. The 0.17.6 fix ensures
+  the underlying rows have proper `tenant_id`.
+
+### Web
+
+`BudgetsPage` fetches the period summary alongside
+budget-vs-actual on every month change. A new
+`PeriodOverview` component renders three tables (Income /
+Bills / Set aside) with running totals per section, then a
+large net line at the bottom — color-coded green/red.
+Overextended runs also show a one-line "you'll need to cover
+this gap" note pointing the user at the editable section as
+the place to trim.
+
+The budget-vs-actual table stays below for users who like
+seeing budgeted vs spent on a single screen.
+
+### Files changed
+
+- `server/src/domain/budget-wizard.ts` — `BillRow` and
+  `IncomeRow` now exported (was internal); `instancesIn`
+  exported (the period helper that walks frequency forward).
+- `server/src/routes/budgets.ts` — new
+  `GET /api/budgets/period` route + `nextMonthStart` /
+  `ymdToday` helpers.
+- `web/src/api.ts` — new `BudgetPeriodSummary` type +
+  `api.budgetPeriod(asOf)` helper.
+- `web/src/pages/BudgetsPage.tsx` — `period` state, paired
+  fetch in `load()`, new `PeriodOverview` component
+  rendered above the existing budget-vs-actual card.
+
+### Tests
+
+All existing budget + wizard tests still pass (14/14 in the
+two test files). No new tests for the new route in this
+slice — it's a pure read aggregator over data the existing
+routes already test thoroughly; the cash-flow shape is
+mostly UI plumbing.
 
 ---
 

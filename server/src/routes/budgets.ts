@@ -1,7 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { query } from '../db/pool.js';
+import { pool, query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import { assertCategoryUsableByTenant, requireTenant } from '../auth/rbac.js';
+import {
+  type BillRow,
+  type IncomeRow,
+  instancesIn,
+} from '../domain/budget-wizard.js';
 
 type PeriodType = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'custom';
 const PERIOD_TYPES: PeriodType[] = [
@@ -472,4 +477,177 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       return { asOf, rows, totals };
     },
   );
+
+  // ── 0.17.7: period cash-flow view ──────────────────────────
+  //
+  // Returns the period covering `asOf` plus its income events
+  // (per-instance with dates), bill events (per-instance with
+  // vendor + due date), modifiable category budgets, and totals
+  // with net. Used by the new "Period overview" section on
+  // /budgets — the cash-flow layout the budget-vs-actual table
+  // doesn't provide.
+  //
+  // The endpoint picks the FIRST budget row whose period covers
+  // asOf to determine the active period window — that way users
+  // running the wizard on weekly cadence get a weekly view,
+  // monthly cadence gets a monthly view, etc. If no budget rows
+  // exist for asOf, it falls back to the calendar month
+  // containing asOf so the UI still has something to render.
+  app.get<{ Querystring: { asOf?: string } }>(
+    '/api/budgets/period',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      const asOf = isYmd(req.query.asOf) ? req.query.asOf : ymdToday();
+
+      // Pick the active period by scanning budget rows. The first
+      // row whose currentPeriod covers asOf defines the window.
+      const budgets = await query<{
+        id: string;
+        period_month: string;
+        period_type: PeriodType;
+        period_end: string | null;
+        category_id: string | null;
+        bill_id: string | null;
+        amount_cents: number;
+        category_name: string | null;
+        bill_name: string | null;
+      }>(
+        `SELECT b.id, b.period_month, b.period_type, b.period_end,
+                b.category_id, b.bill_id, b.amount_cents, b.note,
+                c.name AS category_name,
+                bl.name AS bill_name, bl.next_due_date AS bill_next_due_date
+           FROM budgets b
+      LEFT JOIN categories c ON c.id = b.category_id
+      LEFT JOIN bills      bl ON bl.id = b.bill_id
+          WHERE b.tenant_id = $1`,
+        [tenantId],
+      );
+
+      let activeWindow: { start: string; end: string; type: PeriodType } | null = null;
+      const activeRows: typeof budgets.rows = [];
+      for (const b of budgets.rows) {
+        const win = currentPeriod({
+          anchor: b.period_month,
+          periodType: b.period_type,
+          periodEnd: b.period_end,
+          asOf,
+        });
+        if (asOf >= win.start && asOf < win.end) {
+          if (activeWindow === null) {
+            activeWindow = { start: win.start, end: win.end, type: b.period_type };
+          }
+          activeRows.push(b);
+        }
+      }
+      if (!activeWindow) {
+        // No budget rows cover asOf. Fall back to a calendar-month
+        // window so the UI still renders something useful: income
+        // + bill instances from the master tables, no editable
+        // budgets (since none exist for this window).
+        const [y, m] = asOf.split('-').map(Number) as [number, number];
+        const start = `${y}-${String(m).padStart(2, '0')}-01`;
+        const end = nextMonthStart(start);
+        activeWindow = { start, end, type: 'monthly' };
+      }
+
+      // Income events from recurring_income (no budget rows for
+      // income — it's a target, not a commitment). Walk frequency
+      // forward like the wizard does.
+      const incomeRowsRes = await pool.query<IncomeRow & { active: boolean }>(
+        `SELECT id, name, amount_cents, frequency, next_expected_date, active
+           FROM recurring_income
+          WHERE tenant_id = $1 AND active`,
+        [tenantId],
+      );
+      const incomeEvents = instancesIn(
+        incomeRowsRes.rows,
+        activeWindow.start,
+        activeWindow.end,
+        'next_expected_date',
+      );
+
+      // Bill events come from BUDGET rows where bill_id IS NOT NULL —
+      // the wizard committed one per (period, bill) so the dates
+      // and amounts are already tenant-scoped + period-pinned. Cross-
+      // reference to bills for the next_due_date so we can show
+      // "due Jun 15" etc.
+      const billsRes = await pool.query<BillRow>(
+        `SELECT id, name, amount_cents, frequency, next_due_date
+           FROM bills
+          WHERE tenant_id = $1 AND active`,
+        [tenantId],
+      );
+      const billsById = new Map(billsRes.rows.map((b) => [b.id, b]));
+      const billsByInstance = instancesIn(
+        billsRes.rows,
+        activeWindow.start,
+        activeWindow.end,
+        'next_due_date',
+      );
+
+      const billEvents = activeRows
+        .filter((r) => r.bill_id !== null)
+        .map((r) => {
+          // Find the dated instance for this bill in this window.
+          const inst = billsByInstance.find((i) => i.id === r.bill_id);
+          const masterBill = billsById.get(r.bill_id!);
+          return {
+            budget_id: r.id,
+            bill_id: r.bill_id!,
+            name: r.bill_name ?? masterBill?.name ?? '(unknown bill)',
+            amount_cents: Number(r.amount_cents),
+            date: inst?.date ?? null,
+          };
+        })
+        .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+
+      // Modifiable / editable category budgets. "Savings" is the
+      // one that requires manual action (the user has to transfer
+      // money to their savings account each period). Others are
+      // just spending caps.
+      const editable = activeRows
+        .filter((r) => r.category_id !== null)
+        .map((r) => ({
+          budget_id: r.id,
+          category_id: r.category_id!,
+          category_name: r.category_name ?? '(uncategorized)',
+          amount_cents: Number(r.amount_cents),
+          // Heuristic: name-based. Savings is the one the user
+          // physically moves money into; other categories are
+          // pre-committed spend.
+          requires_manual_action:
+            (r.category_name ?? '').toLowerCase() === 'savings',
+        }))
+        .sort((a, b) => a.category_name.localeCompare(b.category_name));
+
+      const totals = {
+        income_cents: incomeEvents.reduce((s, e) => s + Number(e.amount_cents), 0),
+        bills_cents: billEvents.reduce((s, e) => s + Number(e.amount_cents), 0),
+        editable_cents: editable.reduce((s, e) => s + Number(e.amount_cents), 0),
+        net_cents: 0,
+      };
+      totals.net_cents = totals.income_cents - totals.bills_cents - totals.editable_cents;
+
+      return {
+        period: activeWindow,
+        asOf,
+        income: incomeEvents,
+        bills: billEvents,
+        editable,
+        totals,
+      };
+    },
+  );
+}
+
+function nextMonthStart(ymd: string): string {
+  const [y, m] = ymd.split('-').map(Number) as [number, number];
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  return `${ny}-${String(nm).padStart(2, '0')}-01`;
+}
+
+function ymdToday(): string {
+  return new Date().toISOString().slice(0, 10);
 }
