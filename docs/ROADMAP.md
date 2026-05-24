@@ -494,6 +494,24 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   contributor can't ship a text-only email by accident.
   Driven by the test-deploy finding that operators want
   visually polished invitations, not raw monospace text.
+- **0.18.6** 📋 — **Unify base URL settings** (~1 day).
+  Currently there are two settings that answer the same
+  question — "what URL should outgoing email links use?":
+  `APP_BASE_URL` (read by tenant invitations and the
+  super-admin admin-invite added in 0.17.1) and
+  `STRIPE_PUBLIC_BASE_URL` (read by signup verification,
+  password reset, dunning, and Stripe Checkout redirects).
+  Their fallback orders differ. During the smrtcash-test
+  deploy, an operator typo'd `APP_BASE_URL` with `@`
+  instead of `.`; only the invitation flow broke (the
+  signup-verification path was fine because it reads the
+  other key). The bug was incredibly time-consuming to
+  diagnose because the symptoms looked like SMTP-relay URL
+  mangling. Slice goal: collapse both keys into a single
+  `PUBLIC_BASE_URL`, migrate existing rows, replace all
+  `resolveBaseUrl()` helpers with one. Prevents this exact
+  category of "two settings, one source of truth, drift in
+  between" bug.
 
 ### Deeper bench (slice TBD)
 
