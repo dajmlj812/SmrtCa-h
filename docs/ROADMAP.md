@@ -27,6 +27,8 @@ application — nothing is "all or nothing."
 | 0.14.x | Multi-tenant isolation hardening (72 dedicated tests) | ✅ Complete — 2026-05-23 |
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
+| **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 📋 Planned |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -393,9 +395,134 @@ encrypted under a per-tenant DEK with a super-admin rotation path.
 
 ---
 
-## Beyond — v0.17+
+## 0.17.x — Documentation refresh + HTML build ✅
 
-The big SaaS-launch items left after v0.16:
+Documentation caught up to v0.16 reality and a static HTML mirror
+was added so the marketing site can serve docs directly from `main`
+without a build pipeline.
+
+- **0.17.0** ✅ — README + FEATURES + ROADMAP + INSTALLATION
+  + KNOWN_ISSUES brought current; `scripts/build-docs-html.mjs`
+  renders every `.md` to a self-contained HTML page via
+  `marked`; `docs/html/index.html` + 17 per-doc pages
+  committed; inline CSS + dark-mode + GitHub-style anchor
+  links + internal `.md`→`.html` link rewriting.
+
+---
+
+## 0.18.x — Competitive parity & depth 📋
+
+Competitive read after v0.17 surfaced specific moats competitors
+own that SmrtCash hasn't yet contested. Each slice closes one
+gap; ordering is by impact-per-day so the early wins compound.
+
+The full strategic read lives in the project notes; the short
+version of each slice is below.
+
+### Where competitors lead us today
+
+- **Monarch** — goal-tracking depth (target dates, linked
+  contributions, visualized progress). We have
+  `savings_goals` but it's not dashboard-visible.
+- **Simplifi** — cash-flow forecast as the hero dashboard
+  feature. We compute a 90-day forecast but don't lead with it.
+- **Empower** — investment analysis: fee analyzer, asset
+  allocation drift, Monte Carlo. We have holdings + projections;
+  missing the analysis layer.
+- **YNAB** — debt-payoff workflows (snowball / avalanche). We
+  track loan/credit-card accounts but don't ship a payoff plan.
+- **Rocket Money** — subscription cancellation help. We detect
+  subscriptions; we don't help cancel them.
+- **Lunch Money** — public API + developer audience. We have
+  no tenant-user API keys.
+- **Banktivity / Moneydance** — cleared/uncleared bank-statement
+  reconciliation. We have reconciliation but not the
+  per-transaction cleared toggle that power users want.
+
+### Where SmrtCash already has moats (under-sold)
+
+These are real and shipped — the work below is also to
+DRAMATIZE them via UX + the marketing copy on the BITS site.
+
+- **Self-host OR SaaS** — same code as both a single-container
+  install and a hosted service. Nobody else offers both.
+- **Pluggable AI provider** — Claude / Ollama (fully local) /
+  rules-only. Local AI is unique among consumer finance apps.
+- **Per-tenant envelope encryption** — DEK wrapped by KEK,
+  rotatable. Competitors use a single platform key.
+- **AI assistant with 17 audit-logged tools** — tool-use loop
+  with visible audit trail, not just a chatbot.
+
+### Planned slices (ordered by impact-per-day)
+
+- **0.18.0** 📋 — **Cash-flow forecast as dashboard hero**
+  (~1 day). UI polish on the existing 90-day projection.
+  Headline chart on the dashboard with confidence bands and
+  projected balance in 30 / 60 / 90 days. Steals Simplifi's
+  hero feature using data we already have.
+- **0.18.1** 📋 — **Subscription cancellation links** (~1–2
+  days). For each detected subscription, store the
+  cancellation URL + a canned email template + step-by-step
+  instructions. Don't try to be the concierge (that's a
+  legal + ops moat we won't build); just remove the friction
+  Rocket Money charges for.
+- **0.18.2** 📋 — **Public read-only API + per-user keys**
+  (~2–3 days). Each tenant member gets an API key for their
+  own data. Existing routes already RBAC-enforce ownership;
+  this is a thin token-auth layer on top. Devs are an
+  underserved beachhead market (Lunch Money's whole audience).
+- **0.18.3** 📋 — **Goal tracking polish** (~2–3 days). Target
+  dates with progress visualizations, contributions linked to
+  specific transactions, dashboard card showing top goals.
+  Existing `savings_goals` data; missing UX. Closes Monarch's
+  visible advantage.
+- **0.18.4** 📋 — **Debt payoff plans** (~2–3 days). For
+  accounts of `type IN ('loan','credit_card')`, add a
+  "Payoff plan" view with snowball + avalanche calculators
+  and projected payoff date based on current min payment +
+  optional extra. Closes the YNAB gap.
+
+### Deeper bench (slice TBD)
+
+These showed up in the competitive read but are heavier; they
+may slip to v0.19+ depending on what early traffic asks for.
+
+- **Investment analysis (Empower-class)** — fee analyzer
+  (you have all the holdings; analyze expense ratios), asset
+  allocation chart, Monte Carlo on the retirement projection.
+- **Cleared / uncleared reconciliation (Banktivity-class)** —
+  per-transaction cleared toggle + "reconcile against your
+  statement" workflow with running difference.
+- **Bill negotiation assist** — for detected recurring
+  utilities, surface the company's billing-dispute URL +
+  template. Same pattern as 0.18.1 but for an adjacent
+  category.
+
+### Positioning / marketing (non-code, runs in parallel)
+
+These don't need a release version — they live on the BITS
+site + sales copy. Listed here so they ship alongside the
+features that justify them.
+
+- **"Your data, your hardware, your AI"** landing page
+  leaning into the dual-deploy + local-AI + per-tenant
+  encryption stack. Screenshots from `/settings` (AI
+  provider picker), `/system/overview` (Rotate key button),
+  and the install docs side-by-side.
+- **Publish the encryption design** — a short page describing
+  the KEK / DEK envelope, rotation flow, and what a KEK leak
+  *does and doesn't* expose. Security-curious users notice
+  what competitors hide.
+- **Lead all comparison copy with the dual-deploy story.**
+  No competitor matches it; every other comparison axis
+  (UX polish, feature depth) is one we're either catching up
+  on or matching.
+
+---
+
+## Beyond — v0.19+
+
+Items deferred from earlier series that don't yet have a slice:
 
 - **Stripe Tax dashboard setup** — enabling automatic tax
   requires Stripe Tax → Settings to be configured with a tax

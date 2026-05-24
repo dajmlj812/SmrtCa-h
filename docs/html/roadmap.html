@@ -238,6 +238,16 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <td><strong>SaaS launch readiness — signup, password reset, per-tenant encryption</strong></td>
 <td>✅ Complete — 2026-05-24</td>
 </tr>
+<tr>
+<td><strong>0.17.x</strong></td>
+<td><strong>Documentation refresh + HTML build pipeline</strong></td>
+<td>✅ Complete — 2026-05-24 (0.17.0)</td>
+</tr>
+<tr>
+<td><strong>0.18.x</strong></td>
+<td><strong>Competitive parity &amp; depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower</strong></td>
+<td>📋 Planned</td>
+</tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
 <hr>
@@ -564,8 +574,126 @@ upgrades to v2 on rotation.</li>
 </li>
 </ul>
 <hr>
-<h2 id="beyond-v017">Beyond — v0.17+<a class="heading-anchor" href="#beyond-v017">#</a></h2>
-<p>The big SaaS-launch items left after v0.16:</p>
+<h2 id="017x-documentation-refresh-html-build">0.17.x — Documentation refresh + HTML build ✅<a class="heading-anchor" href="#017x-documentation-refresh-html-build">#</a></h2>
+<p>Documentation caught up to v0.16 reality and a static HTML mirror
+was added so the marketing site can serve docs directly from <code>main</code>
+without a build pipeline.</p>
+<ul>
+<li><strong>0.17.0</strong> ✅ — README + FEATURES + ROADMAP + INSTALLATION<ul>
+<li>KNOWN_ISSUES brought current; <code>scripts/build-docs-html.mjs</code>
+renders every <code>.md</code> to a self-contained HTML page via
+<code>marked</code>; <code>docs/html/index.html</code> + 17 per-doc pages
+committed; inline CSS + dark-mode + GitHub-style anchor
+links + internal <code>.md</code>→<code>.html</code> link rewriting.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="018x-competitive-parity-amp-depth">0.18.x — Competitive parity &amp; depth 📋<a class="heading-anchor" href="#018x-competitive-parity-amp-depth">#</a></h2>
+<p>Competitive read after v0.17 surfaced specific moats competitors
+own that SmrtCash hasn&#39;t yet contested. Each slice closes one
+gap; ordering is by impact-per-day so the early wins compound.</p>
+<p>The full strategic read lives in the project notes; the short
+version of each slice is below.</p>
+<h3 id="where-competitors-lead-us-today">Where competitors lead us today<a class="heading-anchor" href="#where-competitors-lead-us-today">#</a></h3>
+<ul>
+<li><strong>Monarch</strong> — goal-tracking depth (target dates, linked
+contributions, visualized progress). We have
+<code>savings_goals</code> but it&#39;s not dashboard-visible.</li>
+<li><strong>Simplifi</strong> — cash-flow forecast as the hero dashboard
+feature. We compute a 90-day forecast but don&#39;t lead with it.</li>
+<li><strong>Empower</strong> — investment analysis: fee analyzer, asset
+allocation drift, Monte Carlo. We have holdings + projections;
+missing the analysis layer.</li>
+<li><strong>YNAB</strong> — debt-payoff workflows (snowball / avalanche). We
+track loan/credit-card accounts but don&#39;t ship a payoff plan.</li>
+<li><strong>Rocket Money</strong> — subscription cancellation help. We detect
+subscriptions; we don&#39;t help cancel them.</li>
+<li><strong>Lunch Money</strong> — public API + developer audience. We have
+no tenant-user API keys.</li>
+<li><strong>Banktivity / Moneydance</strong> — cleared/uncleared bank-statement
+reconciliation. We have reconciliation but not the
+per-transaction cleared toggle that power users want.</li>
+</ul>
+<h3 id="where-smrtcash-already-has-moats-under-sold">Where SmrtCash already has moats (under-sold)<a class="heading-anchor" href="#where-smrtcash-already-has-moats-under-sold">#</a></h3>
+<p>These are real and shipped — the work below is also to
+DRAMATIZE them via UX + the marketing copy on the BITS site.</p>
+<ul>
+<li><strong>Self-host OR SaaS</strong> — same code as both a single-container
+install and a hosted service. Nobody else offers both.</li>
+<li><strong>Pluggable AI provider</strong> — Claude / Ollama (fully local) /
+rules-only. Local AI is unique among consumer finance apps.</li>
+<li><strong>Per-tenant envelope encryption</strong> — DEK wrapped by KEK,
+rotatable. Competitors use a single platform key.</li>
+<li><strong>AI assistant with 17 audit-logged tools</strong> — tool-use loop
+with visible audit trail, not just a chatbot.</li>
+</ul>
+<h3 id="planned-slices-ordered-by-impact-per-day">Planned slices (ordered by impact-per-day)<a class="heading-anchor" href="#planned-slices-ordered-by-impact-per-day">#</a></h3>
+<ul>
+<li><strong>0.18.0</strong> 📋 — <strong>Cash-flow forecast as dashboard hero</strong>
+(~1 day). UI polish on the existing 90-day projection.
+Headline chart on the dashboard with confidence bands and
+projected balance in 30 / 60 / 90 days. Steals Simplifi&#39;s
+hero feature using data we already have.</li>
+<li><strong>0.18.1</strong> 📋 — <strong>Subscription cancellation links</strong> (~1–2
+days). For each detected subscription, store the
+cancellation URL + a canned email template + step-by-step
+instructions. Don&#39;t try to be the concierge (that&#39;s a
+legal + ops moat we won&#39;t build); just remove the friction
+Rocket Money charges for.</li>
+<li><strong>0.18.2</strong> 📋 — <strong>Public read-only API + per-user keys</strong>
+(~2–3 days). Each tenant member gets an API key for their
+own data. Existing routes already RBAC-enforce ownership;
+this is a thin token-auth layer on top. Devs are an
+underserved beachhead market (Lunch Money&#39;s whole audience).</li>
+<li><strong>0.18.3</strong> 📋 — <strong>Goal tracking polish</strong> (~2–3 days). Target
+dates with progress visualizations, contributions linked to
+specific transactions, dashboard card showing top goals.
+Existing <code>savings_goals</code> data; missing UX. Closes Monarch&#39;s
+visible advantage.</li>
+<li><strong>0.18.4</strong> 📋 — <strong>Debt payoff plans</strong> (~2–3 days). For
+accounts of <code>type IN (&#39;loan&#39;,&#39;credit_card&#39;)</code>, add a
+&quot;Payoff plan&quot; view with snowball + avalanche calculators
+and projected payoff date based on current min payment +
+optional extra. Closes the YNAB gap.</li>
+</ul>
+<h3 id="deeper-bench-slice-tbd">Deeper bench (slice TBD)<a class="heading-anchor" href="#deeper-bench-slice-tbd">#</a></h3>
+<p>These showed up in the competitive read but are heavier; they
+may slip to v0.19+ depending on what early traffic asks for.</p>
+<ul>
+<li><strong>Investment analysis (Empower-class)</strong> — fee analyzer
+(you have all the holdings; analyze expense ratios), asset
+allocation chart, Monte Carlo on the retirement projection.</li>
+<li><strong>Cleared / uncleared reconciliation (Banktivity-class)</strong> —
+per-transaction cleared toggle + &quot;reconcile against your
+statement&quot; workflow with running difference.</li>
+<li><strong>Bill negotiation assist</strong> — for detected recurring
+utilities, surface the company&#39;s billing-dispute URL +
+template. Same pattern as 0.18.1 but for an adjacent
+category.</li>
+</ul>
+<h3 id="positioning-marketing-non-code-runs-in-parallel">Positioning / marketing (non-code, runs in parallel)<a class="heading-anchor" href="#positioning-marketing-non-code-runs-in-parallel">#</a></h3>
+<p>These don&#39;t need a release version — they live on the BITS
+site + sales copy. Listed here so they ship alongside the
+features that justify them.</p>
+<ul>
+<li><strong>&quot;Your data, your hardware, your AI&quot;</strong> landing page
+leaning into the dual-deploy + local-AI + per-tenant
+encryption stack. Screenshots from <code>/settings</code> (AI
+provider picker), <code>/system/overview</code> (Rotate key button),
+and the install docs side-by-side.</li>
+<li><strong>Publish the encryption design</strong> — a short page describing
+the KEK / DEK envelope, rotation flow, and what a KEK leak
+<em>does and doesn&#39;t</em> expose. Security-curious users notice
+what competitors hide.</li>
+<li><strong>Lead all comparison copy with the dual-deploy story.</strong>
+No competitor matches it; every other comparison axis
+(UX polish, feature depth) is one we&#39;re either catching up
+on or matching.</li>
+</ul>
+<hr>
+<h2 id="beyond-v019">Beyond — v0.19+<a class="heading-anchor" href="#beyond-v019">#</a></h2>
+<p>Items deferred from earlier series that don&#39;t yet have a slice:</p>
 <ul>
 <li><strong>Stripe Tax dashboard setup</strong> — enabling automatic tax
 requires Stripe Tax → Settings to be configured with a tax
@@ -589,7 +717,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 15:17:57 UTC · commit 2b46bb2</span>
+  <span>Generated 2026-05-24 15:27:56 UTC · commit f60fd96</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
