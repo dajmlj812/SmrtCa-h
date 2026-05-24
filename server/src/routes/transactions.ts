@@ -1,24 +1,13 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import {
   assertAccountWriteAccess,
   assertCategoryUsableByTenant,
   loadUserContext,
+  requireTenant,
   scopedAccountIds,
 } from '../auth/rbac.js';
-
-function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null {
-  if (!req.user) {
-    reply.code(401).send({ error: 'Not authenticated' });
-    return null;
-  }
-  if (!req.user.tenantId) {
-    reply.code(403).send({ error: 'No active tenant' });
-    return null;
-  }
-  return req.user.tenantId;
-}
 
 interface TransactionQuery {
   accountId?: string;

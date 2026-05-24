@@ -1,7 +1,7 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
-import { assertHoldingInTenant } from '../auth/rbac.js';
+import { assertHoldingInTenant, requireTenant } from '../auth/rbac.js';
 
 const COLUMNS = `id, account_id, symbol, name, asset_type,
   quantity::float8 AS quantity,
@@ -38,18 +38,6 @@ function asNonNegativeInt(v: unknown): number | null {
 function isYmdOrNull(value: unknown): value is string | null {
   if (value === null) return true;
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null {
-  if (!req.user) {
-    reply.code(401).send({ error: 'Not authenticated' });
-    return null;
-  }
-  if (!req.user.tenantId) {
-    reply.code(403).send({ error: 'No active tenant' });
-    return null;
-  }
-  return req.user.tenantId;
 }
 
 /**

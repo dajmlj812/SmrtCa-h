@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { requireTenant } from '../auth/rbac.js';
 
 interface GoalBody {
   name?: unknown;
@@ -36,19 +37,31 @@ const GOAL_COLUMNS = `id, name, target_amount_cents, current_amount_cents,
        ELSE LEAST(1.0, current_amount_cents::numeric / target_amount_cents)
   END AS progress`;
 
+/**
+ * 0.14.1 — savings goals are tenant-scoped (audit missed this file
+ * but it had the same unscoped pattern as bills/budgets). GET filters
+ * by tenant; POST writes tenant_id from session; PATCH/DELETE WHERE
+ * by id AND tenant_id so cross-tenant ids 404 identically.
+ */
 export async function goalRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/goals', async () => {
+  app.get('/api/goals', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const r = await query(
       `SELECT ${GOAL_COLUMNS}
          FROM savings_goals
+        WHERE tenant_id = $1
         ORDER BY (target_date IS NULL),  -- dated goals first
                  target_date ASC,
                  created_at`,
+      [tenantId],
     );
     return { goals: r.rows };
   });
 
   app.post('/api/goals', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as GoalBody;
     const name = asString(body.name);
     if (name === '') {
@@ -77,10 +90,10 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
     }
     const r = await query(
       `INSERT INTO savings_goals
-         (name, target_amount_cents, current_amount_cents, target_date)
-       VALUES ($1, $2, $3, $4)
+         (tenant_id, name, target_amount_cents, current_amount_cents, target_date)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING ${GOAL_COLUMNS}`,
-      [name, target, current, (body.targetDate as string | null) ?? null],
+      [tenantId, name, target, current, (body.targetDate as string | null) ?? null],
     );
     return reply.code(201).send({ goal: r.rows[0] });
   });
@@ -88,6 +101,8 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/goals/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid goal id' });
       }
@@ -139,9 +154,12 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       }
 
       params.push(req.params.id);
+      const idIdx = params.length;
+      params.push(tenantId);
+      const tenantIdx = params.length;
       const r = await query(
         `UPDATE savings_goals SET ${updates.join(', ')}
-          WHERE id = $${params.length}
+          WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
        RETURNING ${GOAL_COLUMNS}`,
         params,
       );
@@ -155,12 +173,15 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/goals/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid goal id' });
       }
-      const r = await query(`DELETE FROM savings_goals WHERE id = $1`, [
-        req.params.id,
-      ]);
+      const r = await query(
+        `DELETE FROM savings_goals WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, tenantId],
+      );
       if (r.rowCount === 0) {
         return reply.code(404).send({ error: 'Goal not found' });
       }

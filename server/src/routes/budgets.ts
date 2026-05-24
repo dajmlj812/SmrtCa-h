@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { assertCategoryUsableByTenant, requireTenant } from '../auth/rbac.js';
 
 type PeriodType = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'custom';
 const PERIOD_TYPES: PeriodType[] = [
@@ -110,19 +111,31 @@ const BUDGET_COLUMNS = `b.id, b.period_month, b.period_type, b.period_end,
   c.name AS category_name, c.parent_id,
   bl.name AS bill_name, bl.next_due_date AS bill_next_due_date`;
 
+/**
+ * 0.14.1 — every budget route is tenant-scoped. List/actual filter by
+ * `b.tenant_id`; mutations write `tenant_id` from the session and
+ * filter the WHERE clause by it so cross-tenant probes 404 identically
+ * to unknown ids. The `actual` aggregation also joins
+ * `transaction_category_lines → accounts` to keep per-category totals
+ * from leaking across tenants.
+ */
 export async function budgetRoutes(app: FastifyInstance): Promise<void> {
   // List budgets. Filter by anchor month for backward compatibility, OR
   // list everything when `all=1`.
   app.get<{ Querystring: { month?: string; all?: string } }>(
     '/api/budgets',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (req.query.all === '1') {
         const rows = await query(
           `SELECT ${BUDGET_COLUMNS}
              FROM budgets b
         LEFT JOIN categories c ON c.id = b.category_id
         LEFT JOIN bills      bl ON bl.id = b.bill_id
+            WHERE b.tenant_id = $1
          ORDER BY b.period_type, b.period_month, c.name NULLS LAST`,
+          [tenantId],
         );
         return { budgets: rows.rows };
       }
@@ -137,10 +150,11 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
            FROM budgets b
       LEFT JOIN categories c ON c.id = b.category_id
       LEFT JOIN bills      bl ON bl.id = b.bill_id
-          WHERE b.period_month = $1::date
+          WHERE b.tenant_id = $1
+            AND b.period_month = $2::date
        ORDER BY (b.category_id IS NULL),  -- flex pool last
                 c.name NULLS LAST`,
-        [month],
+        [tenantId, month],
       );
       return { month, budgets: rows.rows };
     },
@@ -150,6 +164,8 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
   // anchors the window. `periodType` defaults to 'monthly'; for 'custom'
   // a `periodEnd` is required and must be after the start.
   app.post('/api/budgets', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as BudgetBody;
 
     const anchor =
@@ -169,10 +185,6 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         error: `periodType must be one of: ${PERIOD_TYPES.join(', ')}`,
       });
     }
-    // Monthly anchors used to require day=1; we now accept any day-of-month
-    // but warn callers via the 'custom' path if they want a non-rolling
-    // window. To stay backward-compatible with old callers passing
-    // `periodMonth` as YYYY-MM-01, leave that path unchanged.
 
     let periodEnd: string | null = null;
     if (periodType === 'custom') {
@@ -195,28 +207,32 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       if (typeof body.categoryId !== 'string' || !isUuid(body.categoryId)) {
         return reply.code(400).send({ error: 'Invalid categoryId' });
       }
+      const ok = await assertCategoryUsableByTenant(tenantId, body.categoryId);
+      if (!ok) return reply.code(400).send({ error: 'Invalid categoryId' });
       categoryId = body.categoryId;
     }
 
-    // For monthly budgets that target the same (start, category), keep
-    // the upsert UX so editing from the UI updates the existing row.
-    // Other period types always insert a new row.
+    // Monthly + first-of-month upsert. Scoped to caller's tenant so
+    // two tenants can each have their own monthly budget for the same
+    // category in the same month.
     if (periodType === 'monthly' && isFirstOfMonth(anchor)) {
       const existing = await query<{ id: string }>(
         `SELECT id FROM budgets
-          WHERE period_type = 'monthly'
-            AND period_month = $1::date
+          WHERE tenant_id = $1
+            AND period_type = 'monthly'
+            AND period_month = $2::date
             AND COALESCE(category_id, '00000000-0000-0000-0000-000000000000'::uuid)
-                = COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+                = COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
           LIMIT 1`,
-        [anchor, categoryId],
+        [tenantId, anchor, categoryId],
       );
       if (existing.rowCount! > 0) {
         const upd = await query(
-          `UPDATE budgets SET amount_cents = $1 WHERE id = $2
+          `UPDATE budgets SET amount_cents = $1
+            WHERE id = $2 AND tenant_id = $3
         RETURNING id, period_month, period_type, period_end, category_id,
                   amount_cents, created_at`,
-          [amountCents, existing.rows[0]!.id],
+          [amountCents, existing.rows[0]!.id, tenantId],
         );
         return reply.code(200).send({ budget: upd.rows[0] });
       }
@@ -224,11 +240,11 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
 
     const ins = await query(
       `INSERT INTO budgets
-         (period_month, period_type, period_end, category_id, amount_cents)
-       VALUES ($1::date, $2, $3::date, $4, $5)
+         (tenant_id, period_month, period_type, period_end, category_id, amount_cents)
+       VALUES ($1, $2::date, $3, $4::date, $5, $6)
        RETURNING id, period_month, period_type, period_end, category_id,
                  amount_cents, created_at`,
-      [anchor, periodType, periodEnd, categoryId, amountCents],
+      [tenantId, anchor, periodType, periodEnd, categoryId, amountCents],
     );
     return reply.code(201).send({ budget: ins.rows[0] });
   });
@@ -236,6 +252,8 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/budgets/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid budget id' });
       }
@@ -247,10 +265,11 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: 'amountCents must be a positive integer' });
       }
       const r = await query(
-        `UPDATE budgets SET amount_cents = $1 WHERE id = $2
+        `UPDATE budgets SET amount_cents = $1
+          WHERE id = $2 AND tenant_id = $3
       RETURNING id, period_month, period_type, period_end, category_id,
                 amount_cents, created_at`,
-        [amountCents, req.params.id],
+        [amountCents, req.params.id, tenantId],
       );
       if (r.rowCount === 0) {
         return reply.code(404).send({ error: 'Budget not found' });
@@ -262,10 +281,15 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/budgets/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id)) {
         return reply.code(400).send({ error: 'Invalid budget id' });
       }
-      const r = await query('DELETE FROM budgets WHERE id = $1', [req.params.id]);
+      const r = await query(
+        'DELETE FROM budgets WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, tenantId],
+      );
       if (r.rowCount === 0) {
         return reply.code(404).send({ error: 'Budget not found' });
       }
@@ -273,11 +297,13 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Copy monthly budgets from one month to another. Skips rows that
-  // already exist for the destination month.
+  // Copy monthly budgets from one month to another. Tenant-scoped on
+  // both source and destination — copying across tenants is impossible.
   app.post<{ Body: { fromMonth?: unknown; toMonth?: unknown } }>(
     '/api/budgets/copy',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const { fromMonth, toMonth } = (req.body ?? {}) as {
         fromMonth?: unknown;
         toMonth?: unknown;
@@ -288,31 +314,35 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       const r = await query(
-        `INSERT INTO budgets (period_month, period_type, category_id, amount_cents)
-         SELECT $2::date, 'monthly', src.category_id, src.amount_cents
+        `INSERT INTO budgets (tenant_id, period_month, period_type, category_id, amount_cents)
+         SELECT $1, $3::date, 'monthly', src.category_id, src.amount_cents
            FROM budgets src
-          WHERE src.period_month = $1::date
+          WHERE src.tenant_id = $1
+            AND src.period_month = $2::date
             AND src.period_type = 'monthly'
             AND NOT EXISTS (
               SELECT 1 FROM budgets dst
-               WHERE dst.period_type = 'monthly'
-                 AND dst.period_month = $2::date
+               WHERE dst.tenant_id = $1
+                 AND dst.period_type = 'monthly'
+                 AND dst.period_month = $3::date
                  AND COALESCE(dst.category_id, '00000000-0000-0000-0000-000000000000'::uuid)
                      = COALESCE(src.category_id, '00000000-0000-0000-0000-000000000000'::uuid)
             )
          RETURNING id`,
-        [fromMonth, toMonth],
+        [tenantId, fromMonth, toMonth],
       );
       return { copied: r.rowCount ?? 0 };
     },
   );
 
-  // Budget vs actual. The legacy `month` query param scopes to monthly
-  // budgets whose period_month equals that date. The new `asOf` param
-  // returns every budget with the active [start, end) covering that date.
+  // Budget vs actual. Filters budgets by tenant; the per-period
+  // category-totals join `transaction_category_lines → accounts` so
+  // tenant-A budgets never see tenant-B spending bleeding in.
   app.get<{ Querystring: { month?: string; asOf?: string } }>(
     '/api/budgets/actual',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const useAsOf = isYmd(req.query.asOf);
       const month = req.query.month?.trim();
       if (!useAsOf && !isFirstOfMonth(month)) {
@@ -337,13 +367,16 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
           ? `SELECT ${BUDGET_COLUMNS}
                FROM budgets b
           LEFT JOIN categories c ON c.id = b.category_id
-          LEFT JOIN bills      bl ON bl.id = b.bill_id`
+          LEFT JOIN bills      bl ON bl.id = b.bill_id
+              WHERE b.tenant_id = $1`
           : `SELECT ${BUDGET_COLUMNS}
                FROM budgets b
           LEFT JOIN categories c ON c.id = b.category_id
           LEFT JOIN bills      bl ON bl.id = b.bill_id
-              WHERE b.period_type = 'monthly' AND b.period_month = $1::date`,
-        useAsOf ? [] : [month],
+              WHERE b.tenant_id = $1
+                AND b.period_type = 'monthly'
+                AND b.period_month = $2::date`,
+        useAsOf ? [tenantId] : [tenantId, month],
       );
 
       const asOf = useAsOf ? (req.query.asOf as string) : (month as string);
@@ -375,37 +408,40 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         });
         let actualCents: number;
         if (b.bill_id !== null) {
-          // Bill-linked rows: actual flips to the budgeted amount the
-          // moment the bill is marked paid (next_due_date advances
-          // past this period's end), and stays 0 until then.
           actualCents =
             b.bill_next_due_date !== null && b.bill_next_due_date >= period.end
               ? Number(b.amount_cents)
               : 0;
         } else if (b.category_id !== null) {
-          // Split transactions contribute their per-category slice here
-          // (transaction_category_lines is the right source).
+          // Tenant filter via accounts join — spending from another
+          // tenant's transactions cannot contribute to this tenant's
+          // per-category totals even if the category_id is shared.
           const r = await query<{ total: number }>(
-            `SELECT COALESCE(SUM(-amount_cents), 0)::bigint AS total
-               FROM transaction_category_lines
-              WHERE category_id = $1
-                AND amount_cents < 0
-                AND transfer_group_id IS NULL
-                AND txn_date >= $2::date
-                AND txn_date < $3::date`,
-            [b.category_id, period.start, period.end],
+            `SELECT COALESCE(SUM(-l.amount_cents), 0)::bigint AS total
+               FROM transaction_category_lines l
+               JOIN accounts a ON a.id = l.account_id
+              WHERE a.tenant_id = $1
+                AND l.category_id = $2
+                AND l.amount_cents < 0
+                AND l.transfer_group_id IS NULL
+                AND l.txn_date >= $3::date
+                AND l.txn_date < $4::date`,
+            [tenantId, b.category_id, period.start, period.end],
           );
           actualCents = Number(r.rows[0]!.total);
         } else {
+          // Flex pool: every spending line that isn't explicitly budgeted.
           const r = await query<{ total: number }>(
-            `SELECT COALESCE(SUM(-amount_cents), 0)::bigint AS total
-               FROM transaction_category_lines
-              WHERE amount_cents < 0
-                AND transfer_group_id IS NULL
-                AND txn_date >= $1::date
-                AND txn_date < $2::date
-                AND (category_id IS NULL OR category_id <> ALL($3::uuid[]))`,
-            [period.start, period.end, explicitCategoryIds],
+            `SELECT COALESCE(SUM(-l.amount_cents), 0)::bigint AS total
+               FROM transaction_category_lines l
+               JOIN accounts a ON a.id = l.account_id
+              WHERE a.tenant_id = $1
+                AND l.amount_cents < 0
+                AND l.transfer_group_id IS NULL
+                AND l.txn_date >= $2::date
+                AND l.txn_date < $3::date
+                AND (l.category_id IS NULL OR l.category_id <> ALL($4::uuid[]))`,
+            [tenantId, period.start, period.end, explicitCategoryIds],
           );
           actualCents = Number(r.rows[0]!.total);
         }

@@ -1,24 +1,13 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { requireTenant } from '../auth/rbac.js';
 
 const COLUMNS = `id, pattern, normalized_merchant, category_id, source,
   enabled, priority, match_count, last_applied_at, created_at, tenant_id`;
 
 function asString(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null {
-  if (!req.user) {
-    reply.code(401).send({ error: 'Not authenticated' });
-    return null;
-  }
-  if (!req.user.tenantId) {
-    reply.code(403).send({ error: 'No active tenant' });
-    return null;
-  }
-  return req.user.tenantId;
 }
 
 /**

@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import {
+  assertAccountInTenant,
+  assertCategoryUsableByTenant,
+  requireTenant,
+} from '../auth/rbac.js';
 
 type Frequency = 'monthly' | 'weekly' | 'biweekly' | 'yearly' | 'one-time';
 const BILL_FREQUENCIES: Frequency[] = [
@@ -52,26 +57,39 @@ type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 const INCOME_COLUMNS = `id, name, amount_cents, frequency, next_expected_date,
   account_id, active, created_at`;
 
+/**
+ * 0.14.1 — bills, recurring-income, and the cash-flow projection are
+ * all per-tenant. POST writes `tenant_id` from the session;
+ * `accountId` / `categoryId` (when supplied) are validated against the
+ * caller's tenant before insertion. Cash-flow's net-worth seed and
+ * bill/income walk all filter by `tenant_id` so two households can
+ * have wildly different forecasts on the same instance without one
+ * leaking into the other.
+ */
 export async function billRoutes(app: FastifyInstance): Promise<void> {
   // ── Bills ───────────────────────────────────────────────
   app.get<{ Querystring: { reviewStatus?: string } }>(
     '/api/bills',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const filter = (req.query.reviewStatus ?? '').trim();
       if (filter === '') {
         const r = await query(
           `SELECT ${BILL_COLUMNS} FROM bills
+            WHERE tenant_id = $1
             ORDER BY active DESC, next_due_date`,
+          [tenantId],
         );
         return { bills: r.rows };
       }
-      // 'queue' is shorthand for "anything the user needs to act on" —
-      // i.e. flagged-but-not-yet-resolved entries.
       if (filter === 'queue') {
         const r = await query(
           `SELECT ${BILL_COLUMNS} FROM bills
-            WHERE review_status IN ('review','cancel','alter')
+            WHERE tenant_id = $1
+              AND review_status IN ('review','cancel','alter')
             ORDER BY last_reviewed_at DESC NULLS LAST, next_due_date`,
+          [tenantId],
         );
         return { bills: r.rows };
       }
@@ -82,15 +100,18 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
       }
       const r = await query(
         `SELECT ${BILL_COLUMNS} FROM bills
-          WHERE review_status = $1
+          WHERE tenant_id = $1
+            AND review_status = $2
           ORDER BY active DESC, next_due_date`,
-        [filter],
+        [tenantId, filter],
       );
       return { bills: r.rows };
     },
   );
 
   app.post('/api/bills', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const name = asString(body.name);
     if (name === '') return reply.code(400).send({ error: 'Name is required' });
@@ -104,23 +125,27 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
       });
     if (typeof body.nextDueDate !== 'string' || !YMD.test(body.nextDueDate))
       return reply.code(400).send({ error: 'nextDueDate must be YYYY-MM-DD' });
+
+    // Validate categoryId + accountId belong to this tenant when supplied.
+    let categoryId: string | null = null;
+    if (typeof body.categoryId === 'string' && isUuid(body.categoryId)) {
+      const ok = await assertCategoryUsableByTenant(tenantId, body.categoryId);
+      if (!ok) return reply.code(400).send({ error: 'Invalid categoryId' });
+      categoryId = body.categoryId;
+    }
+    let accountId: string | null = null;
+    if (typeof body.accountId === 'string' && isUuid(body.accountId)) {
+      const ok = await assertAccountInTenant(tenantId, body.accountId);
+      if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+      accountId = body.accountId;
+    }
+
     const r = await query(
-      `INSERT INTO bills (name, amount_cents, frequency, next_due_date,
+      `INSERT INTO bills (tenant_id, name, amount_cents, frequency, next_due_date,
                           category_id, account_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${BILL_COLUMNS}`,
-      [
-        name,
-        amount,
-        freq,
-        body.nextDueDate,
-        typeof body.categoryId === 'string' && isUuid(body.categoryId)
-          ? body.categoryId
-          : null,
-        typeof body.accountId === 'string' && isUuid(body.accountId)
-          ? body.accountId
-          : null,
-      ],
+      [tenantId, name, amount, freq, body.nextDueDate, categoryId, accountId],
     );
     return reply.code(201).send({ bill: r.rows[0] });
   });
@@ -128,6 +153,8 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string } }>(
     '/api/bills/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid bill id' });
       const body = (req.body ?? {}) as Record<string, unknown>;
@@ -166,9 +193,12 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
       if (updates.length === 0)
         return reply.code(400).send({ error: 'No updates' });
       params.push(req.params.id);
+      const idIdx = params.length;
+      params.push(tenantId);
+      const tenantIdx = params.length;
       const r = await query(
         `UPDATE bills SET ${updates.join(', ')}
-          WHERE id = $${params.length}
+          WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
        RETURNING ${BILL_COLUMNS}`,
         params,
       );
@@ -178,12 +208,11 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Review-status update. The status moves a bill into the user's action
-  // queue (review/cancel/alter) or closes it out (active/keep). Each
-  // change bumps last_reviewed_at so the queue can sort by recency.
   app.patch<{ Params: { id: string } }>(
     '/api/bills/:id/review',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid bill id' });
       const body = (req.body ?? {}) as { status?: unknown; note?: unknown };
@@ -195,7 +224,6 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
           error: `status must be one of: ${REVIEW_STATUSES.join(', ')}`,
         });
       }
-      // note is optional; pass null to clear, omit to leave alone.
       const noteProvided = body.note !== undefined;
       const noteValue =
         body.note === null ? null : typeof body.note === 'string' ? body.note.trim() || null : null;
@@ -204,16 +232,16 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
               SET review_status = $1,
                   review_note = $2,
                   last_reviewed_at = now()
-            WHERE id = $3
+            WHERE id = $3 AND tenant_id = $4
         RETURNING ${BILL_COLUMNS}`
         : `UPDATE bills
               SET review_status = $1,
                   last_reviewed_at = now()
-            WHERE id = $2
+            WHERE id = $2 AND tenant_id = $3
         RETURNING ${BILL_COLUMNS}`;
       const params = noteProvided
-        ? [body.status, noteValue, req.params.id]
-        : [body.status, req.params.id];
+        ? [body.status, noteValue, req.params.id, tenantId]
+        : [body.status, req.params.id, tenantId];
       const r = await query(sql, params);
       if (r.rowCount === 0)
         return reply.code(404).send({ error: 'Bill not found' });
@@ -224,9 +252,14 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/bills/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid bill id' });
-      const r = await query('DELETE FROM bills WHERE id = $1', [req.params.id]);
+      const r = await query(
+        'DELETE FROM bills WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, tenantId],
+      );
       if (r.rowCount === 0)
         return reply.code(404).send({ error: 'Bill not found' });
       return reply.code(204).send();
@@ -237,6 +270,8 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>(
     '/api/bills/:id/mark-paid',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid bill id' });
       const current = await query<{
@@ -244,8 +279,9 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         frequency: Frequency;
         next_due_date: string;
       }>(
-        `SELECT id, frequency, next_due_date FROM bills WHERE id = $1`,
-        [req.params.id],
+        `SELECT id, frequency, next_due_date FROM bills
+          WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, tenantId],
       );
       if (current.rowCount === 0)
         return reply.code(404).send({ error: 'Bill not found' });
@@ -253,14 +289,16 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
       const next = advanceByFrequency(row.next_due_date, row.frequency);
       const updated = next
         ? await query(
-            `UPDATE bills SET next_due_date = $1::date WHERE id = $2
+            `UPDATE bills SET next_due_date = $1::date
+              WHERE id = $2 AND tenant_id = $3
               RETURNING ${BILL_COLUMNS}`,
-            [next, row.id],
+            [next, row.id, tenantId],
           )
         : await query(
-            `UPDATE bills SET active = false WHERE id = $1
+            `UPDATE bills SET active = false
+              WHERE id = $1 AND tenant_id = $2
               RETURNING ${BILL_COLUMNS}`,
-            [row.id],
+            [row.id, tenantId],
           );
       return { bill: updated.rows[0] };
     },
@@ -269,38 +307,45 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
   // Upcoming N days of active bills.
   app.get<{ Querystring: { days?: string } }>(
     '/api/bills/upcoming',
-    async (req) => {
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const days = Math.min(
         Math.max(Number(req.query.days) || 30, 1),
         365,
       );
-      // BILL_COLUMNS is unqualified; this query joins categories which
-      // also has a `name` column — so qualify explicitly here.
       const r = await query(
         `SELECT b.id, b.name, b.amount_cents, b.frequency, b.next_due_date,
                 b.category_id, b.account_id, b.active, b.created_at,
                 c.name AS category_name
            FROM bills b
       LEFT JOIN categories c ON c.id = b.category_id
-          WHERE b.active
-            AND b.next_due_date <= now()::date + make_interval(days => $1::int)
+          WHERE b.tenant_id = $1
+            AND b.active
+            AND b.next_due_date <= now()::date + make_interval(days => $2::int)
        ORDER BY b.next_due_date`,
-        [days],
+        [tenantId, days],
       );
       return { days, bills: r.rows };
     },
   );
 
   // ── Recurring income ─────────────────────────────────────
-  app.get('/api/recurring-income', async () => {
+  app.get('/api/recurring-income', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const r = await query(
       `SELECT ${INCOME_COLUMNS} FROM recurring_income
+        WHERE tenant_id = $1
         ORDER BY active DESC, next_expected_date`,
+      [tenantId],
     );
     return { income: r.rows };
   });
 
   app.post('/api/recurring-income', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const name = asString(body.name);
     if (name === '') return reply.code(400).send({ error: 'Name is required' });
@@ -319,20 +364,20 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
       return reply
         .code(400)
         .send({ error: 'nextExpectedDate must be YYYY-MM-DD' });
+
+    let accountId: string | null = null;
+    if (typeof body.accountId === 'string' && isUuid(body.accountId)) {
+      const ok = await assertAccountInTenant(tenantId, body.accountId);
+      if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+      accountId = body.accountId;
+    }
+
     const r = await query(
       `INSERT INTO recurring_income
-         (name, amount_cents, frequency, next_expected_date, account_id)
-       VALUES ($1, $2, $3, $4, $5)
+         (tenant_id, name, amount_cents, frequency, next_expected_date, account_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${INCOME_COLUMNS}`,
-      [
-        name,
-        amount,
-        freq,
-        body.nextExpectedDate,
-        typeof body.accountId === 'string' && isUuid(body.accountId)
-          ? body.accountId
-          : null,
-      ],
+      [tenantId, name, amount, freq, body.nextExpectedDate, accountId],
     );
     return reply.code(201).send({ income: r.rows[0] });
   });
@@ -340,11 +385,14 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>(
     '/api/recurring-income/:id',
     async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
-      const r = await query(`DELETE FROM recurring_income WHERE id = $1`, [
-        req.params.id,
-      ]);
+      const r = await query(
+        `DELETE FROM recurring_income WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, tenantId],
+      );
       if (r.rowCount === 0)
         return reply.code(404).send({ error: 'Not found' });
       return reply.code(204).send();
@@ -352,18 +400,20 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ── Cash-flow projection ─────────────────────────────────
-  // Starts from the current net worth across all accounts and walks the
-  // next N days applying each bill / income event at its expected date.
-  // Recurring events are projected forward for the whole window.
+  // Starts from the current net worth across THE CALLER'S accounts
+  // and walks the next N days applying each bill / income event at
+  // its expected date. Pre-0.14.1 this aggregated across every
+  // tenant; now scoped end-to-end.
   app.get<{ Querystring: { days?: string } }>(
     '/api/cash-flow',
-    async (req) => {
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
       const days = Math.min(
         Math.max(Number(req.query.days) || 90, 1),
         365,
       );
 
-      // Net worth today (mirrors the accounts list).
       const nw = await query<{ total: number }>(
         `SELECT COALESCE(SUM(
             a.opening_balance_cents +
@@ -374,10 +424,13 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         SELECT t.account_id, SUM(t.amount_cents) AS sum_amount
           FROM transactions t
           JOIN accounts a ON a.id = t.account_id
-         WHERE a.opening_balance_date IS NULL
-            OR t.txn_date >= a.opening_balance_date
+         WHERE a.tenant_id = $1
+           AND (a.opening_balance_date IS NULL
+                OR t.txn_date >= a.opening_balance_date)
       GROUP BY t.account_id
-      ) t ON t.account_id = a.id`,
+      ) t ON t.account_id = a.id
+          WHERE a.tenant_id = $1`,
+        [tenantId],
       );
       let balance = Number(nw.rows[0]!.total);
 
@@ -395,7 +448,8 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         next_due_date: string;
       }>(
         `SELECT amount_cents, frequency, next_due_date
-           FROM bills WHERE active`,
+           FROM bills WHERE tenant_id = $1 AND active`,
+        [tenantId],
       );
       for (const b of bills.rows) {
         let date: string | null = b.next_due_date;
@@ -413,7 +467,8 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         next_expected_date: string;
       }>(
         `SELECT amount_cents, frequency, next_expected_date
-           FROM recurring_income WHERE active`,
+           FROM recurring_income WHERE tenant_id = $1 AND active`,
+        [tenantId],
       );
       for (const i of incomes.rows) {
         let date: string | null = i.next_expected_date;

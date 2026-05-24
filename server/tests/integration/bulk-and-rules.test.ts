@@ -558,14 +558,21 @@ describe('Bulk edit + normalization rules + splits', () => {
   });
 
   describe('bulk recurring-suggestion actions', () => {
+    async function defaultTenantId(): Promise<string> {
+      const t = await pool.query<{ id: string }>(
+        `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+      );
+      return t.rows[0]!.id;
+    }
     async function seedSuggestion(name: string, amount: number, freq: string) {
+      const tenantId = await defaultTenantId();
       const r = await pool.query<{ id: string }>(
         `INSERT INTO recurring_suggestions
-           (kind, name, normalized_key, amount_cents, detected_frequency,
-            sample_txn_ids, confidence)
-         VALUES ('bill', $1, $1, $2, $3, ARRAY[]::uuid[], 0.9)
+           (tenant_id, kind, name, normalized_key, amount_cents,
+            detected_frequency, sample_txn_ids, confidence)
+         VALUES ($1, 'bill', $2, $2, $3, $4, ARRAY[]::uuid[], 0.9)
          RETURNING id`,
-        [name, amount, freq],
+        [tenantId, name, amount, freq],
       );
       return r.rows[0]!.id;
     }
@@ -585,6 +592,7 @@ describe('Bulk edit + normalization rules + splits', () => {
     it('bulk-confirms — but each needs a derivable next date (samples)', async () => {
       // Confirm path requires sample txns; without them deriveNextDate
       // returns null and the suggestion is skipped.
+      const tenantId = await defaultTenantId();
       const txn = await seedTxn({
         accountId,
         date: '2026-04-15',
@@ -593,12 +601,12 @@ describe('Bulk edit + normalization rules + splits', () => {
       });
       const r = await pool.query<{ id: string }>(
         `INSERT INTO recurring_suggestions
-           (kind, name, normalized_key, amount_cents, detected_frequency,
-            sample_txn_ids, confidence)
-         VALUES ('bill', 'Netflix', 'NETFLIX', 1499, 'monthly',
-                 ARRAY[$1::uuid], 0.9)
+           (tenant_id, kind, name, normalized_key, amount_cents,
+            detected_frequency, sample_txn_ids, confidence)
+         VALUES ($1, 'bill', 'Netflix', 'NETFLIX', 1499, 'monthly',
+                 ARRAY[$2::uuid], 0.9)
          RETURNING id`,
-        [txn],
+        [tenantId, txn],
       );
       const sugId = r.rows[0]!.id;
       const bulk = await app.inject({

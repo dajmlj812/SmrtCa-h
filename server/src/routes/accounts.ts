@@ -1,32 +1,17 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { ACCOUNT_TYPES, type AccountType } from '../import/types.js';
 import { isUuid } from '../util.js';
-import { loadUserContext, scopedAccountIds } from '../auth/rbac.js';
+import {
+  loadUserContext,
+  requireTenant,
+  scopedAccountIds,
+} from '../auth/rbac.js';
 import { convert, getDisplayCurrency, loadRatesSnapshot } from '../domain/fx.js';
 
 /** Coerce an unknown request-body field to a trimmed string (or ''). */
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-/**
- * 0.14.0 — tenant guard.
- *
- * Every account route is per-tenant. Sessions without an active tenant
- * (super-admin sessions hitting tenant data; freshly-created users with
- * no membership yet) get 403 instead of seeing every tenant's accounts.
- */
-function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null {
-  if (!req.user) {
-    reply.code(401).send({ error: 'Not authenticated' });
-    return null;
-  }
-  if (!req.user.tenantId) {
-    reply.code(403).send({ error: 'No active tenant' });
-    return null;
-  }
-  return req.user.tenantId;
 }
 
 // True balance: opening_balance_cents + sum of amounts on/after opening date

@@ -1,8 +1,9 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import {
   loadUserContext,
   requireFinancialMutation,
+  requireTenant,
 } from '../auth/rbac.js';
 import { recordAudit } from '../domain/audit.js';
 import { scanTransactionsForAnomalies } from '../domain/anomaly-detector.js';
@@ -22,18 +23,6 @@ import { isUuid } from '../util.js';
  * write actions and let reads show only the rows children's
  * transactions touch via the FK chain).
  */
-
-function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null {
-  if (!req.user) {
-    reply.code(401).send({ error: 'Not authenticated' });
-    return null;
-  }
-  if (!req.user.tenantId) {
-    reply.code(403).send({ error: 'No active tenant' });
-    return null;
-  }
-  return req.user.tenantId;
-}
 
 export async function anomalyRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { includeDismissed?: string } }>(

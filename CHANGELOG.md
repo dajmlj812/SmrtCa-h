@@ -9,12 +9,129 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.6 + 0.14.0 shipped. Original backlog fully complete
-except native mobile (deferred). **0.14.0 begins a multi-slice
-multi-tenant isolation hardening pass** after an audit found ~17
-route files with no tenant scoping. Slices 0.14.1 → 0.14.4 will
-cover budgets/bills, insights/reports, attachments/splits, and
-the long-tail (vehicles, fuel, etc.)._
+_0.13.0–0.13.6 + 0.14.0–0.14.1 shipped. Multi-tenant isolation
+hardening continues — slices 0.14.2 (insights/reports/transfers),
+0.14.3 (attachments/splits/suggestions), and 0.14.4 (vehicles/
+commute/fuel/normalize) still pending._
+
+---
+
+## [0.14.1] — 2026-05-23 — Tenant isolation hardening, slice 2: budgets + bills + recurring + subscriptions + goals
+
+Slice 2 of the multi-tenant hardening pass. Five route files
+brought up to the same isolation discipline that 0.14.0
+established for the foundational tables. The `requireTenant`
+helper from 0.14.0 was extracted to `auth/rbac.ts` so every
+slice imports the same one (was duplicated in
+`anomalies.ts` / `normalization-rules.ts`).
+
+### Scope
+
+`budgets.ts`, `bills.ts`, `goals.ts`, `recurring.ts`,
+`subscriptions.ts`. Plus `goals.ts` (audit missed it, but same
+unscoped pattern). The shared `requireTenant` is now in
+`auth/rbac.ts`; route files import it instead of redefining.
+
+### Server — `routes/budgets.ts`
+
+- All 6 handlers scoped by `req.user.tenantId`. POST writes
+  `tenant_id`; PATCH/DELETE filter on `tenant_id` so cross-tenant
+  ids 404.
+- POST validates `categoryId` via `assertCategoryUsableByTenant`
+  before insertion.
+- `POST /api/budgets/copy` scopes both the source SELECT and the
+  destination NOT EXISTS check by tenant — copying across
+  tenants is impossible.
+- `GET /api/budgets/actual` joins `transaction_category_lines →
+  accounts` so a tenant's per-category totals never include
+  another tenant's spending, even on a shared global category.
+
+### Server — `routes/bills.ts`
+
+- All 10 handlers (bills + recurring-income + cash-flow) scoped.
+- POST `bills` and `recurring-income` validate `categoryId` /
+  `accountId` against this tenant before insertion.
+- `GET /api/cash-flow` starting-net-worth query, bills walk, and
+  income walk all filter by `tenant_id`. Pre-0.14.1 a single call
+  aggregated every tenant's net worth and projected every
+  tenant's bills into the same forecast.
+
+### Server — `routes/goals.ts`
+
+- All 4 handlers scoped. (Audit missed this file; added it to
+  this slice.)
+
+### Server — `routes/recurring.ts`
+
+- `POST /api/recurring/detect` walks transactions via an accounts
+  join — only this tenant's history is scanned. Pre-0.14.1 the
+  detector saw every tenant's merchants and surfaced them as
+  suggestions visible to everyone.
+- All 6 handlers tenant-scope SELECTs/UPDATEs on
+  `recurring_suggestions`.
+- `/confirm` and bulk `/confirm` INSERT bills + recurring_income
+  rows with `tenant_id` from the session.
+- `deriveNextDate` joins through accounts so smuggled
+  `sample_txn_ids` from another tenant return null.
+
+### Server — `routes/subscriptions.ts`
+
+- Same shape as recurring: `/scan` walks tenant txns only;
+  `/candidates` filtered; AI-applied verdicts UPDATE scoped so
+  one tenant can't mass-rename another tenant's suggestions.
+
+### Tests (+17 cross-tenant isolation tests)
+
+`tests/security/tenant-isolation.test.ts` extended:
+
+- Budgets: list filtered; PATCH/DELETE cross-tenant 404; POST
+  /copy only copies caller-tenant source; budget actual
+  aggregates only this tenant's transactions even on a shared
+  global category; POST rejects cross-tenant categoryId.
+- Bills: list filtered; PATCH/DELETE cross-tenant 404; POST
+  rejects cross-tenant accountId and categoryId.
+- Recurring-income: list filtered.
+- Cash-flow: starting net worth + bills + income all scoped (A's
+  $1000 forecast doesn't include B's $50000).
+- Goals: list filtered; PATCH/DELETE cross-tenant 404.
+- Recurring: /detect only scans caller's transactions; reject 404s
+  cross-tenant; /suggestions list filtered.
+- Subscriptions: /candidates list filtered.
+
+Total: **34 tenant-isolation tests** (17 from 0.14.0 + 17 new).
+Each would have failed against pre-0.14.1 code.
+
+Two `tests/integration/bulk-and-rules.test.ts` `recurring_suggestions`
+inserts updated to include `tenant_id` (they relied on the
+now-removed unscoped bulk action).
+
+- Total: **598 tests** (592 server + 6 web). 6 pre-existing
+  portability tar failures unchanged.
+
+### Files
+
+```
+server/src/auth/rbac.ts                              (+requireTenant export)
+server/src/routes/budgets.ts                         (rewrote)
+server/src/routes/bills.ts                           (rewrote)
+server/src/routes/goals.ts                           (rewrote)
+server/src/routes/recurring.ts                       (rewrote)
+server/src/routes/subscriptions.ts                   (rewrote)
+server/src/routes/accounts.ts                        (use shared requireTenant)
+server/src/routes/transactions.ts                    (use shared requireTenant)
+server/src/routes/holdings.ts                        (use shared requireTenant)
+server/src/routes/normalization-rules.ts             (use shared requireTenant)
+server/src/routes/anomalies.ts                       (use shared requireTenant)
+server/tests/security/tenant-isolation.test.ts       (+17 tests)
+server/tests/integration/bulk-and-rules.test.ts      (tenant_id on direct INSERTs)
+package.json + server/package.json + web/package.json (0.14.0 → 0.14.1)
+```
+
+### Coming next
+
+- **0.14.2** — insights, reports + `domain/reports.ts`, transfers + `domain/transfers.ts`
+- **0.14.3** — attachments, splits, suggestions, tenants member-list permission tighten
+- **0.14.4** — vehicles, commute-routes, fuel-prices, normalize, projections NULL hatch
 
 ---
 

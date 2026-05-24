@@ -209,6 +209,30 @@ export function requireSuperAdmin(
 }
 
 /**
+ * 0.14.0 — tenant gate used by every tenant-scoped route.
+ *
+ * Sessions without an active tenant (super-admin sessions hitting
+ * tenant data; freshly-created users with no membership yet) get 403
+ * instead of seeing every tenant's data. The previously-duplicated
+ * `requireTenant` helper in each route file now lives here so all
+ * 0.14.x slices import the same one.
+ */
+export function requireTenant(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): string | null {
+  if (!req.user) {
+    reply.code(401).send({ error: 'Not authenticated' });
+    return null;
+  }
+  if (!req.user.tenantId) {
+    reply.code(403).send({ error: 'No active tenant' });
+    return null;
+  }
+  return req.user.tenantId;
+}
+
+/**
  * 0.14.0 — multi-tenant isolation hardening.
  *
  * The audit found that many routes accept an entity id (account_id,
