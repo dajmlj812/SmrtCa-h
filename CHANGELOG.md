@@ -9,11 +9,114 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.15.0–0.15.4 shipped. Payment failures now trigger a dunning
-email + a 3-day grace window before features lock, and every gated
-page in the web client shows a paywall card when access is denied.
-Slice 0.15.5 (SaaS readiness — health metrics, ops docs) is the
-last item before we cut the v0.16 release._
+_0.15.0–0.15.5 shipped. The SaaS pivot is feature-complete:
+billing surface, Stripe integration, paywall, dunning + grace
+window, operator health dashboard, runbook, automatic-tax
+toggle. v0.16 is the next branch — likely focused on signup
+flow polish + per-tenant attachment-encryption rotation, the
+two big items left from the original SAAS_PLAN._
+
+---
+
+## [0.15.5] — 2026-05-24 — SaaS pivot, slice 6: operator readiness
+
+Close out the SaaS pivot by giving the operator the surface
+they need to actually run it. A single super-admin can now
+glance at /health and see how many tenants are paying, which
+subscriptions are in `past_due`, and whether Stripe webhooks
+are still arriving.
+
+### Backend
+
+- **New endpoint `GET /api/health/saas`** (super-admin only).
+  Returns subscription distribution + webhook ingest counts:
+
+  ```json
+  {
+    "tenants": { "total": 47, "with_active_sub": 31 },
+    "subscriptions": {
+      "total": 31,
+      "by_plan": { "starter": 4, "plus": 19, "family": 8 },
+      "by_status": { "trialing": 6, "active": 23, "past_due": 2 }
+    },
+    "webhooks": {
+      "processed_total": 1812,
+      "processed_24h": 47,
+      "last_event_at": "2026-05-24T18:32:11Z"
+    }
+  }
+  ```
+
+  Implemented as `server/src/domain/saas-health.ts` — three
+  parallel COUNT/GROUP-BY queries against `tenants`,
+  `subscriptions`, and `stripe_processed_events`. No new
+  schema; the existing webhook idempotency table doubles as
+  the ingest log.
+
+- **`STRIPE_AUTOMATIC_TAX` env toggle**. Stripe Checkout's
+  `automatic_tax.enabled` flag now reads from the env via a
+  new `automaticTaxEnabled()` helper in
+  `server/src/billing/stripe.ts`. Default off so dev
+  deployments don't hit "no tax origin address" errors;
+  operator flips it after configuring Stripe → Tax →
+  Settings (see runbook).
+
+### Web
+
+- **HealthPage SaaS section**. Three new cards under the
+  existing app/db/storage row showing tenant totals,
+  subscription distribution, and webhook ingest health.
+  Polls on the same cadence as the rest of /health and
+  fails silently when /api/health/saas isn't reachable
+  (super-admin can still see the regular metrics on a
+  self-host-only deployment).
+- **BillingPage legal footer**. Inline "By subscribing you
+  agree to the Terms of Service and Privacy Policy" line
+  linking placeholder docs. Operators swap the hrefs to the
+  real lawyer-reviewed URLs at launch.
+
+### Docs
+
+- **`docs/OPERATOR_RUNBOOK.md`** — playbook for the SaaS
+  operator. Practical recipes for the cases that will come
+  up:
+  - "Customer paid but can't access" — tenant lookup,
+    subscription row inspection, Stripe-side cross-check.
+  - "Webhook delivery is failing" — sanity probe, Stripe
+    dashboard delivery log, replay via CLI.
+  - Reconciling a state mismatch (resend the event; never
+    hand-edit the row).
+  - SMTP outage impact on dunning (best-effort, doesn't
+    break webhook ingest).
+  - Past-due grace window math.
+  - Granting courtesy access (Stripe-side coupon preferred,
+    DB grant as emergency).
+  - Stripe automatic-tax prerequisites.
+  - One-liner psql queries for daily glance.
+- **`docs/TERMS_OF_SERVICE.md` + `docs/PRIVACY_POLICY.md`** —
+  placeholder stubs marked as such. Structural skeleton for
+  counsel to expand; never deploy as-is.
+
+### Tests
+
+- `server/tests/unit/billing-stripe-config.test.ts` —
+  `automaticTaxEnabled()` env-parse contract (only literal
+  `"true"` enables; "1"/"yes"/"on" intentionally don't).
+- `server/tests/integration/health-backups-reports.test.ts`
+  — three new cases on /api/health/saas: 403 for tenant
+  admins, response shape under super-admin, webhook counts
+  reflect newly recorded events.
+
+### Deferred from the original 0.15.5 plan
+
+The earlier SAAS_PLAN sketch bundled a signup-flow rewrite
+(email verification + plan selection during signup) and a
+per-tenant attachment-encryption key migration (KMS-style
+envelope rotation) into 0.15.5. Both are real, both are
+multi-day projects on their own. They're deferred to the
+v0.16 series rather than crammed into this slice. The
+current signup flow (login then pick a plan from /billing)
+works fine for launch.
 
 ---
 

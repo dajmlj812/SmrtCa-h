@@ -131,6 +131,52 @@ describe('Health metrics (Phase 7.6, super-admin gated 0.9.1)', () => {
       expect(typeof body.latest.cpu_pct).toBe('number');
     }
   });
+
+  // ── 0.15.5: SaaS health endpoint ───────────────────────────
+
+  it('tenant admin gets 403 on /api/health/saas', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/health/saas' });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('GET /api/health/saas returns tenants/subscriptions/webhooks shape', async () => {
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/health/saas',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    // resetDb seeds a Default tenant + a Family active sub.
+    expect(body.tenants.total).toBeGreaterThanOrEqual(1);
+    expect(body.tenants.with_active_sub).toBeGreaterThanOrEqual(1);
+    expect(body.subscriptions.total).toBeGreaterThanOrEqual(1);
+    expect(body.subscriptions.by_plan).toEqual(
+      expect.objectContaining({ starter: expect.any(Number), plus: expect.any(Number), family: expect.any(Number) }),
+    );
+    expect(body.subscriptions.by_status).toBeDefined();
+    expect(body.webhooks.processed_total).toBeGreaterThanOrEqual(0);
+    expect(body.webhooks.processed_24h).toBeGreaterThanOrEqual(0);
+  });
+
+  it('webhook counts reflect newly recorded events', async () => {
+    await pool.query(
+      `INSERT INTO stripe_processed_events (event_id) VALUES
+         ('evt_test_a'), ('evt_test_b'), ('evt_test_c')
+       ON CONFLICT DO NOTHING`,
+    );
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/health/saas',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(asSuper(superCookie) as any),
+    });
+    const body = r.json();
+    expect(body.webhooks.processed_total).toBeGreaterThanOrEqual(3);
+    expect(body.webhooks.processed_24h).toBeGreaterThanOrEqual(3);
+    expect(body.webhooks.last_event_at).not.toBeNull();
+  });
 });
 
 describe('Backups (Phase 7.6, super-admin gated 0.9.1)', () => {

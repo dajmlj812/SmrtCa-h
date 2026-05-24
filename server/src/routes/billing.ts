@@ -10,7 +10,7 @@ import {
   getActiveSubscription,
   type Plan,
 } from '../auth/entitlements.js';
-import { getStripe, isStripeConfigured } from '../billing/stripe.js';
+import { automaticTaxEnabled, getStripe, isStripeConfigured } from '../billing/stripe.js';
 import { isKnownLookupKey } from '../billing/plans.js';
 import {
   handleSubscriptionUpsert,
@@ -181,9 +181,10 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
       metadata: { tenant_id: tenantId },
       success_url: `${publicBaseUrl()}/billing?status=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${publicBaseUrl()}/billing?status=canceled`,
-      // Auto-tax: enable when the account has tax registrations
-      // configured. No harm leaving it off for dev / pre-launch.
-      automatic_tax: { enabled: false },
+      // 0.15.5 — env-driven via automaticTaxEnabled(). See
+      // billing/stripe.ts for the rule + docs/OPERATOR_RUNBOOK.md
+      // for the "before flipping this on" prerequisites.
+      automatic_tax: { enabled: automaticTaxEnabled() },
     };
     if (existing?.stripeCustomerId) {
       sessionParams.customer = existing.stripeCustomerId;

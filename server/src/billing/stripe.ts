@@ -38,3 +38,18 @@ export function _resetStripeClientForTests(): void {
 export function isStripeConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
+
+/**
+ * 0.15.5 — Stripe automatic tax toggle for Checkout. Read at session-
+ * creation time (not cached) so the operator can flip the env var
+ * and restart without code changes.
+ *
+ * Default off: a Stripe account without a tax origin address
+ * configured returns errors when automatic_tax is enabled, which
+ * would break dev + pre-launch deployments. Set
+ * STRIPE_AUTOMATIC_TAX=true once your Stripe Tax → Settings is
+ * configured (see docs/OPERATOR_RUNBOOK.md).
+ */
+export function automaticTaxEnabled(): boolean {
+  return (process.env.STRIPE_AUTOMATIC_TAX ?? '').toLowerCase() === 'true';
+}

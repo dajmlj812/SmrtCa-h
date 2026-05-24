@@ -743,6 +743,29 @@ export interface RejectSuggestionResult {
   transactionsCleared: number;
 }
 
+/**
+ * 0.15.5 — SaaS operator metrics. Super-admin only.
+ *
+ * Powers the SaaS section of the /health page: subscription
+ * distribution + webhook ingest health, so the operator can spot
+ * a Stripe outage or stalled webhook delivery without leaving the
+ * app.
+ */
+export interface SaasMetrics {
+  generated_at: string;
+  tenants: { total: number; with_active_sub: number };
+  subscriptions: {
+    total: number;
+    by_plan: { starter: number; plus: number; family: number };
+    by_status: Record<string, number>;
+  };
+  webhooks: {
+    processed_total: number;
+    processed_24h: number;
+    last_event_at: string | null;
+  };
+}
+
 // ── Phase 7.6 types (health + backups + reports) ─────────────
 export interface HealthSnapshot {
   generated_at: string;
@@ -2344,6 +2367,8 @@ export const api = {
 
   healthLive: () =>
     http<{ latest: MetricSample | null }>('/api/health/live'),
+
+  healthSaas: () => http<SaasMetrics>('/api/health/saas'),
 
   // ── Backups (Phase 7.6) ──────────────────────────────────
   listBackupsHistory: () =>

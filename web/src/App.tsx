@@ -226,7 +226,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.15.4
+          SmrtCash · v0.15.5
           <button
             className="btn secondary logout-btn"
             type="button"

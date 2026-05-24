@@ -12,6 +12,7 @@ import {
   api,
   type HealthSnapshot,
   type MetricSample,
+  type SaasMetrics,
 } from '../api';
 
 const WINDOW_SEC = 300; // 5 minutes of trend data on each chart
@@ -62,6 +63,7 @@ function formatTickTime(iso: string): string {
 export function HealthPage() {
   const [snapshot, setSnapshot] = useState<HealthSnapshot | null>(null);
   const [series, setSeries] = useState<MetricSample[]>([]);
+  const [saas, setSaas] = useState<SaasMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshMs, setRefreshMs] = useState<number>(() => {
     try {
@@ -77,12 +79,17 @@ export function HealthPage() {
 
   async function load() {
     try {
-      const [s, ts] = await Promise.all([
+      const [s, ts, sa] = await Promise.all([
         api.healthMetrics(),
         api.healthTimeseries(WINDOW_SEC),
+        // SaaS metrics fail silently when Stripe + billing aren't
+        // configured — the operator still wants the rest of the
+        // page to load on a self-host-only deployment.
+        api.healthSaas().catch(() => null),
       ]);
       setSnapshot(s);
       setSeries(ts.points);
+      setSaas(sa);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load metrics');
@@ -343,6 +350,62 @@ export function HealthPage() {
             </Card>
           </div>
         </>
+      )}
+
+      {/* ── 0.15.5: SaaS operator section ─────────────────── */}
+      {saas && (
+        <div className="health-grid" style={{ marginTop: 16 }}>
+          <Card title="Tenants">
+            <Row label="Total tenants" value={saas.tenants.total.toLocaleString()} />
+            <Row
+              label="With active subscription"
+              value={saas.tenants.with_active_sub.toLocaleString()}
+            />
+          </Card>
+
+          <Card title="Subscriptions">
+            <Row label="Total rows" value={saas.subscriptions.total.toLocaleString()} />
+            <Row
+              label="By plan"
+              value={
+                <span>
+                  starter <strong>{saas.subscriptions.by_plan.starter}</strong> ·{' '}
+                  plus <strong>{saas.subscriptions.by_plan.plus}</strong> ·{' '}
+                  family <strong>{saas.subscriptions.by_plan.family}</strong>
+                </span>
+              }
+            />
+            <div className="health-counts">
+              {Object.entries(saas.subscriptions.by_status).map(([status, n]) => (
+                <span key={status} className="health-count">
+                  <strong>{n}</strong> {status}
+                </span>
+              ))}
+              {Object.keys(saas.subscriptions.by_status).length === 0 && (
+                <span className="muted">No subscriptions yet</span>
+              )}
+            </div>
+          </Card>
+
+          <Card title="Stripe webhooks">
+            <Row
+              label="Processed (lifetime)"
+              value={saas.webhooks.processed_total.toLocaleString()}
+            />
+            <Row
+              label="Processed (24h)"
+              value={saas.webhooks.processed_24h.toLocaleString()}
+            />
+            <Row
+              label="Last event"
+              value={
+                saas.webhooks.last_event_at
+                  ? saas.webhooks.last_event_at.slice(0, 19).replace('T', ' ')
+                  : '—'
+              }
+            />
+          </Card>
+        </div>
       )}
 
       {snapshot && (

@@ -299,6 +299,25 @@ export function BillingPage() {
         </section>
       )}
 
+      {/*
+        * 0.15.5: legal-stub footer. The href targets are placeholders
+        * — they point at the in-repo markdown docs. Before commercial
+        * launch swap these to whatever URLs serve the lawyer-reviewed
+        * Terms of Service + Privacy Policy (probably /terms and
+        * /privacy on the marketing site, or a CDN-hosted copy).
+        */}
+      <p className="muted small" style={{ marginTop: 12 }}>
+        By subscribing you agree to the{' '}
+        <a href="/docs/TERMS_OF_SERVICE.md" target="_blank" rel="noreferrer">
+          Terms of Service
+        </a>{' '}
+        and{' '}
+        <a href="/docs/PRIVACY_POLICY.md" target="_blank" rel="noreferrer">
+          Privacy Policy
+        </a>
+        .
+      </p>
+
       {/* Plan comparison + change-plan buttons */}
       <section className="card">
         <h3>{status?.plan ? 'Change plan' : 'Available plans'}</h3>

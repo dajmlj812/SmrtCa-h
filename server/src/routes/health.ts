@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { collectHealth } from '../domain/health.js';
 import { metricsRecorder } from '../domain/metrics-recorder.js';
+import { collectSaasMetrics } from '../domain/saas-health.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
 
 /**
@@ -14,6 +15,9 @@ import { requireSuperAdmin } from '../auth/rbac.js';
  *
  * GET /api/health/live
  *   The most recent sample.
+ *
+ * GET /api/health/saas (0.15.5)
+ *   Subscription distribution + webhook ingest counts.
  *
  * These were tenant-admin-visible until 0.9.1. They surface operational
  * details (process pids, DB pool, on-disk paths) that don't belong in
@@ -42,5 +46,10 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     if (!requireSuperAdmin(req, reply)) return;
     const latest = metricsRecorder.latest();
     return { latest };
+  });
+
+  app.get('/api/health/saas', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+    return collectSaasMetrics();
   });
 }
