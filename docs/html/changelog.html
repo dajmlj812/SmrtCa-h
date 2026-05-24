@@ -161,11 +161,60 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.14 shipped. 0.17.14 ships migration 036 to
-backfill <code>bills.account_id</code> and <code>recurring_income.account_id</code>
-from their most-frequent matching transaction — so an
-account-scoped period card stops showing income/bills that
-actually belong to a different account.</em></p>
+<p><em>0.17.0–0.17.15 shipped. 0.17.15 aggregates the Monthly
+Budget section to one line per category and one per bill,
+summing the wizard&#39;s weekly/biweekly allotments into a
+monthly total instead of repeating them.</em></p>
+<hr>
+<h2 id="01715-2026-05-24-monthly-budget-one-row-per-category">[0.17.15] — 2026-05-24 — Monthly Budget: one row per category<a class="heading-anchor" href="#01715-2026-05-24-monthly-budget-one-row-per-category">#</a></h2>
+<p>The Monthly Budget section (bottom of /budgets) was showing
+every weekly budget row as its own line — e.g. four
+&quot;Groceries&quot; rows for a month when AutoMagic ran weekly. Plus
+the per-row actuals query was overlapping: rows from
+multiple anchors all resolved to the same active period and
+double/triple-counted the same transactions.</p>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<p>The asOf branch of <code>/api/budgets/actual</code> now aggregates:</p>
+<ol>
+<li>Picks budget rows whose <strong>anchor</strong> (<code>period_month</code>) lands
+in the calendar month containing <code>asOf</code>. For monthly
+cadence that&#39;s the one row anchored to the 1st; for
+weekly cadence it&#39;s every row whose week starts that
+month.</li>
+<li>Groups by <code>(category_id, bill_id, flex)</code>. One group per
+category, one per bill, one for the flex pool.</li>
+<li>Sums <code>budgeted_cents</code> across each group&#39;s member rows —
+so 4 weekly Groceries × $150 = $600 monthly.</li>
+<li>Computes <code>actual_cents</code> ONCE per group against the full
+calendar-month range — no more overlap counting.</li>
+</ol>
+<p>The <code>include_account_ids</code> filter still applies per group
+(scope is shared across all member rows by wizard
+construction; the first row&#39;s scope wins). The legacy
+<code>month=YYYY-MM-01</code> branch is unchanged — it was already
+monthly-only.</p>
+<h3 id="bills">Bills<a class="heading-anchor" href="#bills">#</a></h3>
+<p>A bill in the wizard creates one budget row per
+<em>instance</em> the bill was due in the period (e.g. Netflix
+appears in only the weekly period containing its due date).
+So bills naturally didn&#39;t multiply across weekly rows; the
+new code still groups by <code>bill_id</code> for symmetry and to
+handle edge cases where two anchors land on the same bill.
+Actuals for bills are taken as <code>actual = budgeted</code>
+(recurring fixed amount; future slice could match against
+actual transactions matching the bill).</p>
+<h3 id="net-effect">Net effect<a class="heading-anchor" href="#net-effect">#</a></h3>
+<p>Monthly Budget section now shows:</p>
+<ul>
+<li>One row per budgeted category, with budgeted = sum of
+weekly/biweekly/etc. allotments</li>
+<li>One row per bill, with budgeted = its monthly amount</li>
+<li>One row for the flex pool (catch-all spending), if set</li>
+<li>Actuals match calendar-month transaction totals</li>
+</ul>
+<p>API shape unchanged; just fewer + larger rows in the same
+<code>rows[]</code> array.</p>
+<p>14 budget + wizard tests still pass.</p>
 <hr>
 <h2 id="01714-2026-05-24-backfill-bills-income-account_id">[0.17.14] — 2026-05-24 — Backfill bills + income account_id<a class="heading-anchor" href="#01714-2026-05-24-backfill-bills-income-account_id">#</a></h2>
 <p>Operator with account-scoped budgets (&quot;Chase 5793 only&quot;)
@@ -6092,7 +6141,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 22:12:53 UTC · commit 5d5ed34</span>
+  <span>Generated 2026-05-24 22:29:00 UTC · commit 77ea1fd</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

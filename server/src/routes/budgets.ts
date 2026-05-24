@@ -386,10 +386,83 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       );
 
       const asOf = useAsOf ? (req.query.asOf as string) : (month as string);
-      const explicitCategoryIds = budgets.rows
-        .filter((b) => b.period_type === 'monthly')
-        .map((r) => r.category_id)
-        .filter((id): id is string => id !== null);
+
+      // 0.17.15 — Monthly Budget view aggregates the wizard's
+      // weekly/biweekly/etc rows into one line per category +
+      // one line per bill across the calendar month containing
+      // asOf. Pre-fix the page showed e.g. 5 weekly Groceries
+      // rows for a single month + double-counted their actuals
+      // because rows from earlier anchors all returned the same
+      // current-period window. Now: one Groceries row, one
+      // Netflix row, etc., with `budgeted_cents` = sum of
+      // member rows and `actual_cents` computed once over the
+      // calendar month.
+      const monthStart = useAsOf
+        ? (() => {
+            const [y, m] = asOf.split('-').map(Number) as [number, number];
+            return `${y}-${String(m).padStart(2, '0')}-01`;
+          })()
+        : (asOf as string);
+      const monthEnd = nextMonthStart(monthStart);
+
+      // Only rows whose ANCHOR (period_month) lands inside the
+      // calendar month feed this view. For monthly cadence
+      // that's the one row anchored to the 1st. For weekly /
+      // biweekly cadence that's every row whose start lands in
+      // the month — naturally summing to the monthly total.
+      const inMonth = useAsOf
+        ? budgets.rows.filter(
+            (b) => b.period_month >= monthStart && b.period_month < monthEnd,
+          )
+        : budgets.rows;
+
+      const explicitCategoryIds = Array.from(
+        new Set(
+          inMonth
+            .map((r) => r.category_id)
+            .filter((id): id is string => id !== null),
+        ),
+      );
+
+      // Group key: category_id ("c:<uuid>"), bill_id
+      // ("b:<uuid>"), or flex pool ("flex").
+      interface Group {
+        category_id: string | null;
+        category_name: string | null;
+        bill_id: string | null;
+        bill_name: string | null;
+        bill_next_due_date: string | null;
+        budgeted_cents: number;
+        member_row_id: string;  // for the API's `id` field — pick one
+        included_account_ids: string[] | null;
+      }
+      const groups = new Map<string, Group>();
+      for (const b of inMonth) {
+        const key =
+          b.category_id !== null
+            ? `c:${b.category_id}`
+            : b.bill_id !== null
+              ? `b:${b.bill_id}`
+              : 'flex';
+        const existing = groups.get(key);
+        if (existing) {
+          existing.budgeted_cents += Number(b.amount_cents);
+        } else {
+          groups.set(key, {
+            category_id: b.category_id,
+            category_name:
+              b.category_name ?? (b.category_id === null ? null : 'Unknown'),
+            bill_id: b.bill_id,
+            bill_name: b.bill_name,
+            bill_next_due_date: b.bill_next_due_date,
+            budgeted_cents: Number(b.amount_cents),
+            member_row_id: b.id,
+            // All wizard-committed rows in the same group share
+            // a scope by construction. The first one wins.
+            included_account_ids: b.included_account_ids,
+          });
+        }
+      }
 
       const rows: Array<{
         id: string;
@@ -405,28 +478,15 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         actual_cents: number;
       }> = [];
 
-      for (const b of budgets.rows) {
-        const period = currentPeriod({
-          anchor: b.period_month,
-          periodType: b.period_type,
-          periodEnd: b.period_end,
-          asOf,
-        });
+      for (const g of groups.values()) {
         let actualCents: number;
-        if (b.bill_id !== null) {
-          actualCents =
-            b.bill_next_due_date !== null && b.bill_next_due_date >= period.end
-              ? Number(b.amount_cents)
-              : 0;
-        } else if (b.category_id !== null) {
-          // Tenant filter via accounts join — spending from another
-          // tenant's transactions cannot contribute to this tenant's
-          // per-category totals even if the category_id is shared.
-          //
-          // 0.17.11 — if the budget row has an account scope
-          // (`included_account_ids`), only transactions from those
-          // accounts count. NULL scope keeps the legacy "all
-          // accounts in tenant" behavior.
+        if (g.bill_id !== null) {
+          // Bills are recurring + fixed; assume the budgeted
+          // amount equals the actual (the user wired up
+          // auto-pay or pays on schedule). Wrong-but-useful
+          // until we add per-bill transaction matching.
+          actualCents = g.budgeted_cents;
+        } else if (g.category_id !== null) {
           const r = await query<{ total: number }>(
             `SELECT COALESCE(SUM(-l.amount_cents), 0)::bigint AS total
                FROM transaction_category_lines l
@@ -438,12 +498,10 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
                 AND l.txn_date >= $3::date
                 AND l.txn_date < $4::date
                 AND ($5::uuid[] IS NULL OR a.id = ANY($5::uuid[]))`,
-            [tenantId, b.category_id, period.start, period.end, b.included_account_ids],
+            [tenantId, g.category_id, monthStart, monthEnd, g.included_account_ids],
           );
           actualCents = Number(r.rows[0]!.total);
         } else {
-          // Flex pool: every spending line that isn't explicitly budgeted.
-          // 0.17.11 — same account-scope filter when the row has one.
           const r = await query<{ total: number }>(
             `SELECT COALESCE(SUM(-l.amount_cents), 0)::bigint AS total
                FROM transaction_category_lines l
@@ -455,22 +513,24 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
                 AND l.txn_date < $3::date
                 AND (l.category_id IS NULL OR l.category_id <> ALL($4::uuid[]))
                 AND ($5::uuid[] IS NULL OR a.id = ANY($5::uuid[]))`,
-            [tenantId, period.start, period.end, explicitCategoryIds, b.included_account_ids],
+            [tenantId, monthStart, monthEnd, explicitCategoryIds, g.included_account_ids],
           );
           actualCents = Number(r.rows[0]!.total);
         }
         rows.push({
-          id: b.id,
-          category_id: b.category_id,
-          bill_id: b.bill_id,
-          bill_name: b.bill_name,
-          bill_next_due_date: b.bill_next_due_date,
-          category_name:
-            b.category_name ?? (b.category_id === null ? null : 'Unknown'),
-          period_type: b.period_type,
-          period_start: period.start,
-          period_end: period.end,
-          budgeted_cents: Number(b.amount_cents),
+          id: g.member_row_id,
+          category_id: g.category_id,
+          category_name: g.category_name,
+          bill_id: g.bill_id,
+          bill_name: g.bill_name,
+          bill_next_due_date: g.bill_next_due_date,
+          // The aggregated row always represents the calendar
+          // month, regardless of which cadence the member
+          // rows used.
+          period_type: 'monthly',
+          period_start: monthStart,
+          period_end: monthEnd,
+          budgeted_cents: g.budgeted_cents,
           actual_cents: actualCents,
         });
       }

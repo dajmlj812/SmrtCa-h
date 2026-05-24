@@ -9,11 +9,70 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.14 shipped. 0.17.14 ships migration 036 to
-backfill `bills.account_id` and `recurring_income.account_id`
-from their most-frequent matching transaction — so an
-account-scoped period card stops showing income/bills that
-actually belong to a different account._
+_0.17.0–0.17.15 shipped. 0.17.15 aggregates the Monthly
+Budget section to one line per category and one per bill,
+summing the wizard's weekly/biweekly allotments into a
+monthly total instead of repeating them._
+
+---
+
+## [0.17.15] — 2026-05-24 — Monthly Budget: one row per category
+
+The Monthly Budget section (bottom of /budgets) was showing
+every weekly budget row as its own line — e.g. four
+"Groceries" rows for a month when AutoMagic ran weekly. Plus
+the per-row actuals query was overlapping: rows from
+multiple anchors all resolved to the same active period and
+double/triple-counted the same transactions.
+
+### Fix
+
+The asOf branch of `/api/budgets/actual` now aggregates:
+
+1. Picks budget rows whose **anchor** (`period_month`) lands
+   in the calendar month containing `asOf`. For monthly
+   cadence that's the one row anchored to the 1st; for
+   weekly cadence it's every row whose week starts that
+   month.
+2. Groups by `(category_id, bill_id, flex)`. One group per
+   category, one per bill, one for the flex pool.
+3. Sums `budgeted_cents` across each group's member rows —
+   so 4 weekly Groceries × $150 = $600 monthly.
+4. Computes `actual_cents` ONCE per group against the full
+   calendar-month range — no more overlap counting.
+
+The `include_account_ids` filter still applies per group
+(scope is shared across all member rows by wizard
+construction; the first row's scope wins). The legacy
+`month=YYYY-MM-01` branch is unchanged — it was already
+monthly-only.
+
+### Bills
+
+A bill in the wizard creates one budget row per
+*instance* the bill was due in the period (e.g. Netflix
+appears in only the weekly period containing its due date).
+So bills naturally didn't multiply across weekly rows; the
+new code still groups by `bill_id` for symmetry and to
+handle edge cases where two anchors land on the same bill.
+Actuals for bills are taken as `actual = budgeted`
+(recurring fixed amount; future slice could match against
+actual transactions matching the bill).
+
+### Net effect
+
+Monthly Budget section now shows:
+
+- One row per budgeted category, with budgeted = sum of
+  weekly/biweekly/etc. allotments
+- One row per bill, with budgeted = its monthly amount
+- One row for the flex pool (catch-all spending), if set
+- Actuals match calendar-month transaction totals
+
+API shape unchanged; just fewer + larger rows in the same
+`rows[]` array.
+
+14 budget + wizard tests still pass.
 
 ---
 
