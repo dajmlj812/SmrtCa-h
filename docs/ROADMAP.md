@@ -512,6 +512,45 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   `resolveBaseUrl()` helpers with one. Prevents this exact
   category of "two settings, one source of truth, drift in
   between" bug.
+- **0.18.7** 📋 — **SaaS deploy guide + runbook gaps** (~3
+  hours, docs-only). Two artifacts left over from the
+  smrtcash-test deploy:
+  - **New `docs/SAAS_DEPLOY.md`** — step-by-step for putting
+    SmrtCash behind Nginx Proxy Manager on a fresh box.
+    Covers the actual sequence we ran:
+    SSH preflight, deploy-key generation, `docker-compose.
+    override.yml` for the `proxy` network (no host port
+    publish), `.env` generation with strong secrets, NPM
+    proxy-host config with the right advanced-tab snippet,
+    SMTP relay choice (with the Maileroo URL-mangling
+    lesson called out so future operators don't go on the
+    same wild-goose chase), DNS verification, sandbox cleanup.
+    The self-host single-container doc covers a developer's
+    laptop — this covers a SaaS deploy.
+  - **Operator runbook entry: "User stuck on verification
+    gate"** — append to `docs/OPERATOR_RUNBOOK.md` with
+    the SQL one-liner from 0.17.3's CHANGELOG and the
+    pre-0.17.3 vs post-0.17.3 behavior matrix. Future
+    operators upgrading from an older deploy will have a
+    list of stuck users to unblock; this is the
+    one-command fix.
+- **0.18.8** 📋 — **Settings input validation guardrails**
+  (~half day). The `@`-instead-of-`.` typo that consumed
+  hours of diagnosis would have been caught instantly by
+  client-side or server-side URL-shape validation on the
+  settings page. Slice scope:
+  - Server: every URL-typed setting key
+    (`PUBLIC_BASE_URL`, `SUPPORT_URL`, `OLLAMA_BASE_URL`,
+    `STRIPE_PUBLIC_BASE_URL` until 0.18.6 retires it)
+    runs through `new URL(value)` at write time; reject
+    400 + clear error message on parse failure.
+  - Web: per-key input validation on `SettingsPage` —
+    URL keys get a small "this doesn't look like a valid
+    URL" hint inline before the Save button enables.
+  - Bonus: visual warning when a URL host contains an `@`
+    (RFC-allowed but almost always a typo of a `.`). The
+    one-line check that would have saved this week's
+    diagnosis time.
 
 ### Deeper bench (slice TBD)
 

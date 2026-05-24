@@ -687,6 +687,48 @@ mangling. Slice goal: collapse both keys into a single
 <code>resolveBaseUrl()</code> helpers with one. Prevents this exact
 category of &quot;two settings, one source of truth, drift in
 between&quot; bug.</li>
+<li><strong>0.18.7</strong> 📋 — <strong>SaaS deploy guide + runbook gaps</strong> (~3
+hours, docs-only). Two artifacts left over from the
+smrtcash-test deploy:<ul>
+<li><strong>New <code>docs/SAAS_DEPLOY.md</code></strong> — step-by-step for putting
+SmrtCash behind Nginx Proxy Manager on a fresh box.
+Covers the actual sequence we ran:
+SSH preflight, deploy-key generation, <code>docker-compose. override.yml</code> for the <code>proxy</code> network (no host port
+publish), <code>.env</code> generation with strong secrets, NPM
+proxy-host config with the right advanced-tab snippet,
+SMTP relay choice (with the Maileroo URL-mangling
+lesson called out so future operators don&#39;t go on the
+same wild-goose chase), DNS verification, sandbox cleanup.
+The self-host single-container doc covers a developer&#39;s
+laptop — this covers a SaaS deploy.</li>
+<li><strong>Operator runbook entry: &quot;User stuck on verification
+gate&quot;</strong> — append to <code>docs/OPERATOR_RUNBOOK.md</code> with
+the SQL one-liner from 0.17.3&#39;s CHANGELOG and the
+pre-0.17.3 vs post-0.17.3 behavior matrix. Future
+operators upgrading from an older deploy will have a
+list of stuck users to unblock; this is the
+one-command fix.</li>
+</ul>
+</li>
+<li><strong>0.18.8</strong> 📋 — <strong>Settings input validation guardrails</strong>
+(~half day). The <code>@</code>-instead-of-<code>.</code> typo that consumed
+hours of diagnosis would have been caught instantly by
+client-side or server-side URL-shape validation on the
+settings page. Slice scope:<ul>
+<li>Server: every URL-typed setting key
+(<code>PUBLIC_BASE_URL</code>, <code>SUPPORT_URL</code>, <code>OLLAMA_BASE_URL</code>,
+<code>STRIPE_PUBLIC_BASE_URL</code> until 0.18.6 retires it)
+runs through <code>new URL(value)</code> at write time; reject
+400 + clear error message on parse failure.</li>
+<li>Web: per-key input validation on <code>SettingsPage</code> —
+URL keys get a small &quot;this doesn&#39;t look like a valid
+URL&quot; hint inline before the Save button enables.</li>
+<li>Bonus: visual warning when a URL host contains an <code>@</code>
+(RFC-allowed but almost always a typo of a <code>.</code>). The
+one-line check that would have saved this week&#39;s
+diagnosis time.</li>
+</ul>
+</li>
 </ul>
 <h3 id="deeper-bench-slice-tbd">Deeper bench (slice TBD)<a class="heading-anchor" href="#deeper-bench-slice-tbd">#</a></h3>
 <p>These showed up in the competitive read but are heavier; they
@@ -748,7 +790,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 18:31:05 UTC · commit 108f10c</span>
+  <span>Generated 2026-05-24 18:39:48 UTC · commit ed22f2a</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
