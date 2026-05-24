@@ -44,6 +44,18 @@ export interface ParsedTransaction {
   sourceType: string | null;
   memo: string | null;
   balanceCents: number | null;
+  /**
+   * Bank-provided unique reference for this transaction, when the
+   * source format supplies one. OFX has `FITID`; Plaid has
+   * `transaction_id`. CSV/XLSX/QIF generally don't.
+   *
+   * 0.14.7: when present, the dedup hash derives directly from this
+   * reference rather than the (date, amount, description) tuple, so
+   * re-importing the same OFX file or syncing the same Plaid window
+   * is idempotent EVEN IF the bank rewrites the description (mid-
+   * settlement renames, merchant cleanup, etc.).
+   */
+  bankReference?: string | null;
 }
 
 export interface RowError {

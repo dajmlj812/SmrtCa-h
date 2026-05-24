@@ -19,7 +19,11 @@ describe('OFX/QFX parser (0.11.0)', () => {
     expect(a!.rawDescription).toBe('Starbucks #1234');
     expect(a!.sourceType).toBe('DEBIT');
     expect(a!.memo).toContain('Airport');
-    expect(a!.memo).toContain('fit ');
+    // 0.14.7: FITID is now exposed as ParsedTransaction.bankReference
+    // (and used by the dedup hash); it's no longer folded into the
+    // memo string.
+    expect(a!.bankReference).toBeTruthy();
+    expect(a!.memo).not.toContain('fit ');
 
     expect(c!.amountCents).toBe(-999);
   });

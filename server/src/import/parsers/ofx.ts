@@ -222,8 +222,12 @@ function buildTxn(node: SgmlNode): ParsedTransaction {
   const txnDate = parseOfxDate(dtPosted);
   const amountCents = parseAmountToCents(trnAmt);
   const description = (name || memo || trnType || '(unspecified)').trim();
+  // 0.14.7: FITID is now the canonical bank reference, so we don't
+  // also fold it into the memo line — that was a workaround for the
+  // pre-bank-ref dedup hash. Keeps the memo focused on free-form
+  // notes (memo + check number).
   const memoOut =
-    [memo, checkNum && `chk ${checkNum}`, fitId && `fit ${fitId}`]
+    [memo, checkNum && `chk ${checkNum}`]
       .filter((s): s is string => Boolean(s && s.trim() !== ''))
       .join(' | ') || null;
 
@@ -236,6 +240,7 @@ function buildTxn(node: SgmlNode): ParsedTransaction {
     sourceType: trnType || null,
     memo: memoOut,
     balanceCents: null,
+    bankReference: fitId ? fitId.trim() : null,
   };
 }
 

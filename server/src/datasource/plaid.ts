@@ -119,6 +119,10 @@ export async function fetchPlaidItemTransactions(
         sourceType: mapped.sourceType,
         memo: mapped.memo,
         balanceCents: null,
+        // 0.14.7: Plaid's transaction_id is a stable per-account
+        // reference. Driving dedup off this makes /transactions/sync
+        // genuinely idempotent across cursor windows that overlap.
+        bankReference: p.transaction_id,
       };
       const list = byAccount.get(smrtAccount) ?? [];
       list.push(txn);

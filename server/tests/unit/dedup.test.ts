@@ -47,4 +47,44 @@ describe('assignDedupHashes', () => {
     const lower = assignDedupHashes([txn({ rawDescription: 'coffee' })]);
     expect(upper[0]).toBe(lower[0]);
   });
+
+  // ── 0.14.7: bank-reference-keyed dedup (closes KI-05) ─────────
+
+  it('bank-ref-keyed rows survive a description rewrite', () => {
+    // Same FITID, different cleaned-up descriptions — must dedup.
+    const [pre] = assignDedupHashes([
+      txn({ bankReference: 'FITID-1', rawDescription: 'STARBUCKS #4012' }),
+    ]);
+    const [post] = assignDedupHashes([
+      txn({ bankReference: 'FITID-1', rawDescription: 'Starbucks' }),
+    ]);
+    expect(pre).toBe(post);
+  });
+
+  it('different bank refs do not collide even on otherwise-identical rows', () => {
+    const [ha] = assignDedupHashes([txn({ bankReference: 'A' })]);
+    const [hb] = assignDedupHashes([txn({ bankReference: 'B' })]);
+    expect(ha).not.toBe(hb);
+  });
+
+  it('absent bank ref falls back to the (date, amount, desc) heuristic — the pre-fix behavior', () => {
+    // No ref: descriptions matter, so 'STARBUCKS #4012' vs 'Starbucks'
+    // produce DIFFERENT hashes. This is exactly the failure mode that
+    // motivated KI-05 — without a ref there's nothing better we can do.
+    const [ha] = assignDedupHashes([txn({ rawDescription: 'STARBUCKS #4012' })]);
+    const [hb] = assignDedupHashes([txn({ rawDescription: 'Starbucks' })]);
+    expect(ha).not.toBe(hb);
+  });
+
+  it('two rows with the same bank ref in one batch still get distinct hashes (occurrence counter)', () => {
+    // Pathological case — feed sent the same FITID twice in one batch.
+    // We keep both rather than silently dropping; the ON CONFLICT in
+    // persistBatch will collide the second-import-of-either with the
+    // first surviving row.
+    const hashes = assignDedupHashes([
+      txn({ bankReference: 'DUP' }),
+      txn({ bankReference: 'DUP' }),
+    ]);
+    expect(new Set(hashes).size).toBe(2);
+  });
 });

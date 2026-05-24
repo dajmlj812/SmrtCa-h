@@ -9,10 +9,113 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.6 + 0.14.0–0.14.5 shipped. Multi-tenant isolation
-pass complete and the test suite is fully green for the first
-time in this iteration. No outstanding KI items aside from the
-documented exceljs/XLSX ones (KI-02, KI-06)._
+_All known issues closed (KI-02, KI-05, KI-06, KI-08 retired in
+0.14.7; KI-07 in 0.14.x; portability/tar in 0.14.5). 634/634
+server tests passing. The project is in a fully-clean state —
+backlog done, hardening done, KI list empty._
+
+---
+
+## [0.14.7] — 2026-05-23 — Close all remaining KIs
+
+Closes the four remaining items in `docs/KNOWN_ISSUES.md`. Three
+are real fixes (KI-02, KI-05, KI-06); KI-08 is retired as
+accepted-by-design.
+
+### KI-02 — exceljs npm-audit moderate advisories ✅
+
+Both advisories traced to `uuid <11.1.1` used transitively by
+exceljs. Resolved with an npm `overrides` block in
+`server/package.json`:
+
+```json
+"overrides": {
+  "uuid": "^11.1.1"
+}
+```
+
+`npm audit` after re-install: **0 vulnerabilities** (was 2
+moderate). No exceljs major-version swap needed.
+
+### KI-05 — Heuristic dup detection ✅
+
+The dedup hash now uses the **bank-provided reference** as the
+canonical identity when present, falling back to the pre-fix
+`(date, amount, description)` hash only for sources that don't
+provide one.
+
+- `ParsedTransaction.bankReference?: string | null` added to
+  `server/src/import/types.ts`.
+- OFX parser (`server/src/import/parsers/ofx.ts`) sets it from
+  `FITID` and removes the redundant `fit <id>` token from the
+  memo string (the bank ref is now first-class).
+- Plaid datasource (`server/src/datasource/plaid.ts`) sets it
+  from the Plaid `transaction_id`.
+- `server/src/import/dedup.ts` derives the hash from
+  `sha256("ref:" + bankReference)` when present; otherwise the
+  Phase-1 heuristic.
+
+**Impact:** re-importing the same OFX file or syncing an
+overlapping Plaid window is now deterministically idempotent
+EVEN IF the bank rewrites the description (merchant-name
+cleanup post-settlement, correction postings, etc.).
+
+CSV / XLSX / QIF imports keep the heuristic path — those formats
+generally don't carry a unique reference, and the
+heuristic-with-occurrence-counter design is the best we can do
+without one.
+
+### KI-06 — XLSX date cells may need verification ✅
+
+The XLSX parser's `cellToString` already extracted dates via
+`getUTC*` methods (correct since 0.11.0), but the behavior was
+never pinned by a test. Added `tests/unit/xlsx-date-parsing.test.ts`
+covering year-start, year-end, month boundaries, and a leap day.
+Round-trips through exceljs without committing a binary fixture.
+All 5 dates parse verbatim → KI verified resolved.
+
+### KI-08 — Project folder name contains `$` ✅ (retired)
+
+Working directory is `SmrtCa$h` because that's what the user
+chose. Handled by always passing `-p smrtcash` to docker compose
+and by quoting paths; internal package and container names are
+`smrtcash`. No code change required — moving from "open issue"
+to "documented convention."
+
+### Tests (+6)
+
+- `tests/unit/xlsx-date-parsing.test.ts` — 2 tests (date
+  boundaries; missing-cell handling).
+- `tests/unit/dedup.test.ts` — 4 new tests (bank-ref idempotence
+  across description rewrites; different refs don't collide;
+  fallback to heuristic; same-ref-twice-in-batch occurrence
+  counter).
+- `tests/unit/ofx-parser.test.ts` — 1 existing assertion
+  updated (FITID no longer in memo; `bankReference` now set).
+
+**634/634 server tests pass.**
+
+### Docs
+
+- `docs/KNOWN_ISSUES.md` — KI list now **empty**. KI-02 / KI-05
+  / KI-06 / KI-08 all moved to the Resolved section with a
+  paragraph each on what was done.
+
+### Files
+
+```
+server/package.json                                  (overrides + 0.14.6 → 0.14.7)
+server/package-lock.json                             (uuid resolution)
+server/src/import/types.ts                           (bankReference field)
+server/src/import/dedup.ts                           (bank-ref-keyed hash)
+server/src/import/parsers/ofx.ts                    (FITID → bankReference)
+server/src/datasource/plaid.ts                       (transaction_id → bankReference)
+server/tests/unit/dedup.test.ts                      (+4 bank-ref tests)
+server/tests/unit/xlsx-date-parsing.test.ts          (new, 2 tests)
+server/tests/unit/ofx-parser.test.ts                 (memo assertion updated)
+docs/KNOWN_ISSUES.md                                 (KI list empty)
+package.json + web/package.json                      (0.14.6 → 0.14.7)
+```
 
 ---
 
