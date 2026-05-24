@@ -26,10 +26,14 @@
 -- (tenant_id, lower(pattern)) composite so two tenants can each have
 -- their own "ONSTAR" rule without colliding.
 
+-- IF NOT EXISTS on each column so the migration is re-runnable. A
+-- prior failed attempt that left one column behind (observed in
+-- this project's dev + test DBs from an earlier draft of 029) won't
+-- block the second run.
 ALTER TABLE normalization_rules
-  ADD COLUMN tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
-  ADD COLUMN enabled   boolean NOT NULL DEFAULT true,
-  ADD COLUMN priority  int     NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS enabled   boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS priority  int     NOT NULL DEFAULT 0;
 
 -- Backfill existing rows to the Default tenant if one exists. On a
 -- brand-new install with no tenants seeded yet, the WHERE clause is
@@ -47,13 +51,14 @@ ALTER TABLE normalization_rules
   ALTER COLUMN tenant_id SET NOT NULL;
 
 -- Replace the old global unique index with a per-tenant one.
+-- IF NOT EXISTS on the CREATEs so a re-run is a no-op.
 DROP INDEX IF EXISTS normalization_rules_pattern_unique;
-CREATE UNIQUE INDEX normalization_rules_pattern_unique
+CREATE UNIQUE INDEX IF NOT EXISTS normalization_rules_pattern_unique
   ON normalization_rules (tenant_id, lower(pattern));
 
 -- Hot path: the import-time auto-apply loads enabled rules for one
 -- tenant on every import. Keeps the planner honest as rule counts
 -- grow.
-CREATE INDEX normalization_rules_active_idx
+CREATE INDEX IF NOT EXISTS normalization_rules_active_idx
   ON normalization_rules (tenant_id, priority)
   WHERE enabled = true;
