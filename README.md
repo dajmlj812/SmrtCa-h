@@ -7,24 +7,44 @@ your own container, with your data staying on your machine.
 
 ## Status
 
-**Phases 1 through 6 — Foundation, Import, AI Normalization, Receipts, Insights, Auth & Hardening, Budgeting & Cash Flow** ✅ Complete
+**Phases 1 through 9 — complete.** Original backlog also complete (versions
+`0.13.0` → `0.13.5`); only native mobile is deferred (the PWA covers it).
 
-The stack is live, verified, and **safe to deploy**: accounts with **true
-opening-balance reconciliation**, a CSV/XLSX importer with automatic
-bank-format detection, duplicate protection, a web UI for browsing
-transactions, **a pluggable AI normalization layer (rules / Claude API /
-Ollama)** that cleans merchant names and categorizes transactions, a
-user-editable category taxonomy, inline manual editing, **drag-and-drop
-receipt attachments with Claude-vision OCR + AES-256-GCM encryption at
-rest** that flags receipts whose amount or date don't match the
-transaction, **automatic transfer detection** between own accounts, a
-**dashboard** with spending-by-category, income-vs-expense, and
-net-worth-over-time charts plus filtered CSV export, **Argon2id
-single-user authentication** with first-boot password setup, a
-**single-container Docker image** ready for `docker compose up`, and
-**flex budgeting + budget-vs-actual + savings goals + bill reminders +
-90-day cash-flow forecast** rounding out the everyday-finance experience.
-See the [Roadmap](./docs/ROADMAP.md) for what's next.
+What ships today:
+
+- **Import & connectivity** — CSV / XLSX / OFX / QFX / QIF import with
+  bank-format auto-detection and duplicate protection; **OFX Direct
+  Connect** to pull transactions straight from supporting banks;
+  **opt-in Plaid integration** (off by default); **scheduled background
+  sync** that drives all sources on a per-source cadence and refreshes
+  crypto prices.
+- **AI normalization** — pluggable provider (rules / Claude API /
+  Ollama) that cleans merchant names and categorizes transactions, plus
+  a **conversational financial assistant** with 17 tenant-scoped,
+  audit-logged tools.
+- **Receipts** — drag-and-drop attachments with Claude-vision OCR +
+  AES-256-GCM encryption at rest, mismatch flagging.
+- **Wealth** — investment holdings (cost basis + mark-to-market), manual
+  assets & liabilities, **multi-currency** with daily-refreshed FX
+  rates, **retirement projections**, **crypto** tracking with daily
+  CoinGecko price refresh.
+- **Budgeting & cash flow** — flex budgets, weekly→monthly periods,
+  budget-vs-actual, savings goals, bill reminders, AutoMagic wizard
+  with fuel/toll math, 90-day forecast.
+- **Reporting & insights** — dashboard charts, anomaly alerts,
+  tax-category tagging + year-end Schedule A/C reports, calendar
+  budget view, filtered CSV export, data portability tooling.
+- **Mobile** — installable PWA with responsive UI, offline shell,
+  install prompt.
+- **Households & sharing** — multi-tenant with admin/spouse/child
+  roles, **per-account read/read-write permission tuning**, **bill-
+  splitting** with net-balance settlement.
+- **Ops** — single-container Docker stack, Argon2id auth, super-admin
+  audit log, GUI-managed backups + runtime settings, live health
+  dashboard, SMTP for alerts.
+
+See the [Roadmap](./docs/ROADMAP.md) for the full phase history and
+[Changelog](./CHANGELOG.md) for what landed when.
 
 ## Documentation
 
@@ -81,7 +101,7 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-405 automated tests spanning unit, integration, functional, security, smoke,
+~560 automated tests spanning unit, integration, functional, security, smoke,
 performance, and end-to-end layers. With PostgreSQL running:
 
 ```sh

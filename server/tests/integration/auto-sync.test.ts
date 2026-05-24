@@ -343,5 +343,170 @@ describe('Auto-sync scheduler (0.11.3)', () => {
     const body = r.json();
     expect(body).toHaveProperty('ofxDc');
     expect(body).toHaveProperty('plaid');
+    expect(body).toHaveProperty('crypto');
+  });
+
+  // ── 0.13.5 — crypto-price refresh inside the tick ──────────
+  describe('crypto price refresh (0.13.5)', () => {
+    /** Build a CoinGecko-shaped JSON fetch. */
+    function priceFetch(
+      body: Record<string, { usd: number }>,
+      status = 200,
+    ): typeof fetch {
+      return (async () =>
+        new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+    }
+
+    /** Seed a crypto holding directly on an account. */
+    async function seedCryptoHolding(
+      accountId: string,
+      symbol: string,
+      opts: { lastPriceDate?: string | null } = {},
+    ): Promise<string> {
+      const r = await pool.query<{ id: string }>(
+        `INSERT INTO holdings
+           (account_id, symbol, name, asset_type, quantity,
+            last_price_cents, last_price_date)
+         VALUES ($1, $2, $2, 'crypto', 1, 0, $3) RETURNING id`,
+        [accountId, symbol, opts.lastPriceDate ?? null],
+      );
+      return r.rows[0]!.id;
+    }
+
+    it('prices crypto holdings and updates last_price_cents + date', async () => {
+      const accountId = await seedAccount({ type: 'investment' });
+      const btcId = await seedCryptoHolding(accountId, 'BTC');
+      const ethId = await seedCryptoHolding(accountId, 'ETH');
+
+      const r = await runAutoSyncTick({
+        force: true,
+        cryptoFetchOverride: priceFetch({
+          bitcoin: { usd: 70_000 },
+          ethereum: { usd: 3_500 },
+        }),
+      });
+      expect(r.crypto.attempted).toBe(2);
+      expect(r.crypto.updated).toBe(2);
+      expect(r.crypto.failed).toBe(0);
+
+      const after = await pool.query<{
+        id: string;
+        last_price_cents: number;
+        last_price_date: string | null;
+      }>(
+        `SELECT id, last_price_cents, last_price_date::text AS last_price_date
+           FROM holdings WHERE id = ANY($1::uuid[])`,
+        [[btcId, ethId]],
+      );
+      const byId = new Map(after.rows.map((r) => [r.id, r]));
+      expect(Number(byId.get(btcId)!.last_price_cents)).toBe(7_000_000);
+      expect(Number(byId.get(ethId)!.last_price_cents)).toBe(350_000);
+      expect(byId.get(btcId)!.last_price_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('counts unknown symbols separately from updates', async () => {
+      const accountId = await seedAccount({ type: 'investment' });
+      await seedCryptoHolding(accountId, 'BTC');
+      await seedCryptoHolding(accountId, 'ZZZ');
+
+      const r = await runAutoSyncTick({
+        force: true,
+        cryptoFetchOverride: priceFetch({ bitcoin: { usd: 60_000 } }),
+      });
+      expect(r.crypto.attempted).toBe(2);
+      expect(r.crypto.updated).toBe(1);
+      expect(r.crypto.unknown).toBe(1);
+    });
+
+    it('skips the provider call when CRYPTO_PRICE_PROVIDER=manual', async () => {
+      await setDbValue('CRYPTO_PRICE_PROVIDER', 'manual');
+      const accountId = await seedAccount({ type: 'investment' });
+      await seedCryptoHolding(accountId, 'BTC');
+
+      // A fetch that would throw if called — proves we never called it.
+      const exploding = (() => {
+        throw new Error('provider must not be called in manual mode');
+      }) as unknown as typeof fetch;
+
+      const r = await runAutoSyncTick({
+        force: true,
+        cryptoFetchOverride: exploding,
+      });
+      expect(r.crypto.attempted).toBe(0);
+      expect(r.crypto.updated).toBe(0);
+      expect(r.crypto.failed).toBe(0);
+    });
+
+    it('skips holdings already priced today (per-day cadence gate)', async () => {
+      const accountId = await seedAccount({ type: 'investment' });
+      const now = new Date('2026-05-23T14:00:00Z');
+      const today = now.toISOString().slice(0, 10);
+      // BTC already priced today → must NOT be re-fetched.
+      await seedCryptoHolding(accountId, 'BTC', { lastPriceDate: today });
+      // ETH never priced → must be fetched.
+      await seedCryptoHolding(accountId, 'ETH');
+
+      const seen: string[] = [];
+      const recordingFetch = (async (url: string) => {
+        seen.push(String(url));
+        return new Response(JSON.stringify({ ethereum: { usd: 3_500 } }), {
+          status: 200,
+        });
+      }) as unknown as typeof fetch;
+
+      const r = await runAutoSyncTick({
+        force: true,
+        now,
+        cryptoFetchOverride: recordingFetch,
+      });
+      expect(r.crypto.attempted).toBe(1);
+      expect(r.crypto.updated).toBe(1);
+      expect(seen).toHaveLength(1);
+      // CoinGecko URL must include ethereum, must NOT include bitcoin.
+      expect(seen[0]).toContain('ethereum');
+      expect(seen[0]).not.toContain('bitcoin');
+    });
+
+    it('a tenant-level provider failure does not block sibling tenants', async () => {
+      // Two tenants, each with one crypto holding. Tenant A's batch
+      // 429s; tenant B's batch succeeds. Verify A is counted failed
+      // and B is still updated.
+      const acctA = await seedAccount({ name: 'A', type: 'investment' });
+      const tB = await pool.query<{ id: string }>(
+        `INSERT INTO tenants (name, slug) VALUES ('B', 'b') RETURNING id`,
+      );
+      const tenantBId = tB.rows[0]!.id;
+      const acctBRes = await pool.query<{ id: string }>(
+        `INSERT INTO accounts (tenant_id, name, type, institution)
+           VALUES ($1, 'B-Acct', 'investment', 'X') RETURNING id`,
+        [tenantBId],
+      );
+      const acctB = acctBRes.rows[0]!.id;
+      await seedCryptoHolding(acctA, 'BTC');
+      await seedCryptoHolding(acctB, 'ETH');
+
+      let call = 0;
+      const fetchSeq = (async (url: string) => {
+        call += 1;
+        // First batch (whichever tenant ran first) → 429.
+        if (call === 1) {
+          return new Response('rate limit', { status: 429 });
+        }
+        // Second batch → succeed with whichever coin was requested.
+        const u = String(url);
+        const body: Record<string, { usd: number }> = {};
+        if (u.includes('bitcoin')) body.bitcoin = { usd: 60_000 };
+        if (u.includes('ethereum')) body.ethereum = { usd: 3_000 };
+        return new Response(JSON.stringify(body), { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const r = await runAutoSyncTick({
+        force: true,
+        cryptoFetchOverride: fetchSeq,
+      });
+      expect(r.crypto.attempted).toBe(2);
+      expect(r.crypto.failed).toBe(1);
+      expect(r.crypto.updated).toBe(1);
+    });
   });
 });

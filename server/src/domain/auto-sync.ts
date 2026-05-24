@@ -8,6 +8,10 @@ import { fetchPlaidItemTransactions } from '../datasource/plaid.js';
 import { OfxDcError } from './ofx-dc.js';
 import { PlaidError, type FetchLike as PlaidFetch } from './plaid.js';
 import { persistBatch } from '../import/importer.js';
+import {
+  fetchCryptoPrices,
+  type FetchLike as CryptoFetch,
+} from './crypto-prices.js';
 
 /**
  * Phase 8.3 (0.11.3) — scheduled background sync.
@@ -38,6 +42,18 @@ export interface AutoSyncTickResult {
   ranAt: string;
   ofxDc: { attempted: number; succeeded: number; failed: number };
   plaid: { attempted: number; succeeded: number; failed: number };
+  /**
+   * 0.13.5: crypto-price refresh. `attempted` is the number of distinct
+   * symbols we tried to price across all tenants; `updated` is the
+   * number of holdings rows we wrote. `unknown` is symbols the price
+   * provider didn't recognize.
+   */
+  crypto: {
+    attempted: number;
+    updated: number;
+    unknown: number;
+    failed: number;
+  };
 }
 
 export function startAutoSyncScheduler(): void {
@@ -76,6 +92,7 @@ export async function runAutoSyncTick(opts: {
   force?: boolean;
   ofxFetchOverride?: OfxDirectConnectContext['fetchImpl'];
   plaidFetchOverride?: PlaidFetch;
+  cryptoFetchOverride?: CryptoFetch;
   now?: Date;
 } = {}): Promise<AutoSyncTickResult> {
   const now = opts.now ?? new Date();
@@ -88,6 +105,7 @@ export async function runAutoSyncTick(opts: {
     enabled,
     frequency,
     ranAt: now.toISOString(),
+    crypto: { attempted: 0, updated: 0, unknown: 0, failed: 0 },
     ofxDc: { attempted: 0, succeeded: 0, failed: 0 },
     plaid: { attempted: 0, succeeded: 0, failed: 0 },
   };
@@ -222,6 +240,68 @@ export async function runAutoSyncTick(opts: {
         [kind, message, row.id],
       );
       result.plaid.failed += 1;
+    }
+  }
+
+  // ── Crypto price refresh ─────────────────────────────────
+  // Refreshes crypto holdings whose price is older than today. One
+  // HTTP call per tenant (CoinGecko batches by ids in a single query).
+  // Honors CRYPTO_PRICE_PROVIDER=manual by skipping the provider call.
+  //
+  // The `last_price_date < today` filter is the per-source cadence
+  // gate analog: an hourly tick on a tenant that already priced its
+  // crypto today produces zero rows and zero HTTP calls.
+  const provider = ((await getEffectiveValue('CRYPTO_PRICE_PROVIDER')) || 'coingecko')
+    .trim()
+    .toLowerCase();
+  if (provider !== 'manual') {
+    const today = now.toISOString().slice(0, 10);
+    const cryptoRows = await pool.query<{
+      tenant_id: string;
+      id: string;
+      symbol: string;
+    }>(
+      `SELECT a.tenant_id, h.id, h.symbol
+         FROM holdings h
+         JOIN accounts a ON a.id = h.account_id
+        WHERE h.asset_type = 'crypto'
+          AND h.symbol IS NOT NULL
+          AND a.tenant_id IS NOT NULL
+          AND (h.last_price_date IS NULL OR h.last_price_date < $1::date)`,
+      [today],
+    );
+    const byTenant = new Map<string, Array<{ id: string; symbol: string }>>();
+    for (const r of cryptoRows.rows) {
+      const list = byTenant.get(r.tenant_id) ?? [];
+      list.push({ id: r.id, symbol: r.symbol });
+      byTenant.set(r.tenant_id, list);
+    }
+
+    for (const [, holdings] of byTenant.entries()) {
+      const symbols = [...new Set(holdings.map((h) => h.symbol.toUpperCase()))];
+      result.crypto.attempted += symbols.length;
+      try {
+        const priced = await fetchCryptoPrices({
+          symbols,
+          ...(opts.cryptoFetchOverride ? { fetchImpl: opts.cryptoFetchOverride } : {}),
+        });
+        result.crypto.unknown += priced.unknown.length;
+        for (const h of holdings) {
+          const cents = priced.prices[h.symbol.toUpperCase()];
+          if (typeof cents !== 'number') continue;
+          const u = await pool.query(
+            `UPDATE holdings
+                SET last_price_cents = $2, last_price_date = $3
+              WHERE id = $1`,
+            [h.id, cents, today],
+          );
+          result.crypto.updated += u.rowCount ?? 0;
+        }
+      } catch {
+        // Best-effort: one tenant's rate-limited CoinGecko shouldn't
+        // stop the others. Surface via the failed counter.
+        result.crypto.failed += 1;
+      }
     }
   }
 

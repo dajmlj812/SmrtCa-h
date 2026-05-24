@@ -9,10 +9,81 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.13.0–0.13.4 shipped. **Original backlog complete** except native
+_0.13.0–0.13.5 shipped. **Original backlog complete** except native
 mobile (deferred). Open backlog item: non-AI rules engine for
 auto-categorization. Future direction is whatever the user picks
 next._
+
+---
+
+## [0.13.5] — 2026-05-23 — Scheduled crypto-price refresh + docs refresh
+
+Combines two stragglers: 0.13.3's manual crypto-price refresh +
+0.11.3's scheduled background sync now talk to each other, so crypto
+prices update hands-off on the same cadence as bank syncs. Also a
+long-overdue refresh of `README.md` and `docs/FEATURES.md`, which
+were stuck at "Phases 1–6 complete" while the product had shipped
+through 0.13.4.
+
+### Server
+
+- `runAutoSyncTick()` (`server/src/domain/auto-sync.ts`) gains a
+  `crypto` pass after OFX-DC + Plaid. For each tenant with stale
+  crypto holdings it batches one CoinGecko call and updates
+  `holdings.last_price_cents` + `last_price_date`. The pass is
+  skipped entirely when `CRYPTO_PRICE_PROVIDER=manual`.
+- **Per-day cadence gate**: the SELECT filters
+  `last_price_date IS NULL OR last_price_date < today`, so an
+  hourly tick on a tenant already priced today produces zero rows
+  and zero HTTP calls — same self-throttling shape as the existing
+  per-source `last_sync_at` gate for OFX/Plaid.
+- Per-tenant failures (rate-limit / HTTP / transport) increment a
+  `crypto.failed` counter without breaking the tick — one
+  rate-limited tenant can't block siblings.
+- `AutoSyncTickResult` now reports
+  `crypto: { attempted, updated, unknown, failed }` alongside
+  `ofxDc` and `plaid`.
+
+### Tests (+5 server)
+
+- `tests/integration/auto-sync.test.ts` new `crypto price refresh
+  (0.13.5)` describe:
+  - Happy path: BTC + ETH priced, `last_price_cents` + date stamped.
+  - Unknown symbols counted separately from updates.
+  - `CRYPTO_PRICE_PROVIDER=manual` skips the provider call entirely
+    (verified by an exploding fetch that must never be invoked).
+  - Per-day cadence gate: holdings already priced today are skipped
+    on subsequent ticks (verified by recording fetch URLs — bitcoin
+    must not appear when only ethereum is stale).
+  - Sibling tenants survive each other's failures: tenant A 429s
+    while tenant B still gets updated.
+- `/api/auto-sync/run` shape assertion extended to include `crypto`.
+- Total: **565 tests** (559 server + 6 web), all green.
+
+### Documentation
+
+- `README.md` Status section rewritten — was stuck at "Phases 1–6
+  complete," now reflects everything shipped through 0.13.5 with a
+  one-bullet-per-area summary (import, AI, receipts, wealth,
+  budgeting, reporting, mobile, households, ops).
+- `README.md` test count updated 405 → ~560.
+- `docs/FEATURES.md` rewritten: every shipped backlog item flipped
+  from 📋 → ✅, plus new rows for anomaly alerts, tax-category
+  tagging, data portability, scheduled crypto refresh, calendar
+  view, bill-splitting, per-account permission tuning, audit log,
+  PWA, and the conversational assistant. New "Households &
+  Sharing" section. Native mobile + non-AI rules engine marked
+  💡 backlog.
+
+### Files
+
+```
+server/src/domain/auto-sync.ts            (crypto pass + cadence gate)
+server/tests/integration/auto-sync.test.ts (+5 crypto-pass tests)
+README.md                                  (Status + test count)
+docs/FEATURES.md                           (full refresh)
+package.json + server/package.json + web/package.json (0.13.4 → 0.13.5)
+```
 
 ---
 

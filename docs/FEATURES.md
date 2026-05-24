@@ -1,11 +1,13 @@
 # SmrtCash — Feature List
 
-Legend: ✅ available now · 🔜 next · 📋 planned (phase shown)
+Legend: ✅ available now · 🔜 next · 📋 planned · 💡 backlog (deferred)
 
-The planned set is shaped by a competitive review of Monarch, Simplifi,
+The planned set was shaped by a competitive review of Monarch, Simplifi,
 Empower, Banktivity, CountAbout, Rocket Money and Moneydance — adopting their
-table-stakes features while keeping SmrtCash self-hosted and private. See the
-[Roadmap](./ROADMAP.md) for phase detail.
+table-stakes features while keeping SmrtCash self-hosted and private. As of
+`0.13.5`, Phases 1–9 and the post-Phase-9 backlog are all complete except for
+native mobile (deferred — the PWA covers it). See the [Roadmap](./ROADMAP.md)
+for phase detail and the [Changelog](../CHANGELOG.md) for per-release notes.
 
 ---
 
@@ -20,6 +22,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Delete an account (cascades to its transactions) | ✅ |
 | True balance reconciliation with opening balances | ✅ |
 | Manual assets & liabilities (property, vehicles, loans) | ✅ |
+| Multi-currency accounts with daily-refreshed FX rates | ✅ |
 
 ## Importing & Connectivity
 
@@ -30,11 +33,12 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Generic column-mapping for any other bank | ✅ |
 | Import preview, per-row error reporting, duplicate detection | ✅ |
 | Import history (batches) per account | ✅ |
-| OFX / QFX / QIF import (Quicken & CountAbout migration) | 📋 Phase 8 |
-| Pluggable account data-source layer | 📋 Phase 8 |
-| OFX Direct Connect (direct bank protocol, no aggregator) | 📋 Phase 8 |
-| Optional Plaid sync (opt-in cloud aggregation) | 📋 Phase 8 |
-| Scheduled background sync & auto-import | 📋 Phase 8 |
+| OFX 1.x (SGML), OFX 2.x (XML), QFX, QIF import | ✅ |
+| Pluggable account data-source layer | ✅ |
+| OFX Direct Connect (direct bank protocol, no aggregator) | ✅ |
+| Optional Plaid sync (opt-in cloud aggregation, super-admin-gated) | ✅ |
+| Scheduled background sync (hourly / daily / weekly) | ✅ |
+| Scheduled crypto price refresh (CoinGecko, once per day) | ✅ |
 
 ## Transactions
 
@@ -68,7 +72,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Comprehensive hierarchical category taxonomy (~190 categories) | ✅ |
 | AI-suggested-category review (Approve / Merge / Reject) | ✅ |
 | Receipt OCR matching | ✅ |
-| Conversational AI financial assistant | 📋 Phase 9 |
+| Conversational AI financial assistant (17 tools, tenant-scoped, audit-logged) | ✅ |
 
 ## Budgeting & Cash Flow
 
@@ -83,6 +87,7 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | AutoMagic budget wizard (multi-period with bills/income/groceries/fuel/tolls) | ✅ |
 | Vehicle-driven fuel cost calculator (EIA prices, ICE + EV) | ✅ |
 | Toll-route weekly estimates | ✅ |
+| Calendar budget view (per-day spend heatmap + bill markers) | ✅ |
 
 ## Wealth & Net Worth
 
@@ -91,8 +96,10 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Investment holdings — cost basis & mark-to-market | ✅ |
 | Manual asset & liability tracking (house, mortgage, vehicle) | ✅ |
 | Net worth over time across all accounts (incl. holdings + A&L) | ✅ |
-| Multi-currency support with exchange rates | 🔜 Phase 7.1 |
-| Retirement / long-term goal projections | 📋 Phase 7.2 |
+| Multi-currency support with exchange rates | ✅ |
+| Retirement / long-term goal projections | ✅ |
+| Cryptocurrency holdings (mixed-asset accounts) | ✅ |
+| CoinGecko price refresh (manual + scheduled) | ✅ |
 
 ## Insights & Reporting
 
@@ -102,14 +109,29 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Income vs. expense trends | ✅ |
 | Dashboard with charts | ✅ |
 | Filtered CSV export | ✅ |
+| Spending-anomaly alerts (large / unusual-at-merchant / duplicate-suspect) | ✅ |
+| Tax-category tagging + year-end Schedule A / C reports (JSON + CSV) | ✅ |
+| Data portability (full account-scoped export bundle) | ✅ |
+| Canned reports catalog (CSV export per report) | ✅ |
 
 ## Mobile & Experience
 
 | Feature | Status |
 |---------|--------|
-| Installable PWA (responsive, mobile home-screen) | 📋 Phase 9 |
-| Bill-splitting / shared expenses | 📋 Phase 9 |
-| Calendar budget view | 📋 Phase 9 |
+| Installable PWA (responsive, mobile home-screen, offline shell) | ✅ |
+| Bill-splitting / shared expenses (per-tenant participants, settle toggle) | ✅ |
+| Calendar budget view | ✅ |
+| Native mobile apps | 💡 deferred |
+
+## Households & Sharing
+
+| Feature | Status |
+|---------|--------|
+| Multi-tenant (one container, many households) | ✅ |
+| Roles — admin / spouse / child | ✅ |
+| Per-account read / read-write permission tuning | ✅ |
+| Invitations & memberships (SMTP-deliverable) | ✅ |
+| Super-admin audit log of every mutation | ✅ |
 
 ## Data Integrity & Security
 
@@ -118,21 +140,21 @@ table-stakes features while keeping SmrtCash self-hosted and private. See the
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| 351-test automated suite (unit → e2e) | ✅ |
+| ~560-test automated suite (unit → e2e) | ✅ |
 | Live health dashboard (gauges, charts, CPU/mem/req-rate/DB-latency) | ✅ |
 | GUI-managed backups (schedule + manual + retention) | ✅ |
-| Canned reports catalog (CSV export per report) | ✅ |
 | GUI-managed runtime settings (no .env edits for live config) | ✅ |
 | Local-first — data stays in your PostgreSQL | ✅ |
-| Single-user authentication | ✅ |
-| Encryption at rest (attachments AES-256-GCM; DB via host volume) | ✅ |
+| Argon2id authentication | ✅ |
+| Encryption at rest (attachments & connection secrets AES-256-GCM; DB via host volume) | ✅ |
 | Hardened Docker container | ✅ |
+| Non-AI rules engine for auto-categorization | 💡 backlog |
 
 ---
 
 ## Platform
 
-- **Web application**, becoming an installable PWA (Phase 9)
+- **Web application** delivered as an installable PWA
 - **Backend API** — Fastify + TypeScript
 - **Database** — PostgreSQL 17 (runs as a Docker container)
 - **Self-hosted** — runs entirely on hardware you control
