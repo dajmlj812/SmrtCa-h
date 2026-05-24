@@ -161,9 +161,64 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.13 shipped. 0.17.13 renames the two halves of
-/budgets — the top is &quot;Paycheck-to-Paycheck Budgeting&quot;, the
-bottom is &quot;Monthly Budget&quot;.</em></p>
+<p><em>0.17.0–0.17.14 shipped. 0.17.14 ships migration 036 to
+backfill <code>bills.account_id</code> and <code>recurring_income.account_id</code>
+from their most-frequent matching transaction — so an
+account-scoped period card stops showing income/bills that
+actually belong to a different account.</em></p>
+<hr>
+<h2 id="01714-2026-05-24-backfill-bills-income-account_id">[0.17.14] — 2026-05-24 — Backfill bills + income account_id<a class="heading-anchor" href="#01714-2026-05-24-backfill-bills-income-account_id">#</a></h2>
+<p>Operator with account-scoped budgets (&quot;Chase 5793 only&quot;)
+reported &quot;still seeing CAMCO Precision Payroll income&quot; on
+the card. Diagnosis: the period filter treats
+<code>account_id IS NULL</code> as &quot;household-wide, always include&quot; —
+the right rule for genuinely-shared items but wrong for the
+many rows the recurring-detection job and manual-entry
+created with NULL account_id even though every matching
+transaction landed in one specific account.</p>
+<h3 id="migration-036">Migration 036<a class="heading-anchor" href="#migration-036">#</a></h3>
+<p>For each row with <code>account_id IS NULL</code>:</p>
+<ul>
+<li><strong><code>recurring_income</code></strong> — find the account that has the
+most income transactions (<code>amount_cents &gt; 0</code>) whose
+<code>normalized_merchant</code> or <code>raw_description</code> contains the
+first word of the income source name. Set
+<code>account_id</code> to that account.</li>
+<li><strong><code>bills</code></strong> — same, but for outgoing transactions
+(<code>amount_cents &lt; 0</code>).</li>
+</ul>
+<p>Heuristic notes:</p>
+<ul>
+<li>Match is case-insensitive <code>LIKE &#39;%firstword%&#39;</code> against
+the merchant/description.</li>
+<li>Requires the first word to be ≥3 chars so 1–2 char tokens
+don&#39;t false-match (&quot;RJ&quot; → too many false hits).</li>
+<li>If no match: row stays <code>NULL</code> and continues to behave as
+household-wide. Operator can edit via UI later.</li>
+<li>Only touches rows where <code>account_id IS NULL</code>. Existing
+non-null values are preserved.</li>
+</ul>
+<h3 id="net-effect-test-deploy-verification">Net effect (test deploy verification)<a class="heading-anchor" href="#net-effect-test-deploy-verification">#</a></h3>
+<ul>
+<li><code>RJW Logistics Payroll</code> → Chase Checking - 5793 ✓</li>
+<li><code>CAMCO Precision Payroll</code> → Chase Checking - Aadyn
+(so it no longer appears on a 5793-only card)</li>
+<li><code>Zelle from Aadyn Leo Johnson</code> → Chase Checking - 5793
+(most-frequent match)</li>
+<li>37 bills get backfilled similarly.</li>
+</ul>
+<h3 id="follow-up-to-dos-not-in-this-slice">Follow-up to-dos (not in this slice)<a class="heading-anchor" href="#follow-up-to-dos-not-in-this-slice">#</a></h3>
+<ul>
+<li>Audit the <strong>creation paths</strong> (recurring-detection job +
+manual entry forms) to ensure <code>account_id</code> is set at
+insert time for new rows. The migration only fixes
+existing rows; without these audits, new rows could
+recreate the bug.</li>
+<li>Optional <strong>UI to edit</strong> <code>account_id</code> on bills and
+recurring income from the Bills page / a new
+recurring-income management page.</li>
+</ul>
+<p>Both are reasonable v0.18.x slices.</p>
 <hr>
 <h2 id="01713-2026-05-24-section-labels-on-budgets">[0.17.13] — 2026-05-24 — Section labels on /budgets<a class="heading-anchor" href="#01713-2026-05-24-section-labels-on-budgets">#</a></h2>
 <p>The two halves of the budgets page do genuinely different
@@ -6037,7 +6092,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 22:07:15 UTC · commit 1df5e6a</span>
+  <span>Generated 2026-05-24 22:12:53 UTC · commit 5d5ed34</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

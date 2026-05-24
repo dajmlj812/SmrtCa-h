@@ -17,7 +17,7 @@
  * Bump CACHE_VERSION on every release whose static assets change so
  * the activate handler can purge older caches.
  */
-const CACHE_VERSION = 'smrtcash-v0.17.13';
+const CACHE_VERSION = 'smrtcash-v0.17.14';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

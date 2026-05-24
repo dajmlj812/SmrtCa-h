@@ -292,7 +292,7 @@ function AuthenticatedApp({
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.17.13
+          SmrtCash · v0.17.14
           <SupportLink supportUrl={supportUrl} />
           <button
             className="btn secondary logout-btn"

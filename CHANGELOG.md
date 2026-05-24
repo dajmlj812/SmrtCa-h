@@ -9,9 +9,69 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.13 shipped. 0.17.13 renames the two halves of
-/budgets — the top is "Paycheck-to-Paycheck Budgeting", the
-bottom is "Monthly Budget"._
+_0.17.0–0.17.14 shipped. 0.17.14 ships migration 036 to
+backfill `bills.account_id` and `recurring_income.account_id`
+from their most-frequent matching transaction — so an
+account-scoped period card stops showing income/bills that
+actually belong to a different account._
+
+---
+
+## [0.17.14] — 2026-05-24 — Backfill bills + income account_id
+
+Operator with account-scoped budgets ("Chase 5793 only")
+reported "still seeing CAMCO Precision Payroll income" on
+the card. Diagnosis: the period filter treats
+`account_id IS NULL` as "household-wide, always include" —
+the right rule for genuinely-shared items but wrong for the
+many rows the recurring-detection job and manual-entry
+created with NULL account_id even though every matching
+transaction landed in one specific account.
+
+### Migration 036
+
+For each row with `account_id IS NULL`:
+
+- **`recurring_income`** — find the account that has the
+  most income transactions (`amount_cents > 0`) whose
+  `normalized_merchant` or `raw_description` contains the
+  first word of the income source name. Set
+  `account_id` to that account.
+- **`bills`** — same, but for outgoing transactions
+  (`amount_cents < 0`).
+
+Heuristic notes:
+
+- Match is case-insensitive `LIKE '%firstword%'` against
+  the merchant/description.
+- Requires the first word to be ≥3 chars so 1–2 char tokens
+  don't false-match ("RJ" → too many false hits).
+- If no match: row stays `NULL` and continues to behave as
+  household-wide. Operator can edit via UI later.
+- Only touches rows where `account_id IS NULL`. Existing
+  non-null values are preserved.
+
+### Net effect (test deploy verification)
+
+- `RJW Logistics Payroll` → Chase Checking - 5793 ✓
+- `CAMCO Precision Payroll` → Chase Checking - Aadyn
+  (so it no longer appears on a 5793-only card)
+- `Zelle from Aadyn Leo Johnson` → Chase Checking - 5793
+  (most-frequent match)
+- 37 bills get backfilled similarly.
+
+### Follow-up to-dos (not in this slice)
+
+- Audit the **creation paths** (recurring-detection job +
+  manual entry forms) to ensure `account_id` is set at
+  insert time for new rows. The migration only fixes
+  existing rows; without these audits, new rows could
+  recreate the bug.
+- Optional **UI to edit** `account_id` on bills and
+  recurring income from the Bills page / a new
+  recurring-income management page.
+
+Both are reasonable v0.18.x slices.
 
 ---
 
