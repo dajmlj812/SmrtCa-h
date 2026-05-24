@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   api,
+  isUpgradeRequired,
   type AssistantClientMessage,
   type AssistantToolCall,
 } from '../api';
@@ -84,7 +85,15 @@ export function AssistantPage() {
         },
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Assistant request failed');
+      if (isUpgradeRequired(err)) {
+        // 0.15.4: 402 from /api/assistant/chat means either the plan
+        // doesn't include the assistant OR the monthly quota is
+        // exhausted. The error message carries the specific reason;
+        // surface it inline so the user knows which.
+        setError(err.message);
+      } else {
+        setError(err instanceof Error ? err.message : 'Assistant request failed');
+      }
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import {
   FEATURES,
+  GRACE_DAYS_AFTER_PAST_DUE,
   PLAN_FEATURES,
   type Plan,
   type SubscriptionStatus,
@@ -95,9 +96,37 @@ describe('Entitlements (0.15.0)', () => {
     expect(await effectivePlan(tenantId)).toBe('family');
   });
 
-  it('treats past_due as entitled (grace handled at route layer in 0.15.4)', async () => {
+  it('past_due with no current_period_end is lenient (returns plan)', async () => {
+    // No period_end → we can't compute a grace deadline; leniency
+    // until a webhook updates the row.
     await setSubscription({ tenantId, plan: 'plus', status: 'past_due' });
     expect(await effectivePlan(tenantId)).toBe('plus');
+  });
+
+  it('past_due WITHIN grace window stays entitled (0.15.4)', async () => {
+    // current_period_end was 1 day ago — grace lasts
+    // GRACE_DAYS_AFTER_PAST_DUE (3) days past that.
+    const oneDayAgo = new Date(Date.now() - 86400_000);
+    await setSubscription({
+      tenantId,
+      plan: 'plus',
+      status: 'past_due',
+      currentPeriodEnd: oneDayAgo,
+    });
+    expect(await effectivePlan(tenantId)).toBe('plus');
+  });
+
+  it('past_due PAST grace window is denied (0.15.4)', async () => {
+    // current_period_end was grace+1 days ago → grace expired.
+    const expiredMs =
+      Date.now() - (GRACE_DAYS_AFTER_PAST_DUE + 1) * 86400_000;
+    await setSubscription({
+      tenantId,
+      plan: 'plus',
+      status: 'past_due',
+      currentPeriodEnd: new Date(expiredMs),
+    });
+    expect(await effectivePlan(tenantId)).toBeNull();
   });
 
   it("canceled with cancel_at_period_end + future period_end stays entitled", async () => {

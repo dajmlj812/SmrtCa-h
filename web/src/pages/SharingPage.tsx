@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   api,
+  isUpgradeRequired,
   type ShareRow,
   type ShareSummaryRow,
   type SplitParticipant,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { UpgradePrompt } from '../components/UpgradePrompt';
 
 /**
  * Phase 9.2 (0.12.2) — Sharing page.
@@ -25,8 +27,10 @@ export function SharingPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
   async function refresh() {
+    setNeedsUpgrade(false);
     try {
       const [p, s] = await Promise.all([
         api.listSplitParticipants(includeArchived),
@@ -35,7 +39,11 @@ export function SharingPage() {
       setParticipants(p);
       setSummary(s);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      if (isUpgradeRequired(e)) {
+        setNeedsUpgrade(true);
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to load');
+      }
     }
   }
 
@@ -114,6 +122,15 @@ export function SharingPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  if (needsUpgrade) {
+    return (
+      <div>
+        <div className="page-header"><h1>Sharing</h1></div>
+        <UpgradePrompt feature="Bill splitting" requiredPlan="family" />
+      </div>
+    );
   }
 
   return (

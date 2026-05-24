@@ -126,6 +126,49 @@ export async function verifyConnection(): Promise<{
   }
 }
 
+/**
+ * 0.15.4 — dunning email for a failed Stripe payment. Sent from
+ * the `invoice.payment_failed` webhook handler. Body keeps it short
+ * and points at /billing where the Stripe Customer Portal link
+ * lives.
+ */
+export function renderDunningEmail(opts: {
+  customerName: string | null;
+  billingUrl: string;
+  amountDueCents: number;
+  currency: string; // ISO 4217 (usually 'usd')
+}): { subject: string; text: string; html: string } {
+  const greeting = opts.customerName ? `Hi ${opts.customerName},` : 'Hi,';
+  const amount = `${opts.currency.toUpperCase()} ${(opts.amountDueCents / 100).toFixed(2)}`;
+  const subject = `We couldn't process your SmrtCash payment`;
+  const text = [
+    greeting,
+    ``,
+    `We tried to charge your card for ${amount} but the payment didn't go`,
+    `through. Your subscription is in a short grace period — features stay`,
+    `available for the next few days while we retry.`,
+    ``,
+    `Update your payment method to avoid losing access:`,
+    opts.billingUrl,
+    ``,
+    `If the card on file is correct and you're seeing this in error, the`,
+    `billing page above also lets you contact us directly.`,
+  ].join('\n');
+  const html = [
+    `<p>${escapeHtml(greeting)}</p>`,
+    `<p>We tried to charge your card for <strong>${escapeHtml(amount)}</strong>`,
+    `but the payment didn't go through. Your subscription is in a short`,
+    `grace period &mdash; features stay available for the next few days`,
+    `while we retry.</p>`,
+    `<p><a href="${escapeAttr(opts.billingUrl)}"`,
+    `style="display:inline-block;padding:10px 18px;background:#ef4444;`,
+    `color:#fff;border-radius:4px;text-decoration:none">Update payment method</a></p>`,
+    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
+    `<code>${escapeHtml(opts.billingUrl)}</code></p>`,
+  ].join(' ');
+  return { subject, text, html };
+}
+
 /** Render the email body for an invitation link. */
 export function renderInvitationEmail(opts: {
   tenantName: string;

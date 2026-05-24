@@ -11,10 +11,12 @@ import {
 } from 'recharts';
 import {
   api,
+  isUpgradeRequired,
   type ProjectionSeries,
   type RetirementProjection,
 } from '../api';
 import { formatCents } from '../format';
+import { UpgradePrompt } from '../components/UpgradePrompt';
 
 /**
  * /retirement — long-term goal projections.
@@ -33,16 +35,22 @@ export function RetirementPage() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
   async function load() {
     setLoading(true);
+    setNeedsUpgrade(false);
     try {
       const list = await api.listProjections();
       setProjections(list);
       if (list.length > 0 && !activeId) setActiveId(list[0]!.id);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      if (isUpgradeRequired(e)) {
+        setNeedsUpgrade(true);
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to load');
+      }
     } finally {
       setLoading(false);
     }
@@ -79,6 +87,15 @@ export function RetirementPage() {
     () => projections.find((p) => p.id === activeId) ?? null,
     [projections, activeId],
   );
+
+  if (needsUpgrade) {
+    return (
+      <div>
+        <div className="page-header"><h1>Retirement &amp; long-term goals</h1></div>
+        <UpgradePrompt feature="Retirement projections" requiredPlan="plus" />
+      </div>
+    );
+  }
 
   return (
     <div>

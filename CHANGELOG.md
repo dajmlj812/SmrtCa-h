@@ -9,10 +9,103 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.15.0–0.15.3 shipped. The /billing page in the web client is
-live; users can see their plan + usage, change plan via Stripe
-Checkout, and reach the Customer Portal. Slices 0.15.4 (dunning
-+ grace) and 0.15.5 (SaaS readiness) still pending._
+_0.15.0–0.15.4 shipped. Payment failures now trigger a dunning
+email + a 3-day grace window before features lock, and every gated
+page in the web client shows a paywall card when access is denied.
+Slice 0.15.5 (SaaS readiness — health metrics, ops docs) is the
+last item before we cut the v0.16 release._
+
+---
+
+## [0.15.4] — 2026-05-24 — SaaS pivot, slice 5: dunning + grace + downgrade UX
+
+Close the loop on the SaaS billing flow. After this slice a tenant
+whose card fails gets a courtesy email and a short grace window
+instead of an instant lockout, and every premium page knows how
+to present the upgrade story when a route returns 402.
+
+### Past-due grace window
+
+`server/src/auth/entitlements.ts` — `effectivePlan()` no longer
+returns the plan unconditionally for `past_due`. New behavior:
+
+- If the row has no `current_period_end`, stay lenient (return
+  plan). Webhooks will fill this in.
+- If `current_period_end` was within the last
+  `GRACE_DAYS_AFTER_PAST_DUE` (3) days, return the plan.
+- Past that, return `null` — gates lock.
+
+Three days lines up with Stripe's default retry cadence
+(1d / 3d / 5d / 7d): the customer has time to react to the first
+failure email before features cut off, but we don't give indefinite
+free access while Stripe keeps retrying.
+
+### Dunning emails
+
+`server/src/billing/webhook-handlers.ts` — `handleInvoiceEvent`
+now reacts to `invoice.payment_failed`:
+
+1. Pull the Stripe customer to get the canonical billing email
+   (Checkout-collected, may differ from any local user email).
+2. Render a short HTML+text body via the new
+   `renderDunningEmail()` helper in `server/src/domain/mailer.ts`.
+3. Send via the existing `tryMail()` plumbing.
+
+When SMTP isn't configured the handler still returns
+`applied:true` with `reason: 'mail skipped: …'` so the webhook
+log records why no message went out — webhook delivery doesn't
+fail because of a missing capability on the deployment.
+
+The dunning email points at `/billing`. There's no
+"resume subscription" magic link; the Customer Portal handles the
+actual card update, which keeps us out of PCI scope.
+
+### Web — upgrade prompt wiring
+
+`web/src/api.ts` — new `UpgradeRequiredError` thrown by the
+shared `http<T>` helper when the server replies 402, plus an
+`isUpgradeRequired(e)` type guard. Every gated page now does:
+
+```ts
+try {
+  const data = await api.something();
+  ...
+} catch (e) {
+  if (isUpgradeRequired(e)) setNeedsUpgrade(true);
+  else setError(e.message);
+}
+if (needsUpgrade) return <UpgradePrompt feature="X" requiredPlan="…" />;
+```
+
+Wired into AnomaliesPage, CalendarPage, TaxYearPage,
+RetirementPage, and SharingPage. AssistantPage uses the same
+type guard but surfaces the 402 message inline (preserving the
+chat UI) since the failure can mean either "feature not on plan"
+or "quota exhausted this period."
+
+### Web — billing cap-overflow callout
+
+`web/src/pages/BillingPage.tsx` — when a tenant downgrades
+(Family→Plus, Plus→Starter) we never delete their bank
+connections or household members. After downgrade their `used`
+count may exceed the new tier's `cap`. The /billing page now
+shows a warning callout listing each overflow ("3 bank
+connections (cap 0), 4 household members (cap 1)") so they know
+why new writes are being refused.
+
+### Tests
+
+`server/tests/unit/entitlements.test.ts`:
+- past_due WITHIN grace stays entitled
+- past_due PAST grace returns null
+- past_due with no period_end stays lenient
+
+`server/tests/unit/billing-webhook-handlers.test.ts`:
+- non-payment-failed invoice events are early-return no-ops
+- payment_failed with no customer on invoice returns applied:false
+- `renderDunningEmail()` pure-function tests (amount/currency/URL
+  rendering, missing-name greeting fallback, HTML-attribute
+  injection escape)
 
 ---
 

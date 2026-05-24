@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api, type TaxYearReport } from '../api';
+import { api, isUpgradeRequired, type TaxYearReport } from '../api';
 import { formatCents } from '../format';
+import { UpgradePrompt } from '../components/UpgradePrompt';
 
 /**
  * Backlog (0.13.1) — year-end tax summary page.
@@ -15,22 +16,38 @@ export function TaxYearPage() {
   const [report, setReport] = useState<TaxYearReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setNeedsUpgrade(false);
     api
       .taxYearReport(year)
       .then((r) => !cancelled && setReport(r))
-      .catch(
-        (e) => !cancelled && setError(e instanceof Error ? e.message : 'Load failed'),
-      )
+      .catch((e) => {
+        if (cancelled) return;
+        if (isUpgradeRequired(e)) {
+          setNeedsUpgrade(true);
+        } else {
+          setError(e instanceof Error ? e.message : 'Load failed');
+        }
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
   }, [year]);
+
+  if (needsUpgrade) {
+    return (
+      <div>
+        <div className="page-header"><h1>Tax Year Summary</h1></div>
+        <UpgradePrompt feature="Tax-year reports" requiredPlan="plus" />
+      </div>
+    );
+  }
 
   // Build a list of recent years (this + last 5) plus the loaded one
   // if it's outside that range. Keeps the dropdown short + useful.

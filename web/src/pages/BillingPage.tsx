@@ -242,6 +242,36 @@ export function BillingPage() {
       {status?.plan && (
         <section className="card">
           <h3>Usage this period</h3>
+          {/*
+            * 0.15.4: cap-overflow callout. When a tenant downgrades
+            * (Family→Plus or Plus→Starter) we don't touch their data
+            * — household members + bank connections persist. Their
+            * usage is now > cap; flag it prominently so they know
+            * the new tier's gates will refuse writes until they
+            * remove the excess (or re-upgrade).
+            */}
+          {(() => {
+            const overflows: string[] = [];
+            if (status.caps.bankConnections.used > status.caps.bankConnections.cap) {
+              overflows.push(
+                `${status.caps.bankConnections.used} bank connections (cap ${status.caps.bankConnections.cap})`,
+              );
+            }
+            if (status.caps.householdMembers.used > status.caps.householdMembers.cap) {
+              overflows.push(
+                `${status.caps.householdMembers.used} household members (cap ${status.caps.householdMembers.cap})`,
+              );
+            }
+            if (overflows.length === 0) return null;
+            return (
+              <p className="callout warn">
+                <strong>You're over your plan's limit on:</strong>{' '}
+                {overflows.join(', ')}. New writes to these will be
+                refused until you either remove the excess or upgrade.
+                Existing data is preserved.
+              </p>
+            );
+          })()}
           <MeterRow
             label="AI assistant calls"
             used={status.usage.aiAssistant.used}

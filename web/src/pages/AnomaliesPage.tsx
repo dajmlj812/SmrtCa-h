@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api, type AnomalyKind, type AnomalyRow } from '../api';
+import { api, isUpgradeRequired, type AnomalyKind, type AnomalyRow } from '../api';
 import { formatCents, formatDate } from '../format';
+import { UpgradePrompt } from '../components/UpgradePrompt';
 
 /**
  * Backlog (0.13.2) — Anomaly review page.
@@ -23,14 +24,21 @@ export function AnomaliesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // 0.15.4: distinguishes "you need to upgrade" from a real error.
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
   async function load() {
     setLoading(true);
     setError(null);
+    setNeedsUpgrade(false);
     try {
       setAnomalies(await api.listAnomalies(includeDismissed));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      if (isUpgradeRequired(e)) {
+        setNeedsUpgrade(true);
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to load');
+      }
     } finally {
       setLoading(false);
     }
@@ -82,6 +90,17 @@ export function AnomaliesPage() {
     (acc[a.kind] ??= []).push(a);
     return acc;
   }, {});
+
+  if (needsUpgrade) {
+    return (
+      <div>
+        <div className="page-header">
+          <h1>Anomalies</h1>
+        </div>
+        <UpgradePrompt feature="Anomaly alerts" requiredPlan="plus" />
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -924,6 +924,23 @@ export class AuthRequiredError extends Error {
   }
 }
 
+/**
+ * 0.15.4 — thrown when the server returns 402 (Payment Required).
+ * Pages catch this to render `<UpgradePrompt>` instead of an error
+ * toast, since the user can recover by upgrading.
+ */
+export class UpgradeRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UpgradeRequiredError';
+  }
+}
+
+/** True when the caught error is a 402-from-server. */
+export function isUpgradeRequired(err: unknown): err is UpgradeRequiredError {
+  return err instanceof UpgradeRequiredError;
+}
+
 async function http<T>(url: string, init?: RequestInit): Promise<T> {
   // `credentials: 'include'` is required for the session cookie to ride
   // along on cross-origin dev (vite -> api proxy) requests.
@@ -938,6 +955,9 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
       if (body?.error) message = body.error;
     } catch {
       /* response had no JSON body */
+    }
+    if (res.status === 402) {
+      throw new UpgradeRequiredError(message);
     }
     throw new Error(message);
   }

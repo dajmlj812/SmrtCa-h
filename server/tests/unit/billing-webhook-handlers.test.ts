@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import type Stripe from 'stripe';
 import {
+  handleInvoiceEvent,
   handleSubscriptionDeleted,
   handleSubscriptionUpsert,
 } from '../../src/billing/webhook-handlers.js';
+import { renderDunningEmail } from '../../src/domain/mailer.js';
 import { pool, resetDb } from '../setup/test-db.js';
 
 /**
@@ -252,5 +254,86 @@ describe('billing/webhook-handlers (0.15.1)', () => {
     expect(r.applied).toBe(false);
     const rows = await pool.query(`SELECT 1 FROM subscriptions`);
     expect(rows.rowCount).toBe(0);
+  });
+
+  // ── 0.15.4: invoice events / dunning ─────────────────────────
+
+  function makeInvoiceEvent(
+    type: Stripe.Event.Type,
+    invoice: Partial<Stripe.Invoice>,
+  ): Stripe.Event {
+    return {
+      id: `evt_inv_${Math.random().toString(36).slice(2, 10)}`,
+      object: 'event',
+      api_version: '2024-11-20.acacia',
+      created: Math.floor(Date.now() / 1000),
+      type,
+      data: { object: invoice as Stripe.Invoice } as Stripe.Event.Data,
+      livemode: false,
+      pending_webhooks: 0,
+      request: { id: null, idempotency_key: null },
+    } as Stripe.Event;
+  }
+
+  it('non-payment-failed invoice events are no-op (applied=true)', async () => {
+    // invoice.paid / invoice.payment_succeeded shouldn't reach the
+    // Stripe API at all — the early type filter returns immediately.
+    for (const t of ['invoice.paid', 'invoice.payment_succeeded'] as const) {
+      const r = await handleInvoiceEvent(
+        makeInvoiceEvent(t, { customer: 'cus_test_invoice' }),
+      );
+      expect(r.applied).toBe(true);
+      expect(r.reason).toBeUndefined();
+    }
+  });
+
+  it('payment_failed with no customer on invoice returns applied=false', async () => {
+    const r = await handleInvoiceEvent(
+      makeInvoiceEvent('invoice.payment_failed', { customer: null }),
+    );
+    expect(r.applied).toBe(false);
+    expect(r.reason).toMatch(/no customer/i);
+  });
+});
+
+// ── 0.15.4: dunning email rendering ─────────────────────────
+
+describe('renderDunningEmail (0.15.4)', () => {
+  it('includes amount, currency, and billing link in subject + body', () => {
+    const r = renderDunningEmail({
+      customerName: 'Alex',
+      billingUrl: 'https://smrtcash.example/billing',
+      amountDueCents: 1499,
+      currency: 'usd',
+    });
+    expect(r.subject).toMatch(/couldn't process/i);
+    expect(r.text).toContain('Hi Alex');
+    expect(r.text).toContain('USD 14.99');
+    expect(r.text).toContain('https://smrtcash.example/billing');
+    expect(r.html).toContain('USD 14.99');
+    expect(r.html).toContain('https://smrtcash.example/billing');
+  });
+
+  it('handles missing customer name with a generic greeting', () => {
+    const r = renderDunningEmail({
+      customerName: null,
+      billingUrl: 'http://localhost:4000/billing',
+      amountDueCents: 9900,
+      currency: 'usd',
+    });
+    expect(r.text.startsWith('Hi,')).toBe(true);
+    expect(r.text).toContain('USD 99.00');
+  });
+
+  it('escapes HTML in the billing URL to prevent attribute injection', () => {
+    const r = renderDunningEmail({
+      customerName: null,
+      // pathological URL — never realistic, but proves the escape
+      billingUrl: 'http://x/"><script>alert(1)</script>',
+      amountDueCents: 100,
+      currency: 'usd',
+    });
+    expect(r.html).not.toContain('<script>');
+    expect(r.html).toContain('&lt;script&gt;');
   });
 });

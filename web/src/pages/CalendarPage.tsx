@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   api,
+  isUpgradeRequired,
   type CalendarMonthResponse,
   type Transaction,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { UpgradePrompt } from '../components/UpgradePrompt';
 
 /**
  * Phase 9.3 (0.12.3) — Calendar budget view.
@@ -48,10 +50,12 @@ export function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [dayTxns, setDayTxns] = useState<Transaction[]>([]);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setNeedsUpgrade(false);
     api
       .calendarMonth(monthKey)
       .then((r) => {
@@ -61,8 +65,12 @@ export function CalendarPage() {
         }
       })
       .catch((e) => {
-        if (!cancelled)
+        if (cancelled) return;
+        if (isUpgradeRequired(e)) {
+          setNeedsUpgrade(true);
+        } else {
           setError(e instanceof Error ? e.message : 'Failed to load month');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -117,6 +125,15 @@ export function CalendarPage() {
     while (out.length % 7 !== 0) out.push({ kind: 'blank' });
     return out;
   }, [data, firstWeekday]);
+
+  if (needsUpgrade) {
+    return (
+      <div>
+        <div className="page-header"><h1>Calendar</h1></div>
+        <UpgradePrompt feature="Calendar budget view" requiredPlan="plus" />
+      </div>
+    );
+  }
 
   return (
     <div>

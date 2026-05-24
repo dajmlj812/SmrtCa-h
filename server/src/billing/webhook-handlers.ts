@@ -1,6 +1,8 @@
 import type Stripe from 'stripe';
 import { pool } from '../db/pool.js';
 import type { Plan, SubscriptionStatus } from '../auth/entitlements.js';
+import { renderDunningEmail, tryMail } from '../domain/mailer.js';
+import { getStripe } from './stripe.js';
 
 /**
  * 0.15.1 — pure event-handler functions invoked by the webhook
@@ -145,19 +147,68 @@ export async function handleSubscriptionDeleted(
 }
 
 /**
- * Invoice events. `invoice.payment_succeeded` is interesting only
- * for "extend the billing window" data — but the
- * `customer.subscription.updated` event fires right alongside it
- * with the new `current_period_end`, so this handler is a no-op
- * for state changes. We log the event for usage analytics later.
+ * Invoice events.
  *
- * `invoice.payment_failed` likewise will trigger a
- * `customer.subscription.updated` to `past_due` — no separate
- * state to record. 0.15.4 will use this hook to send a dunning
- * email immediately.
+ * - `invoice.payment_succeeded` / `invoice.paid` — no state changes
+ *   here; the `customer.subscription.updated` event arriving
+ *   alongside carries the new `current_period_end`. Returning
+ *   `applied:true` is just our "I've seen it, don't retry" signal.
+ *
+ * - `invoice.payment_failed` (0.15.4) — fire a dunning email
+ *   pointing at /billing. Stripe also fires `customer.subscription.updated`
+ *   right after (status → past_due) which the upsert handler
+ *   captures separately. This handler doesn't touch the DB; it
+ *   only sends mail.
  */
 export async function handleInvoiceEvent(
-  _event: Stripe.Event,
+  event: Stripe.Event,
 ): Promise<{ applied: boolean; reason?: string }> {
-  return { applied: true };
+  if (event.type !== 'invoice.payment_failed') {
+    return { applied: true };
+  }
+  const invoice = event.data.object as Stripe.Invoice;
+  const customerId =
+    typeof invoice.customer === 'string'
+      ? invoice.customer
+      : invoice.customer?.id;
+  if (!customerId) return { applied: false, reason: 'no customer on invoice' };
+
+  // Pull the customer's email from Stripe (Checkout-collected, may
+  // differ from any local user email). Cheaper than joining through
+  // memberships and gives the canonical billing contact.
+  let customerEmail: string | null = null;
+  let customerName: string | null = null;
+  try {
+    const c = await getStripe().customers.retrieve(customerId);
+    if (!('deleted' in c) || c.deleted !== true) {
+      customerEmail = (c as Stripe.Customer).email ?? null;
+      customerName = (c as Stripe.Customer).name ?? null;
+    }
+  } catch {
+    // Stripe down or customer deleted — skip the email rather than
+    // failing the webhook. The next retry's webhook will try again.
+    return { applied: false, reason: 'could not load Stripe customer' };
+  }
+  if (!customerEmail) {
+    return { applied: false, reason: 'customer has no email on file' };
+  }
+
+  const baseUrl = (process.env.STRIPE_PUBLIC_BASE_URL ?? 'http://localhost:4000')
+    .replace(/\/+$/, '');
+  const rendered = renderDunningEmail({
+    customerName,
+    billingUrl: `${baseUrl}/billing`,
+    amountDueCents: invoice.amount_due ?? 0,
+    currency: invoice.currency ?? 'usd',
+  });
+
+  const result = await tryMail({ to: customerEmail, ...rendered });
+  // tryMail returns sent:false when SMTP isn't configured — that's
+  // not a webhook failure, just a missing capability on this
+  // deployment. Log it via the return so the webhook route's log
+  // line records why mail didn't go out.
+  return {
+    applied: true,
+    reason: result.sent ? undefined : `mail skipped: ${result.reason ?? 'unknown'}`,
+  };
 }

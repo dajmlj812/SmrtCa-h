@@ -164,12 +164,26 @@ export async function getActiveSubscription(
 }
 
 /**
+ * 0.15.4 — how many days past `current_period_end` a past_due
+ * subscription remains entitled. After the grace window, the
+ * helper returns `null` (same as canceled) so route gates lock.
+ *
+ * Stripe's default retry cadence for failed invoices is roughly
+ * 1d / 3d / 5d / 7d; 3 days gives the customer time to update
+ * their card after the first retry without leaving them indefinite
+ * free access while Stripe keeps trying.
+ */
+export const GRACE_DAYS_AFTER_PAST_DUE = 3;
+
+/**
  * Return the tenant's currently-entitled plan, or `null` when they
  * have no active subscription. Treats:
  *   - `trialing` and `active` as fully entitled at their plan.
- *   - `past_due` as entitled (3-day grace handled at the route
- *     layer in 0.15.4 — this helper deliberately doesn't enforce
- *     the timer so 0.15.0 can ship without it).
+ *   - `past_due` as entitled within `GRACE_DAYS_AFTER_PAST_DUE` of
+ *     `current_period_end`; outside that window, treated as
+ *     canceled (returns null). The grace gives the customer time
+ *     to update their card after the first failed retry without
+ *     leaving them with indefinite free access.
  *   - `canceled` as entitled UNTIL `current_period_end` IF
  *     `cancel_at_period_end` was true (the "I cancelled but my
  *     month is paid through" case). After period end → null.
@@ -183,8 +197,16 @@ export async function effectivePlan(tenantId: string): Promise<Plan | null> {
   switch (sub.status) {
     case 'trialing':
     case 'active':
-    case 'past_due':
       return sub.planId;
+    case 'past_due': {
+      // No period_end on the row means we can't compute a grace
+      // window — be lenient (treat as entitled) until the next
+      // webhook updates the row.
+      if (!sub.currentPeriodEnd) return sub.planId;
+      const graceEnd =
+        sub.currentPeriodEnd.getTime() + GRACE_DAYS_AFTER_PAST_DUE * 86400_000;
+      return now < graceEnd ? sub.planId : null;
+    }
     case 'canceled':
       if (
         sub.cancelAtPeriodEnd &&
