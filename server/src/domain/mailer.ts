@@ -96,6 +96,28 @@ export async function tryMail(msg: MailMessage): Promise<MailResult> {
       subject: msg.subject,
       text: msg.text,
       html: msg.html,
+      // 0.17.2 — disable click + open tracking on every send.
+      //
+      // Every SmrtCash email is transactional (invitation,
+      // verification, password reset, dunning, SMTP-test). For
+      // those, tracking is a footgun: the click-tracking
+      // rewriter wraps URLs through a redirect domain and can
+      // corrupt them (Maileroo specifically mangled
+      // `https://sub.domain.tld/...` into
+      // `https://sub@domain.tld/...` because the host pattern
+      // matched the FROM address). It also triggers safe-link
+      // warnings in some clients and adds zero analytics value
+      // for an account-flow email.
+      //
+      // `X-Maileroo-Track: no` is the documented Maileroo
+      // header (controls both open + click tracking). On any
+      // other SMTP relay the header is unrecognized and
+      // silently ignored, so it's safe to set unconditionally.
+      // If a future deployment ever wants tracking on, override
+      // it in a wrapper rather than removing this default.
+      headers: {
+        'X-Maileroo-Track': 'no',
+      },
     });
     return { sent: true, messageId: info.messageId };
   } finally {

@@ -161,11 +161,45 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.1 shipped. Documentation refresh + HTML build
-landed in 0.17.0; 0.17.1 fixed a missing email-send on the
-super-admin admin-invite flow (surfaced during the smrtcash-
-test deploy) and added a v0.18.5 roadmap slice for a branded
-HTML email shell across every outward email.</em></p>
+<p><em>0.17.0–0.17.2 shipped. 0.17.0 brought the doc refresh + HTML
+build; 0.17.1 made super-admin invitations actually email;
+0.17.2 disables the SMTP relay&#39;s click tracking on every send
+(it was rewriting URLs and corrupting them on the test deploy).</em></p>
+<hr>
+<h2 id="0172-2026-05-24-fix-disable-smtp-click-tracking-on-transactional-email">[0.17.2] — 2026-05-24 — Fix: disable SMTP click tracking on transactional email<a class="heading-anchor" href="#0172-2026-05-24-fix-disable-smtp-click-tracking-on-transactional-email">#</a></h2>
+<p><strong>Bug.</strong> Maileroo (the SMTP relay used on the test deploy) has
+click tracking enabled by default. It rewrites every link in
+the message body through a tracking redirect. For the
+invitation email&#39;s URL <code>https://smrtcash-test.builditsmrt.com/ invite/&lt;token&gt;</code>, Maileroo&#39;s rewriter mangled the host into
+<code>smrtcash-test@builditsmrt.com</code> — likely because the
+<code>&lt;subdomain&gt;.&lt;domain&gt;.&lt;tld&gt;</code> pattern matched the FROM address
+<code>smrtcash-test@builditsmrt.com</code> and the rewriter substituted
+the <code>.</code> for an <code>@</code>. Recipients clicking the button landed at
+<code>builditsmrt.com</code> (the marketing site, 404).</p>
+<p><strong>Fix.</strong> <code>tryMail()</code> now passes <code>X-Maileroo-Track: no</code> on
+every outbound message. This is the documented Maileroo
+header for opting out of both open + click tracking
+(<a href="https://maileroo.com/docs/smtp-relay/advanced-message-options">docs</a>).
+On any other SMTP relay the custom <code>X-</code> header is silently
+ignored, so it&#39;s safe to set unconditionally.</p>
+<p><strong>Why default-off everywhere.</strong> Every email SmrtCash sends is
+transactional (invitation, verification, password reset,
+dunning, SMTP test). Click tracking is a footgun on this
+class of email: it corrupts URLs, triggers safe-link
+warnings in some clients (the wrapped redirect domain doesn&#39;t
+match the visible host), and adds zero analytics value for an
+account flow. Tracking is appropriate for marketing campaigns,
+which we don&#39;t send.</p>
+<h3 id="operator-notes">Operator notes<a class="heading-anchor" href="#operator-notes">#</a></h3>
+<ul>
+<li>No setting to configure; this is in code. If a future
+deployment ever wants tracking on (e.g. they add marketing
+emails through the same plumbing), override the header in a
+wrapper rather than removing the default in <code>tryMail()</code>.</li>
+<li>Existing in-flight emails sent before this change can&#39;t be
+fixed — clicked links go to the wrong host. Re-send any
+pending invitations after deploying 0.17.2.</li>
+</ul>
 <hr>
 <h2 id="0171-2026-05-24-fix-super-admin-admin-invite-was-silent">[0.17.1] — 2026-05-24 — Fix: super-admin admin-invite was silent<a class="heading-anchor" href="#0171-2026-05-24-fix-super-admin-admin-invite-was-silent">#</a></h2>
 <p><strong>Bug.</strong> <code>POST /api/system/tenants/:id/admin-invite</code> created
@@ -5355,7 +5389,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 16:22:00 UTC · commit fb8d8dc</span>
+  <span>Generated 2026-05-24 16:38:44 UTC · commit fee0770</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

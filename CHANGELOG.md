@@ -9,11 +9,51 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.1 shipped. Documentation refresh + HTML build
-landed in 0.17.0; 0.17.1 fixed a missing email-send on the
-super-admin admin-invite flow (surfaced during the smrtcash-
-test deploy) and added a v0.18.5 roadmap slice for a branded
-HTML email shell across every outward email._
+_0.17.0–0.17.2 shipped. 0.17.0 brought the doc refresh + HTML
+build; 0.17.1 made super-admin invitations actually email;
+0.17.2 disables the SMTP relay's click tracking on every send
+(it was rewriting URLs and corrupting them on the test deploy)._
+
+---
+
+## [0.17.2] — 2026-05-24 — Fix: disable SMTP click tracking on transactional email
+
+**Bug.** Maileroo (the SMTP relay used on the test deploy) has
+click tracking enabled by default. It rewrites every link in
+the message body through a tracking redirect. For the
+invitation email's URL `https://smrtcash-test.builditsmrt.com/
+invite/<token>`, Maileroo's rewriter mangled the host into
+`smrtcash-test@builditsmrt.com` — likely because the
+`<subdomain>.<domain>.<tld>` pattern matched the FROM address
+`smrtcash-test@builditsmrt.com` and the rewriter substituted
+the `.` for an `@`. Recipients clicking the button landed at
+`builditsmrt.com` (the marketing site, 404).
+
+**Fix.** `tryMail()` now passes `X-Maileroo-Track: no` on
+every outbound message. This is the documented Maileroo
+header for opting out of both open + click tracking
+([docs](https://maileroo.com/docs/smtp-relay/advanced-message-options)).
+On any other SMTP relay the custom `X-` header is silently
+ignored, so it's safe to set unconditionally.
+
+**Why default-off everywhere.** Every email SmrtCash sends is
+transactional (invitation, verification, password reset,
+dunning, SMTP test). Click tracking is a footgun on this
+class of email: it corrupts URLs, triggers safe-link
+warnings in some clients (the wrapped redirect domain doesn't
+match the visible host), and adds zero analytics value for an
+account flow. Tracking is appropriate for marketing campaigns,
+which we don't send.
+
+### Operator notes
+
+- No setting to configure; this is in code. If a future
+  deployment ever wants tracking on (e.g. they add marketing
+  emails through the same plumbing), override the header in a
+  wrapper rather than removing the default in `tryMail()`.
+- Existing in-flight emails sent before this change can't be
+  fixed — clicked links go to the wrong host. Re-send any
+  pending invitations after deploying 0.17.2.
 
 ---
 
