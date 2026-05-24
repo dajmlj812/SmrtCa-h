@@ -145,6 +145,29 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Sidebar is 100vh and sidebar-footer pins to the bottom via
+     margin-top:auto. With 6 grouped categories the nav can be
+     taller than the viewport (especially at ~700px tall), which
+     used to hide the last group behind the footer. Let nav take
+     the remaining flex space and scroll internally when it
+     overflows. `min-height: 0` is the flex-quirk fix without
+     which a flex child won't shrink below its content. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Discreet scrollbar — visible enough to know there's more
+     below, not loud enough to look like content. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.nav::-webkit-scrollbar { width: 6px; }
+.nav::-webkit-scrollbar-track { background: transparent; }
+.nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+}
+.nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 .nav-group {
   display: flex;
