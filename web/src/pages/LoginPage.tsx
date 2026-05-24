@@ -1,12 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { api, type AuthProviderDescriptor } from '../api';
 
 interface Props {
   /** Called after a successful login so the App re-checks status. */
   onAuthenticated: () => void;
+  /** 0.16.0 — show the "Create account" link when the server allows signup. */
+  signupEnabled?: boolean;
 }
 
-export function LoginPage({ onAuthenticated }: Props) {
+export function LoginPage({ onAuthenticated, signupEnabled }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +95,11 @@ export function LoginPage({ onAuthenticated }: Props) {
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+        {signupEnabled && (
+          <p className="muted small" style={{ marginTop: 16 }}>
+            New to SmrtCash? <Link to="/signup">Create an account</Link>
+          </p>
+        )}
       </form>
     </div>
   );

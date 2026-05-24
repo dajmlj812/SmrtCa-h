@@ -10,6 +10,8 @@ import { TransfersPage } from './pages/TransfersPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
+import { SignupPage } from './pages/SignupPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { BudgetsPage } from './pages/BudgetsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
@@ -46,13 +48,18 @@ type AuthState =
 
 export function App() {
   const [authState, setAuthState] = useState<AuthState>('loading');
+  const [signupEnabled, setSignupEnabled] = useState(false);
   const location = useLocation();
   // /invite/:token is a public landing — skip the auth gate entirely.
   const isInviteRoute = location.pathname.startsWith('/invite/');
+  // 0.16.0 — /signup and /verify-email are also public.
+  const isSignupRoute = location.pathname === '/signup';
+  const isVerifyRoute = location.pathname.startsWith('/verify-email');
 
   const refreshAuth = useCallback(async () => {
     try {
       const status = await api.authStatus();
+      setSignupEnabled(status.signupEnabled);
       if (!status.isSetup) {
         setAuthState('needs-setup');
         return;
@@ -84,6 +91,21 @@ export function App() {
       </Routes>
     );
   }
+  // 0.16.0 — /signup and /verify-email are reachable regardless of
+  // auth state (so a half-signed-up user can finish the dance).
+  if (isVerifyRoute) {
+    return (
+      <Routes>
+        <Route
+          path="/verify-email"
+          element={<VerifyEmailPage onAuthenticated={refreshAuth} />}
+        />
+      </Routes>
+    );
+  }
+  if (isSignupRoute) {
+    return <SignupPage />;
+  }
   if (authState === 'loading') {
     return (
       <div className="auth-shell">
@@ -95,7 +117,7 @@ export function App() {
     return <SetupPage onAuthenticated={refreshAuth} />;
   }
   if (authState === 'needs-login') {
-    return <LoginPage onAuthenticated={refreshAuth} />;
+    return <LoginPage onAuthenticated={refreshAuth} signupEnabled={signupEnabled} />;
   }
   if (authState === 'authenticated-super') {
     return <SuperAdminApp onSignedOut={refreshAuth} />;
@@ -226,7 +248,7 @@ function AuthenticatedApp({ onSignedOut }: { onSignedOut: () => void }) {
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.15.5
+          SmrtCash · v0.16.0
           <button
             className="btn secondary logout-btn"
             type="button"

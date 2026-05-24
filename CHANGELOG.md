@@ -9,12 +9,100 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.15.0–0.15.5 shipped. The SaaS pivot is feature-complete:
-billing surface, Stripe integration, paywall, dunning + grace
-window, operator health dashboard, runbook, automatic-tax
-toggle. v0.16 is the next branch — likely focused on signup
-flow polish + per-tenant attachment-encryption rotation, the
-two big items left from the original SAAS_PLAN._
+_0.16.0 shipped. The /signup → email-verify → /billing flow is
+the SaaS happy path for new customers; the public-signup gate
+defaults off so existing self-host deployments inherit no new
+attack surface. Next on v0.16: per-tenant attachment-encryption
+rotation (0.16.1)._
+
+---
+
+## [0.16.0] — 2026-05-24 — Public signup + email verification
+
+The first new customer on a SaaS deployment of SmrtCash can now
+self-serve: fill in /signup, click the verification link in
+their email, and land on /billing with a fresh tenant + admin
+membership ready to pick a plan. Operators flip
+`PUBLIC_SIGNUP_ENABLED=true` to turn this on; default off
+preserves the self-host posture.
+
+### Schema (migration 031)
+
+- `users.email_verified_at timestamptz` — NULL means
+  unverified; login is refused. Migration backfills existing
+  users to `created_at` so upgrades don't lock anyone out.
+- `email_verifications` — short-lived tokens. UNIQUE token
+  column, 24-hour expiry, `consumed_at` keeps consumed rows
+  for audit (signup-funnel metric). Partial index on
+  `(expires_at) WHERE consumed_at IS NULL` powers the future
+  cleanup job.
+
+### Backend
+
+- **`POST /api/auth/signup`** — gated by
+  `PUBLIC_SIGNUP_ENABLED`. Creates an unverified user, mints a
+  token, sends the verification email via `tryMail()`. Returns
+  202 `{ status: 'verification_sent' }` regardless of whether
+  the address was already in use — prevents account
+  enumeration. For unverified existing users we re-mint the
+  token (legitimate retry); for verified users we silently
+  no-op.
+- **`POST /api/auth/verify-email`** — consumes the token,
+  marks the user verified, provisions a tenant
+  (`<name>'s household` display name, random `t-XXXXXXXX`
+  slug), creates the `admin` membership, sets the session
+  cookie. Idempotent against partial-failure replays via the
+  consumed-at check + tenant-already-exists guard.
+- **`/api/auth/login`** refuses unverified users with a
+  403 + "confirm your email" message. Super admins created
+  via `/api/auth/setup` are auto-verified at creation.
+- **`/api/auth/status`** gains `signupEnabled: boolean` so the
+  client can show/hide the "Create account" link.
+
+### Web
+
+- **`SignupPage`** at `/signup` — email/name/password form +
+  "check your email" confirmation card. Doesn't probe whether
+  the address is already registered.
+- **`VerifyEmailPage`** at `/verify-email?token=…` — consumes
+  the token, refreshes auth state, redirects to `/billing`
+  for plan selection. Strict-mode-safe (guards against the
+  effect firing twice and false-positive "already used"
+  errors).
+- **LoginPage** shows "Create an account" link when
+  `signupEnabled` is true.
+- **App** routes `/signup` and `/verify-email` as public
+  surfaces alongside `/invite/:token`.
+
+### Tests
+
+`server/tests/integration/auth.test.ts` — eight new cases:
+- Signup 404s when the gate is off
+- Signup creates an unverified user + token row
+- Signup is idempotent for a verified existing email (no
+  fresh token)
+- verify-email consumes the token, provisions a tenant +
+  admin membership, sets the session cookie
+- Replay of a consumed token returns 400 "already been used"
+- Expired tokens return 400 "expired"
+- Login refuses an unverified user with 403 + "confirm" copy
+- /api/auth/status reflects `signupEnabled` from the env
+
+Full suite green: 718/718 server tests + 6/6 web tests.
+
+### Operator notes
+
+- `PUBLIC_SIGNUP_ENABLED=true` is required for both
+  `/api/auth/signup` and `/api/auth/verify-email` to function.
+  When off both routes 404; the LoginPage doesn't advertise
+  signup.
+- SMTP must be configured for verification emails to actually
+  reach customers. When SMTP is unconfigured the server logs
+  the verification URL at `warn` level so the operator can
+  hand-deliver during early launch / testing.
+- The `STRIPE_PUBLIC_BASE_URL` env var is reused as the base
+  for verification links (same as the Stripe success / cancel
+  URLs).
 
 ---
 

@@ -80,6 +80,12 @@ const PUBLIC_PATHS = new Set<string>([
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/providers',
+  // 0.16.0: public signup + email verification. Both must be
+  // reachable without a session; the routes themselves 404 when
+  // PUBLIC_SIGNUP_ENABLED is off, so simply listing them here is
+  // safe on self-host deployments.
+  '/api/auth/signup',
+  '/api/auth/verify-email',
   // 0.15.1: Stripe webhook posts here. No session cookie; auth is
   // via Stripe-signature header which the route handler verifies.
   '/api/billing/webhook',

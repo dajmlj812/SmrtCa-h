@@ -169,6 +169,42 @@ export function renderDunningEmail(opts: {
   return { subject, text, html };
 }
 
+/**
+ * 0.16.0 — verification email for new public signups. Sent from
+ * /api/auth/signup; the user clicks the link to land on
+ * /verify-email?token=... which calls /api/auth/verify-email.
+ */
+export function renderVerificationEmail(opts: {
+  verifyUrl: string;
+  expiresAt: string;
+}): { subject: string; text: string; html: string } {
+  const subject = `Confirm your SmrtCash email`;
+  const text = [
+    `Welcome to SmrtCash!`,
+    ``,
+    `Click the link below to confirm your email address and finish`,
+    `creating your account:`,
+    ``,
+    opts.verifyUrl,
+    ``,
+    `The link expires ${opts.expiresAt}. If you didn't sign up for`,
+    `SmrtCash you can safely ignore this email — the address you`,
+    `received it at will not be used for anything else.`,
+  ].join('\n');
+  const html = [
+    `<p>Welcome to SmrtCash!</p>`,
+    `<p>Click the button below to confirm your email address and`,
+    `finish creating your account:</p>`,
+    `<p><a href="${escapeAttr(opts.verifyUrl)}"`,
+    `style="display:inline-block;padding:10px 18px;background:#10b981;`,
+    `color:#fff;border-radius:4px;text-decoration:none">Confirm email</a></p>`,
+    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
+    `<code>${escapeHtml(opts.verifyUrl)}</code></p>`,
+    `<p style="color:#6b7280;font-size:0.85em">Link expires ${escapeHtml(opts.expiresAt)}.</p>`,
+  ].join(' ');
+  return { subject, text, html };
+}
+
 /** Render the email body for an invitation link. */
 export function renderInvitationEmail(opts: {
   tenantName: string;

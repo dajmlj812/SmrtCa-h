@@ -1224,7 +1224,14 @@ export const api = {
 
   // ── Auth (Phase 5) ───────────────────────────────────────
   authStatus: () =>
-    http<{ isSetup: boolean; authenticated: boolean }>('/api/auth/status'),
+    http<{
+      isSetup: boolean;
+      authenticated: boolean;
+      // 0.16.0 — true when PUBLIC_SIGNUP_ENABLED is set on the
+      // server. LoginPage shows the "Create account" link only
+      // when this is true.
+      signupEnabled: boolean;
+    }>('/api/auth/status'),
 
   authSetup: (input: { email: string; name?: string; password: string }) =>
     http<{ user: { id: string; created_at: string } }>('/api/auth/setup', {
@@ -1238,6 +1245,30 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+    }),
+
+  // 0.16.0 — public signup. Server returns 202 + { status:
+  // 'verification_sent' } regardless of whether the email
+  // address was already in use, so the client can't enumerate
+  // accounts. The user must check email and click the link.
+  authSignup: (input: { email: string; name?: string; password: string }) =>
+    http<{ status: 'verification_sent' }>('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+
+  // 0.16.0 — consume a verification token. On success: tenant is
+  // provisioned, membership created, session cookie set. Caller
+  // should reload auth state to land on the authenticated app.
+  authVerifyEmail: (token: string) =>
+    http<{
+      user: { id: string; email: string; name: string; is_super_admin: boolean };
+      tenantId: string;
+    }>('/api/auth/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
     }),
 
   authProviders: () =>

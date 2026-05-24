@@ -20,6 +20,7 @@ import {
 } from '../auth/providers/registry.js';
 import { resolveIdentity } from '../auth/identities.js';
 import { recordAudit } from '../domain/audit.js';
+import { renderVerificationEmail, tryMail } from '../domain/mailer.js';
 
 const OIDC_STATE_COOKIE = 'smrtcash_oidc_state';
 
@@ -57,6 +58,75 @@ async function isInstanceSetup(): Promise<boolean> {
   return (r.rows[0]?.n ?? 0) > 0;
 }
 
+/**
+ * 0.16.0 — public signup gate. PUBLIC_SIGNUP_ENABLED=true is
+ * required for /api/auth/signup to function. Default off so
+ * existing self-host deployments don't accept random signups
+ * just by upgrading; SaaS operators set this in production.
+ */
+function publicSignupEnabled(): boolean {
+  return (process.env.PUBLIC_SIGNUP_ENABLED ?? '').toLowerCase() === 'true';
+}
+
+/**
+ * 0.16.0 — verification tokens. URL-safe base64 of 32 random
+ * bytes; collisions are astronomical and the column is UNIQUE
+ * so a clash would just throw, not corrupt anything.
+ */
+function newVerificationToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+const VERIFICATION_TTL_HOURS = 24;
+const SIGNUP_BASE_URL_ENV = 'STRIPE_PUBLIC_BASE_URL'; // reuse the same env
+
+function publicBaseUrl(): string {
+  return (process.env[SIGNUP_BASE_URL_ENV] ?? 'http://localhost:4000').replace(/\/+$/, '');
+}
+
+/**
+ * 0.16.0 — generate a tenant slug for a new signup. Format:
+ * `t-<8 url-safe random chars>`. We don't derive from the email
+ * (PII leakage) or display name (collisions + Unicode mess); a
+ * random slug is fine because tenants don't have public URLs.
+ * The display name on the tenant gets the human-friendly text.
+ */
+function newTenantSlug(): string {
+  return `t-${randomBytes(6).toString('base64url').replace(/[^a-z0-9]/gi, '').slice(0, 8).toLowerCase()}`;
+}
+
+/**
+ * 0.16.0 — send the verification email. When SMTP isn't
+ * configured we log the link so the operator can hand it to the
+ * user manually (the same fallback the invitation flow uses).
+ * We never throw — the signup endpoint always reports
+ * `verification_sent` to avoid leaking SMTP configuration to
+ * the public.
+ */
+async function sendVerificationEmail(
+  req: { log: { info: (obj: unknown, msg?: string) => void; warn: (obj: unknown, msg?: string) => void } },
+  email: string,
+  token: string,
+  expiresAt: Date,
+): Promise<void> {
+  const verifyUrl = `${publicBaseUrl()}/verify-email?token=${encodeURIComponent(token)}`;
+  const rendered = renderVerificationEmail({
+    verifyUrl,
+    expiresAt: expiresAt.toISOString(),
+  });
+  try {
+    const r = await tryMail({ to: email, ...rendered });
+    if (!r.sent) {
+      req.log.warn(
+        { reason: r.reason, verifyUrl },
+        'Signup verification email NOT sent (SMTP unconfigured); operator must hand the link to the user manually',
+      );
+    }
+  } catch (err) {
+    req.log.warn({ err, verifyUrl }, 'Verification email send failed');
+  }
+}
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // Public — what the login page needs to render.
   app.get('/api/auth/status', async (req) => {
@@ -64,6 +134,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return {
       isSetup: setup,
       authenticated: req.user !== undefined,
+      // 0.16.0 — drives whether the LoginPage shows a "Create
+      // an account" link. Default false; SaaS operators flip on.
+      signupEnabled: publicSignupEnabled(),
     };
   });
 
@@ -113,9 +186,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // upgrades keep their tenant_admin role unchanged via the
     // migration.
     const result = await withTransaction(async (client) => {
+      // 0.16.0 — the bootstrap operator never goes through the
+      // email-verification flow. They're auto-verified at creation
+      // so /api/auth/login accepts them without a "confirm your
+      // email" detour.
       const u = await client.query<{ id: string; created_at: string }>(
-        `INSERT INTO users (email, name, password_hash, is_super_admin)
-         VALUES ($1, $2, $3, true)
+        `INSERT INTO users (email, name, password_hash, is_super_admin, email_verified_at)
+         VALUES ($1, $2, $3, true, now())
          RETURNING id, created_at`,
         [email, name || 'Operator', hash],
       );
@@ -145,6 +222,217 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         is_super_admin: true,
       },
     });
+  });
+
+  // ── 0.16.0: public signup ─────────────────────────────────
+  //
+  // Creates an unverified user + verification token, emails the
+  // token, and returns 202. The user clicks the verification link
+  // which lands on /verify-email?token=... → POST
+  // /api/auth/verify-email, which completes the dance: marks the
+  // email verified, provisions a tenant + tenant_admin membership,
+  // signs the user in. They then land on /billing to pick a plan.
+  //
+  // Gated by PUBLIC_SIGNUP_ENABLED. When the gate is off the
+  // endpoint 404s so an unconfigured deployment doesn't even
+  // advertise its existence to scanners.
+  app.post('/api/auth/signup', async (req, reply) => {
+    if (!publicSignupEnabled()) {
+      return reply.code(404).send({ error: 'Not found' });
+    }
+    const body = (req.body ?? {}) as {
+      email?: unknown;
+      name?: unknown;
+      password?: unknown;
+    };
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (email === '' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return reply.code(400).send({ error: 'A valid email address is required' });
+    }
+    try {
+      validatePassword(body.password);
+    } catch (err) {
+      if (err instanceof PasswordPolicyError) {
+        return reply.code(400).send({ error: err.message });
+      }
+      throw err;
+    }
+
+    // Idempotency by email: if the address is already in use (verified
+    // or not) we return 202 with a generic "check your email" — same
+    // as a fresh signup. That prevents account-enumeration via the
+    // signup endpoint (an attacker can't distinguish "exists" from
+    // "doesn't exist"). For an unverified existing user we DO mint
+    // a fresh token so the legitimate owner can recover from a
+    // dropped first email.
+    const existing = await pool.query<{
+      id: string;
+      email_verified_at: string | null;
+    }>(
+      `SELECT id, email_verified_at::text AS email_verified_at
+         FROM users WHERE lower(email) = lower($1)`,
+      [email],
+    );
+    if (existing.rowCount && existing.rowCount > 0) {
+      const row = existing.rows[0]!;
+      if (row.email_verified_at !== null) {
+        // Verified account already exists; never reveal that.
+        return reply.code(202).send({ status: 'verification_sent' });
+      }
+      // Unverified existing user → re-mint a token.
+      const token = newVerificationToken();
+      const expiresAt = new Date(Date.now() + VERIFICATION_TTL_HOURS * 3_600_000);
+      await pool.query(
+        `INSERT INTO email_verifications (user_id, token, expires_at)
+         VALUES ($1, $2, $3)`,
+        [row.id, token, expiresAt],
+      );
+      await sendVerificationEmail(req, email, token, expiresAt);
+      return reply.code(202).send({ status: 'verification_sent' });
+    }
+
+    const hash = await hashPassword(body.password as string);
+    const token = newVerificationToken();
+    const expiresAt = new Date(Date.now() + VERIFICATION_TTL_HOURS * 3_600_000);
+
+    await withTransaction(async (client) => {
+      // Unverified user — email_verified_at stays NULL until
+      // /api/auth/verify-email runs. No tenant yet; that's
+      // provisioned at verify time so abandoned signups don't
+      // leave orphan tenants laying around.
+      const u = await client.query<{ id: string }>(
+        `INSERT INTO users (email, name, password_hash, is_super_admin)
+         VALUES ($1, $2, $3, false)
+         RETURNING id`,
+        [email, name || email.split('@')[0]!, hash],
+      );
+      const userId = u.rows[0]!.id;
+      await client.query(
+        `INSERT INTO user_identities (user_id, provider, provider_user_id, email)
+         VALUES ($1, 'local', $2, $3)`,
+        [userId, userId, email],
+      );
+      await client.query(
+        `INSERT INTO email_verifications (user_id, token, expires_at)
+         VALUES ($1, $2, $3)`,
+        [userId, token, expiresAt],
+      );
+    });
+
+    await sendVerificationEmail(req, email, token, expiresAt);
+    return reply.code(202).send({ status: 'verification_sent' });
+  });
+
+  // ── 0.16.0: verify the email + provision tenant ───────────
+  app.post('/api/auth/verify-email', async (req, reply) => {
+    if (!publicSignupEnabled()) {
+      return reply.code(404).send({ error: 'Not found' });
+    }
+    const body = (req.body ?? {}) as { token?: unknown };
+    const token = typeof body.token === 'string' ? body.token : '';
+    if (token === '') {
+      return reply.code(400).send({ error: 'Token is required' });
+    }
+
+    const tokenRow = await pool.query<{
+      id: string;
+      user_id: string;
+      expires_at: string;
+      consumed_at: string | null;
+    }>(
+      `SELECT id, user_id, expires_at::text AS expires_at,
+              consumed_at::text AS consumed_at
+         FROM email_verifications
+        WHERE token = $1`,
+      [token],
+    );
+    if (tokenRow.rowCount === 0) {
+      return reply.code(400).send({ error: 'Invalid verification token' });
+    }
+    const row = tokenRow.rows[0]!;
+    if (row.consumed_at !== null) {
+      return reply.code(400).send({ error: 'This verification link has already been used' });
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      return reply.code(400).send({ error: 'This verification link has expired — sign up again' });
+    }
+
+    const result = await withTransaction(async (client) => {
+      // Mark verified.
+      const userRow = await client.query<{ email: string | null; name: string | null }>(
+        `UPDATE users SET email_verified_at = now()
+          WHERE id = $1 AND email_verified_at IS NULL
+          RETURNING email, name`,
+        [row.user_id],
+      );
+      // Either the user is now verified (first hit) or was already
+      // verified by a parallel request — both paths converge to
+      // "make sure they have a tenant + membership and sign them in".
+      const u =
+        userRow.rowCount && userRow.rowCount > 0
+          ? userRow.rows[0]!
+          : (
+              await client.query<{ email: string | null; name: string | null }>(
+                `SELECT email, name FROM users WHERE id = $1`,
+                [row.user_id],
+              )
+            ).rows[0]!;
+
+      // Provision tenant only if the user doesn't already have one.
+      // This makes verify-email idempotent even after a partial
+      // failure on a previous attempt.
+      const memb = await client.query<{ tenant_id: string }>(
+        `SELECT tenant_id FROM memberships WHERE user_id = $1 LIMIT 1`,
+        [row.user_id],
+      );
+      let tenantId: string;
+      if (memb.rowCount && memb.rowCount > 0) {
+        tenantId = memb.rows[0]!.tenant_id;
+      } else {
+        // Tenant display name: prefer the user's display name,
+        // fall back to the email local-part. Slug is always random.
+        const displayName =
+          (u.name && u.name.trim() !== '' ? u.name.trim() : (u.email ?? 'household').split('@')[0]!) +
+          "'s household";
+        const slug = newTenantSlug();
+        const t = await client.query<{ id: string }>(
+          `INSERT INTO tenants (name, slug) VALUES ($1, $2) RETURNING id`,
+          [displayName, slug],
+        );
+        tenantId = t.rows[0]!.id;
+        await client.query(
+          `INSERT INTO memberships (tenant_id, user_id, role)
+           VALUES ($1, $2, 'admin')`,
+          [tenantId, row.user_id],
+        );
+      }
+
+      await client.query(
+        `UPDATE email_verifications SET consumed_at = now() WHERE id = $1`,
+        [row.id],
+      );
+
+      return { tenantId, userEmail: u.email ?? '', userName: u.name ?? '' };
+    });
+
+    const session = await createSession(row.user_id, result.tenantId);
+    setSessionCookie(reply, session.id, session.expiresAt);
+    void recordAudit({
+      tenantId: result.tenantId,
+      actorUserId: row.user_id,
+      actorKind: 'tenant_user',
+      action: 'user.signup_verified',
+    });
+    return {
+      user: {
+        id: row.user_id,
+        email: result.userEmail,
+        name: result.userName,
+        is_super_admin: false,
+      },
+      tenantId: result.tenantId,
+    };
   });
 
   // Local password login. The frontend sends { email, password }. The
@@ -187,11 +475,24 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const resolved = await resolveIdentity(identity);
     // Super admins have no memberships by design — that's fine; they
     // land on /system. Tenant users need at least one membership.
-    const userRow = await pool.query<{ is_super_admin: boolean }>(
-      `SELECT is_super_admin FROM users WHERE id = $1`,
+    const userRow = await pool.query<{
+      is_super_admin: boolean;
+      email_verified_at: string | null;
+    }>(
+      `SELECT is_super_admin, email_verified_at::text AS email_verified_at
+         FROM users WHERE id = $1`,
       [resolved.userId],
     );
     const isSuperAdmin = userRow.rows[0]?.is_super_admin ?? false;
+    // 0.16.0 — public-signup users must confirm their email before
+    // login is allowed. Super admins (created via /api/auth/setup
+    // or upgraded from pre-031 deployments) are auto-verified by
+    // the migration's UPDATE.
+    if (userRow.rows[0]?.email_verified_at === null) {
+      return reply.code(403).send({
+        error: 'Please confirm your email address before logging in. Check your inbox for the verification link.',
+      });
+    }
     let tenantId: string | null = null;
     if (!isSuperAdmin) {
       tenantId = await activeTenantForUser(resolved.userId);
