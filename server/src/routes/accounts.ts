@@ -7,6 +7,7 @@ import {
   requireTenant,
   scopedAccountIds,
 } from '../auth/rbac.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 import { convert, getDisplayCurrency, loadRatesSnapshot } from '../domain/fx.js';
 
 /** Coerce an unknown request-body field to a trimmed string (or ''). */
@@ -149,7 +150,14 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     }
     const institution = asString(body.institution) || null;
     const last4 = asString(body.last4) || null;
-    const currency = asString(body.currency) || 'USD';
+    const currency = (asString(body.currency) || 'USD').toUpperCase();
+
+    // 0.15.2: non-USD accounts require the MULTI_CURRENCY feature.
+    // USD-only is the Starter default; Plus/Family unlock the rest.
+    if (currency !== 'USD') {
+      const deny = await requireFeature(tenantId, FEATURES.MULTI_CURRENCY);
+      if (deny) return reply.code(deny.status).send({ error: deny.error });
+    }
 
     const result = await query(
       `INSERT INTO accounts (tenant_id, name, institution, type, last4, currency)

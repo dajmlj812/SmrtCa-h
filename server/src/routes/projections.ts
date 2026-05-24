@@ -3,6 +3,7 @@ import { pool, query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import { computeProjection } from '../domain/projections.js';
 import { requireTenant } from '../auth/rbac.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 
 /**
  *   GET    /api/projections                    — list for current tenant
@@ -34,6 +35,8 @@ export async function projectionRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/projections', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    const denyFeat = await requireFeature(tenantId, FEATURES.RETIREMENT_PROJECTIONS);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     // Reads still accept the NULL hatch (shared templates).
     const r = await query(
       `SELECT ${COLUMNS} FROM retirement_projections
@@ -47,6 +50,8 @@ export async function projectionRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/projections', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    const denyFeat = await requireFeature(tenantId, FEATURES.RETIREMENT_PROJECTIONS);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     const body = (req.body ?? {}) as Record<string, unknown>;
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (name === '') return reply.code(400).send({ error: 'name required' });
@@ -102,6 +107,8 @@ export async function projectionRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.RETIREMENT_PROJECTIONS);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid projection id' });
       const body = (req.body ?? {}) as Record<string, unknown>;
@@ -156,6 +163,8 @@ export async function projectionRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.RETIREMENT_PROJECTIONS);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid projection id' });
       // Same NULL-hatch removal as PATCH — a shared template can be
@@ -176,6 +185,8 @@ export async function projectionRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.RETIREMENT_PROJECTIONS);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid projection id' });
       // Series is a read — the NULL hatch is preserved here so a

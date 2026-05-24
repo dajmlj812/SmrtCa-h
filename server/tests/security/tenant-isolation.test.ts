@@ -60,6 +60,17 @@ async function makeTenant(
      VALUES ($1, $2, now() + interval '1 day', $3)`,
     [sessionId, userId, tenantId],
   );
+  // 0.15.2: grant Family/active so the tenant-isolation tests can
+  // exercise the gated routes WITHOUT also tripping the entitlement
+  // gate (which is tested separately in tests/security/entitlements
+  // — when that file lands). Isolation tests care about cross-
+  // tenant boundaries, not subscription enforcement.
+  await pool.query(
+    `INSERT INTO subscriptions
+       (tenant_id, plan_id, status, current_period_end)
+     VALUES ($1, 'family', 'active', now() + interval '1 year')`,
+    [tenantId],
+  );
   const cookie = `smrtcash_session=${app.signCookie(sessionId)}`;
   return { id: tenantId, userId, cookie };
 }

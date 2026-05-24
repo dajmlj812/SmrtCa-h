@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { getProviderId } from '../ai/factory.js';
 import { normalizePending } from '../ai/normalize-service.js';
 import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 import { isUuid } from '../util.js';
 
 /**
@@ -18,6 +19,11 @@ export async function normalizeRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/normalize', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    // 0.15.2: AI normalize is a Plus+ feature (vendor pays for the
+    // LLM call). Starter still uses the local rules-based normalizer
+    // via the existing AI_PROVIDER=rules config path.
+    const deny = await requireFeature(tenantId, FEATURES.AI_NORMALIZE);
+    if (deny) return reply.code(deny.status).send({ error: deny.error });
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     let accountId: string | undefined;

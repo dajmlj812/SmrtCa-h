@@ -89,6 +89,18 @@ export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> 
        VALUES ($1, $2, now() + interval '1 day', $3)`,
       [TEST_SESSION_ID, TEST_USER_ID, tenantId],
     );
+    // 0.15.2: every gated premium route requires an active
+    // subscription on the caller's tenant. The default test setup
+    // grants Family/active so existing tests (which don't care
+    // about entitlements) keep working as written. Entitlement-
+    // specific tests in tests/security/entitlements.test.ts
+    // override the row to exercise Starter/quota-exhausted paths.
+    await pool.query(
+      `INSERT INTO subscriptions
+         (tenant_id, plan_id, status, current_period_end)
+       VALUES ($1, 'family', 'active', now() + interval '1 year')`,
+      [tenantId],
+    );
   }
 }
 

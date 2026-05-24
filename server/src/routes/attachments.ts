@@ -8,6 +8,12 @@ import {
   requireTenant,
 } from '../auth/rbac.js';
 import {
+  FEATURES,
+  checkAndIncrementQuota,
+  effectivePlan,
+  PLAN_FEATURES,
+} from '../auth/entitlements.js';
+import {
   AttachmentValidationError,
   type EncryptionVersion,
   MAX_REQUEST_BYTES,
@@ -185,9 +191,37 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // 0.15.2: OCR is a Plus+ feature with a per-period quota
+      // (200/mo Plus, unlimited Family). We DELIBERATELY don't gate
+      // the upload itself on RECEIPT_OCR — Starter users can still
+      // attach files manually; they just won't get OCR text
+      // extraction. The OCR step gracefully degrades when the plan
+      // doesn't include it or the quota is exhausted.
+      const plan = await effectivePlan(tenantId);
+      const ocrAllowed = plan
+        ? PLAN_FEATURES[plan].features.has(FEATURES.RECEIPT_OCR)
+        : false;
       const ocrProvider = getOcrProvider();
-      if (ocrProvider) {
+      if (ocrAllowed && ocrProvider) {
         for (const item of pendingOcr) {
+          // Charge one quota tick per receipt. If exhausted on this
+          // upload, mark the rest as skipped with a quota-exhausted
+          // note rather than failing the whole upload.
+          const quota = await checkAndIncrementQuota(
+            tenantId,
+            FEATURES.RECEIPT_OCR,
+            1,
+          );
+          if (!quota.granted) {
+            await markOcrSkipped(item.id);
+            const row = created.find((c) => c.id === item.id);
+            if (row) {
+              row.ocr_status = 'skipped';
+              row.ocr_note =
+                'Monthly OCR quota exhausted on this plan. Upgrade for more.';
+            }
+            continue;
+          }
           void runOcrExtraction(
             item.id,
             ocrProvider,
@@ -202,12 +236,15 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
           });
         }
       } else {
+        const skipReason = !ocrAllowed
+          ? 'OCR requires an upgraded plan'
+          : 'No OCR provider configured';
         for (const item of pendingOcr) {
           await markOcrSkipped(item.id);
         }
         for (const row of created) {
           row.ocr_status = 'skipped';
-          row.ocr_note = 'No OCR provider configured';
+          row.ocr_note = skipReason;
         }
       }
 

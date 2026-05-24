@@ -16,6 +16,16 @@ e2e/storage-state.json
 .env
 .env.local
 *.local
+# Belt-and-suspenders on top of .env so ad-hoc scratch files that
+# look like credential notes can't be swept in by `git add -A`.
+# Prompted by an actual incident on 0.15.2 — a Stripe.txt scratch
+# file at the repo root with a live secret key got committed.
+Stripe.txt
+*-keys.txt
+*-secrets.txt
+*-notes.txt
+keys/
+secrets/
 
 # Local data
 uploads/

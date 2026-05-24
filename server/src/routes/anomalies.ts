@@ -5,6 +5,7 @@ import {
   requireFinancialMutation,
   requireTenant,
 } from '../auth/rbac.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 import { recordAudit } from '../domain/audit.js';
 import { scanTransactionsForAnomalies } from '../domain/anomaly-detector.js';
 import { isUuid } from '../util.js';
@@ -30,6 +31,8 @@ export async function anomalyRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.ANOMALY_ALERTS);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       const includeDismissed = req.query.includeDismissed === '1';
       const r = await pool.query(
         `SELECT a.id, a.transaction_id, a.kind, a.severity, a.message,
@@ -55,6 +58,8 @@ export async function anomalyRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/anomalies/count', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    const denyFeat = await requireFeature(tenantId, FEATURES.ANOMALY_ALERTS);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     const r = await pool.query<{ c: string }>(
       `SELECT count(*)::text AS c FROM anomaly_alerts
         WHERE tenant_id = $1 AND dismissed = false`,
@@ -66,6 +71,8 @@ export async function anomalyRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/anomalies/scan', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    const denyFeat = await requireFeature(tenantId, FEATURES.ANOMALY_ALERTS);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     const ctx = await loadUserContext(req.user!.id, tenantId);
     const denied = requireFinancialMutation(ctx);
     if (denied) return reply.code(denied.status).send({ error: denied.error });
@@ -87,6 +94,8 @@ export async function anomalyRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.ANOMALY_ALERTS);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);

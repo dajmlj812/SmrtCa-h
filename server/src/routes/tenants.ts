@@ -11,6 +11,7 @@ import { createSession, setSessionTenant, SESSION_COOKIE } from '../auth/session
 import { config } from '../config.js';
 import { renderInvitationEmail, tryMail } from '../domain/mailer.js';
 import { getEffectiveValue } from '../domain/settings.js';
+import { requireHouseholdSeat } from '../auth/entitlements.js';
 
 /**
  *   GET  /api/tenants                       — tenants the user belongs to
@@ -282,6 +283,13 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Invalid tenant id' });
       const role = await roleOf(req.user.id, req.params.id);
       if (!isAdmin(role)) return reply.code(403).send({ error: 'Forbidden' });
+      // 0.15.2: enforce the plan's household-seat cap. Issuing an
+      // invitation doesn't IMMEDIATELY add a member, but it would on
+      // accept — refuse here so the inviter sees the upgrade prompt
+      // before they hand the link out. (The /accept endpoint runs
+      // its own check too for race-safety.)
+      const denySeat = await requireHouseholdSeat(req.params.id);
+      if (denySeat) return reply.code(denySeat.status).send({ error: denySeat.error });
       const body = (req.body ?? {}) as {
         emailHint?: unknown;
         role?: unknown;

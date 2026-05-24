@@ -2,6 +2,11 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { pool, withTransaction } from '../db/pool.js';
 import { loadUserContext, requireFinancialMutation, canManageMembers } from '../auth/rbac.js';
 import {
+  FEATURES,
+  requireBankConnectionSlot,
+  requireFeature,
+} from '../auth/entitlements.js';
+import {
   encryptString,
   decryptString,
   CryptoNotConfiguredError,
@@ -132,6 +137,14 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      // 0.15.2: BANK_SYNC feature + per-plan connection-cap. Order
+      // matters: feature first (cleanest "needs upgrade" message);
+      // slot check second (gives a specific "you're at the limit"
+      // message when on a Plus/Family plan).
+      const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
+      const denySlot = await requireBankConnectionSlot(tenantId);
+      if (denySlot) return reply.code(denySlot.status).send({ error: denySlot.error });
       const ctx = await loadUserContext(req.user!.id, tenantId);
       if (!canManageMembers(ctx)) {
         return reply
@@ -185,6 +198,8 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);
@@ -264,6 +279,8 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);
@@ -305,6 +322,8 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);

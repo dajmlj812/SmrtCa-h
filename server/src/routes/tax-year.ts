@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { pool } from '../db/pool.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 
 /**
  * Backlog (0.13.1) — year-end tax report.
@@ -177,6 +178,8 @@ export async function taxYearRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.TAX_REPORTS);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       const year = Number(req.params.year);
       if (!Number.isInteger(year) || year < 1900 || year > 2200) {
         return reply.code(400).send({ error: 'year must be 1900..2200' });
@@ -190,6 +193,8 @@ export async function taxYearRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.TAX_REPORTS);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       const year = Number(req.params.year);
       if (!Number.isInteger(year) || year < 1900 || year > 2200) {
         return reply.code(400).send({ error: 'year must be 1900..2200' });

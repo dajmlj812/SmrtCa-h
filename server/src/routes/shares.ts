@@ -7,6 +7,7 @@ import {
 } from '../auth/rbac.js';
 import { recordAudit } from '../domain/audit.js';
 import { isUuid } from '../util.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 
 /**
  * Phase 9.2 — bill-splitting routes.
@@ -49,6 +50,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       const include = req.query.includeArchived === '1';
       const r = await pool.query(
         `SELECT id, name, email, user_id, archived,
@@ -68,6 +71,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       const ctx = await loadUserContext(req.user!.id, tenantId);
       if (!canMutateFinancials(ctx)) {
         return reply.code(403).send({ error: 'Children cannot manage participants' });
@@ -104,6 +109,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);
@@ -145,6 +152,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);
@@ -167,6 +176,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
 
@@ -217,6 +228,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
   }>('/api/transactions/:id/shares', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     if (!isUuid(req.params.id))
       return reply.code(400).send({ error: 'Invalid id' });
     const ctx = await loadUserContext(req.user!.id, tenantId);
@@ -315,6 +328,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);
@@ -342,6 +357,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/shares/summary', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     const r = await pool.query(
       `SELECT p.id AS participant_id, p.name AS participant_name,
               COALESCE(SUM(CASE WHEN s.settled = false THEN s.share_cents ELSE 0 END), 0)::bigint
@@ -363,6 +380,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BILL_SPLITTING);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       const params: unknown[] = [tenantId];
       const where: string[] = ['p.tenant_id = $1'];
       if (req.query.participantId) {

@@ -5,6 +5,11 @@ import {
   loadUserContext,
   requireFinancialMutation,
 } from '../auth/rbac.js';
+import {
+  FEATURES,
+  requireBankConnectionSlot,
+  requireFeature,
+} from '../auth/entitlements.js';
 import { encryptString } from '../domain/crypto.js';
 import {
   PlaidClient,
@@ -97,6 +102,14 @@ export async function plaidRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/plaid/link-token', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    // 0.15.2: link-token starts a Plaid Link flow which will result
+    // in a new plaid_items row on exchange. Gate on BANK_SYNC + cap
+    // here so the user doesn't go through Link only to be refused
+    // at the exchange step.
+    const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
+    const denySlot = await requireBankConnectionSlot(tenantId);
+    if (denySlot) return reply.code(denySlot.status).send({ error: denySlot.error });
     const ctx = await loadUserContext(req.user!.id, tenantId);
     if (!canManageMembers(ctx)) {
       return reply.code(403).send({ error: 'Only tenant admins may link Plaid' });
@@ -124,6 +137,12 @@ export async function plaidRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      // Same gates as link-token — exchange is the step that actually
+      // creates the plaid_items row, so cap-check before the INSERT.
+      const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
+      const denySlot = await requireBankConnectionSlot(tenantId);
+      if (denySlot) return reply.code(denySlot.status).send({ error: denySlot.error });
       const ctx = await loadUserContext(req.user!.id, tenantId);
       if (!canManageMembers(ctx)) {
         return reply.code(403).send({ error: 'Only tenant admins may link Plaid' });
@@ -220,6 +239,8 @@ export async function plaidRoutes(app: FastifyInstance): Promise<void> {
   }>('/api/plaid/items/:id/link-account', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     if (!isUuid(req.params.id))
       return reply.code(400).send({ error: 'Invalid id' });
     const ctx = await loadUserContext(req.user!.id, tenantId);
@@ -271,6 +292,8 @@ export async function plaidRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.BANK_SYNC);
+      if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
       if (!isUuid(req.params.id))
         return reply.code(400).send({ error: 'Invalid id' });
       const ctx = await loadUserContext(req.user!.id, tenantId);

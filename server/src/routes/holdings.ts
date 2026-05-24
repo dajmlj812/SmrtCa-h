@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import { assertHoldingInTenant, requireTenant } from '../auth/rbac.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 
 const COLUMNS = `id, account_id, symbol, name, asset_type,
   quantity::float8 AS quantity,
@@ -284,6 +285,9 @@ export async function holdingRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/holdings/refresh-prices/crypto', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    // 0.15.2: CoinGecko refresh is a Plus+ feature.
+    const denyFeat = await requireFeature(tenantId, FEATURES.CRYPTO_REFRESH);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     const { loadUserContext, requireFinancialMutation } = await import(
       '../auth/rbac.js'
     );

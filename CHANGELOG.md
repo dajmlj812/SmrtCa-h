@@ -9,10 +9,130 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.15.x — SaaS pivot in progress. 0.15.0 + 0.15.1 shipped (schema
-+ entitlements + Stripe Checkout/webhook/portal). Slices 0.15.2
-through 0.15.5 still pending (route gating, billing UI, dunning,
-SaaS-readiness)._
+_0.15.0–0.15.2 shipped. Routes now enforce the entitlement plan
+end-to-end. Slices 0.15.3 (web `/billing` UI), 0.15.4 (dunning +
+grace), and 0.15.5 (SaaS readiness) still pending._
+
+---
+
+## [0.15.2] — 2026-05-24 — SaaS pivot, slice 3: feature-gate every premium route
+
+Wires the entitlement core from 0.15.0 into every premium route.
+A Starter-plan tenant now gets `402 Payment Required` on the
+features that aren't part of their tier; Plus + Family get
+through; metered features (AI assistant, OCR) are charged
+against per-period counters with hard caps.
+
+### Gated routes (with feature key)
+
+| Route surface | Feature |
+|---|---|
+| `POST /api/ofx-dc/connections` + PATCH/test/sync | `BANK_SYNC` + `requireBankConnectionSlot` (cap 10 Plus / 25 Family) |
+| `POST /api/plaid/link-token` + exchange + link-account + sync | `BANK_SYNC` + slot cap |
+| `POST /api/normalize` | `AI_NORMALIZE` |
+| `POST /api/holdings/refresh-prices/crypto` | `CRYPTO_REFRESH` |
+| `GET /api/anomalies` + count + scan + dismiss (4) | `ANOMALY_ALERTS` |
+| `GET /api/reports/tax-year/:year` + csv | `TAX_REPORTS` |
+| `GET /api/calendar/:month` | `CALENDAR_VIEW` |
+| `GET/POST/PATCH/DELETE/series /api/projections` (5) | `RETIREMENT_PROJECTIONS` |
+| `/api/split-participants` CRUD + `/api/transactions/:id/shares` + settle + summary (9) | `BILL_SPLITTING` |
+| `POST /api/assistant/chat` | `AI_ASSISTANT` + per-request quota tick (500/mo on Plus) |
+| Attachment OCR (file upload path) | `RECEIPT_OCR` + per-file quota (200/mo on Plus); upload itself ungated, OCR step gracefully marks skipped with note when denied/exhausted |
+| `POST /api/accounts` (when `currency != USD`) | `MULTI_CURRENCY` |
+| `POST /api/tenants/:id/invitations` | `requireHouseholdSeat` (1 Starter+Plus / 6 Family) |
+
+GET endpoints on list-shaped resources (e.g. `/api/ofx-dc/connections`,
+`/api/plaid/items`) are deliberately left ungated — a downgraded
+user should still be able to SEE what they had and clean it up.
+Mutation paths enforce the plan.
+
+### Notable design decisions
+
+- **402, not 403.** Entitlement denials use `402 Payment Required`
+  so the web client can distinguish "needs an upgrade" from
+  "forbidden by role" (which is 403). The error message includes
+  the feature name and an upgrade hint.
+- **OCR fails open per-receipt.** When the plan grants OCR but the
+  monthly quota is exhausted partway through an upload, the rest
+  of the batch is marked `ocr_status='skipped'` with a quota-
+  exhausted note instead of failing the upload itself. Uploads
+  still succeed; OCR is the part that degrades.
+- **Assistant quota fires before provider availability.** Reordered
+  the assistant route so quota check (402) runs before
+  `assistantAvailable` (400). A paying customer at their cap
+  should see "monthly quota exceeded," not "assistant not
+  configured" — the latter is a transient env-config state, the
+  former is the canonical business message.
+- **Auto-sync stays super-admin-only.** `POST /api/auto-sync/run`
+  was listed in SAAS_PLAN.md for gating but is a super-admin
+  operator endpoint with no `tenantId` of its own — gating it
+  on `BANK_SYNC` doesn't fit. Per-tenant enforcement of
+  `BANK_SYNC` inside the scheduler tick is a separate slice
+  (not 0.15.x).
+
+### Test-harness changes
+
+- `tests/setup/test-db.ts` `resetDb()` now seeds a `family/active`
+  subscription on the Default tenant. Every existing test that
+  doesn't care about entitlements keeps working as written; only
+  the new entitlement-specific tests deliberately exercise
+  Starter / quota-exhausted paths.
+- `tests/security/tenant-isolation.test.ts` `makeTenant()` now
+  seeds Family/active on each test tenant for the same reason —
+  isolation tests care about cross-tenant boundaries, not
+  subscription enforcement.
+
+### Tests (+16)
+
+`tests/security/entitlements-routes.test.ts` — 16 route-level
+gate tests covering every gated surface:
+
+- Starter denials (402) on bank-sync, normalize, crypto refresh,
+  anomalies, tax-year, calendar, projections, bill-splitting,
+  assistant, non-USD account creation, invitation when at cap.
+- Plus / Family grants (200/201) on the same routes.
+- Plus-vs-Family split: Plus denied bill-splitting, Family granted.
+- Starter CAN still create a USD account (currency gate only
+  triggers on non-USD).
+- Plus assistant quota exhaustion: pre-burn 500 ticks via the
+  helper itself (so periods align with what the route computes),
+  then verify 501st call returns 402.
+- Family can invite (1 of 6 used) — confirms the seat-cap path
+  is positive on Family.
+
+Total: **688 server tests pass** (672 from 0.15.1 + 16 new).
+
+### Files
+
+```
+server/src/auth/entitlements.ts                       (unchanged from 0.15.0)
+server/src/routes/ofx-dc.ts                           (BANK_SYNC + slot cap)
+server/src/routes/plaid.ts                            (BANK_SYNC + slot cap)
+server/src/routes/normalize.ts                        (AI_NORMALIZE)
+server/src/routes/holdings.ts                         (CRYPTO_REFRESH)
+server/src/routes/anomalies.ts                        (ANOMALY_ALERTS)
+server/src/routes/tax-year.ts                         (TAX_REPORTS)
+server/src/routes/calendar.ts                         (CALENDAR_VIEW)
+server/src/routes/projections.ts                      (RETIREMENT_PROJECTIONS)
+server/src/routes/shares.ts                           (BILL_SPLITTING)
+server/src/routes/assistant.ts                        (AI_ASSISTANT + quota; reordered)
+server/src/routes/attachments.ts                      (RECEIPT_OCR + quota; fails open)
+server/src/routes/accounts.ts                         (MULTI_CURRENCY on POST when != USD)
+server/src/routes/tenants.ts                          (requireHouseholdSeat on invitations)
+server/tests/setup/test-db.ts                         (seed family sub on Default)
+server/tests/security/tenant-isolation.test.ts        (seed family sub on per-test tenants)
+server/tests/security/entitlements-routes.test.ts     (new, 16 tests)
+package.json + server/package.json + web/package.json (0.15.1 → 0.15.2)
+```
+
+### Coming next
+
+- **0.15.3** — `/billing` page in web (current plan, change-plan,
+  Stripe Customer Portal redirect, usage meters, trial banner,
+  upgrade prompts on locked features).
+- **0.15.4** — dunning + grace window + cancellation/downgrade UX.
+- **0.15.5** — SaaS readiness (signup, drop self-host docs,
+  KMS-backed per-tenant keys).
 
 ---
 

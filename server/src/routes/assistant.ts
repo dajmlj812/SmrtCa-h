@@ -2,6 +2,11 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type Anthropic from '@anthropic-ai/sdk';
 import { loadUserContext } from '../auth/rbac.js';
 import {
+  FEATURES,
+  checkAndIncrementQuota,
+  requireFeature,
+} from '../auth/entitlements.js';
+import {
   assistantAvailable,
   runAssistantChat,
   type AssistantMessage,
@@ -55,11 +60,32 @@ export async function assistantRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: ChatBody }>('/api/assistant/chat', async (req, reply) => {
     const tenantId = requireTenant(req, reply);
     if (!tenantId) return;
+    // 0.15.2: AI assistant is metered. requireFeature catches the
+    // "Starter has no AI assistant" case; checkAndIncrementQuota
+    // catches the "Plus is at 500/mo" case. We charge ONE quota tick
+    // per HTTP request — i.e. per user message — even though the
+    // model may internally fan out to several tool calls. That's
+    // what the SAAS_PLAN.md cap (500 tool calls/mo on Plus) names,
+    // and it's much simpler to enforce per-request than per-tool.
+    const denyFeat = await requireFeature(tenantId, FEATURES.AI_ASSISTANT);
+    if (denyFeat) return reply.code(denyFeat.status).send({ error: denyFeat.error });
     const ctx = await loadUserContext(req.user!.id, tenantId);
     if (ctx.role === 'child') {
       return reply
         .code(403)
         .send({ error: 'Assistant is not available for child accounts' });
+    }
+    // Quota check BEFORE provider availability — a paying customer
+    // over their cap should see "monthly quota exceeded" (402), not
+    // "assistant not configured" (400), even when env config is in
+    // a transient bad state. If granted, the counter has been
+    // incremented; subsequent route failures don't refund (matches
+    // how Stripe handles failed-but-attempted API calls).
+    const quota = await checkAndIncrementQuota(tenantId, FEATURES.AI_ASSISTANT, 1);
+    if (!quota.granted) {
+      return reply
+        .code(quota.denial!.status)
+        .send({ error: quota.denial!.error });
     }
     const a = await assistantAvailable();
     if (!a.available) {

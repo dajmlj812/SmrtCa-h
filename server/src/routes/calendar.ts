@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { pool } from '../db/pool.js';
+import { FEATURES, requireFeature } from '../auth/entitlements.js';
 
 /**
  * Phase 9.3 — calendar budget view.
@@ -59,6 +60,11 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply): Promise<CalendarMonthResponse | undefined> => {
       const tenantId = requireTenant(req, reply);
       if (!tenantId) return;
+      const denyFeat = await requireFeature(tenantId, FEATURES.CALENDAR_VIEW);
+      if (denyFeat) {
+        reply.code(denyFeat.status).send({ error: denyFeat.error });
+        return;
+      }
       const m = req.params.month.match(/^(\d{4})-(\d{2})$/);
       if (!m) {
         reply.code(400).send({ error: 'month must be YYYY-MM' });
