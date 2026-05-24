@@ -9,6 +9,7 @@ import { requireSuperAdmin } from '../auth/rbac.js';
 import { getStripe, isStripeConfigured } from '../billing/stripe.js';
 import { handleSubscriptionUpsert } from '../billing/webhook-handlers.js';
 import { PLAN_FEATURES, type Plan } from '../auth/entitlements.js';
+import { rotateTenantKey } from '../attachments/tenant-keys.js';
 
 /**
  * Super-admin console endpoints. Gated by `req.user.isSuperAdmin`.
@@ -450,6 +451,55 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
         targetId: req.params.tenantId,
       });
       return reply.send({ cleared: true });
+    },
+  );
+
+  // ── 0.16.4: rotate per-tenant attachment encryption key ────
+  //
+  // Mints a fresh DEK for the tenant, re-encrypts every existing
+  // attachment under it, then commits the new wrapped DEK +
+  // bumps the generation. Synchronous — small tenants finish in
+  // milliseconds; tenants with many large attachments can take
+  // a while. We don't background-job this in 0.16.4 because the
+  // operator triggers it manually and the request timeout
+  // (default 60s) is generous; if a tenant outgrows that, we'll
+  // promote this to a background job later.
+  app.post<{ Params: { id: string } }>(
+    '/api/system/tenants/:id/rotate-encryption-key',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      if (!isUuid(req.params.id)) {
+        return reply.code(400).send({ error: 'Invalid tenant id' });
+      }
+      const exists = await pool.query<{ id: string }>(
+        `SELECT id FROM tenants WHERE id = $1`,
+        [req.params.id],
+      );
+      if (exists.rowCount === 0) {
+        return reply.code(404).send({ error: 'Tenant not found' });
+      }
+      try {
+        const result = await rotateTenantKey(req.params.id);
+        await recordAudit({
+          tenantId: req.params.id,
+          actorUserId: req.user!.id,
+          actorKind: 'super_admin',
+          action: 'tenant.rotate_encryption_key',
+          targetKind: 'tenant',
+          targetId: req.params.id,
+          details: {
+            attachments_rewritten: result.attachments_rewritten,
+            new_generation: result.new_generation,
+          },
+        });
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, tenantId: req.params.id }, 'Encryption rotation failed');
+        // Bubble the message so the operator sees why (most
+        // common cause: ATTACHMENT_ENCRYPTION_KEY not set).
+        return reply.code(500).send({ error: `Rotation failed: ${msg}` });
+      }
     },
   );
 

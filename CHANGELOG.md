@@ -9,11 +9,129 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.16.0–0.16.3 shipped. Every Stripe + SaaS env var is now
-editable from /settings without touching the .env file, and every
-page in the app surfaces the operator-configured support /
-feature-request URL. Per-tenant attachment-encryption rotation
-slides to 0.16.4._
+_0.16.0–0.16.4 shipped. v0.16 closes out: public signup +
+verification, password reset, super-admin subscriptions
+console, settings unification, per-tenant attachment encryption
+with envelope key wrapping + rotation. The remaining SAAS_PLAN
+items (Stripe automatic tax via dashboard, ToS/Privacy legal
+review) live outside the codebase. v0.17 next._
+
+---
+
+## [0.16.4] — 2026-05-24 — Per-tenant attachment encryption (envelope)
+
+Closes the last security-correctness gap from the original
+SAAS_PLAN. Before this slice every tenant's attachments were
+encrypted with the same global key — a leaked
+`ATTACHMENT_ENCRYPTION_KEY` exposed every customer's receipts
+at once. Now each tenant has its own DEK (data encryption key)
+wrapped by the global KEK (key encryption key), and a super
+admin can rotate any tenant's DEK without touching anyone
+else.
+
+### Schema (migration 033)
+
+- `tenant_encryption_keys` — one row per tenant, holding the
+  AES-256-GCM-wrapped 32-byte DEK + an integer `generation`
+  that bumps on each rotation.
+- `attachments.key_generation` — nullable; populated for v2
+  rows so a partial-rotation crash leaves the DB self-
+  consistent.
+- `attachments.encryption_version` check constraint extended
+  to accept `2`. Legacy `0` (plaintext) and `1` (KEK-direct)
+  rows stay readable indefinitely.
+
+### Encryption module (`server/src/attachments/tenant-keys.ts`)
+
+New module owning the envelope crypto:
+
+- `getOrCreateTenantKey(tenantId)` — fetches the wrapped DEK
+  from the DB, unwraps with the KEK, returns
+  `{dek, generation}`. Mints a fresh DEK on first call for a
+  tenant (ON CONFLICT no-op handles the cold-start race).
+- `encryptWithDek(dek, plaintext)` / `decryptWithDek(...)` —
+  AES-256-GCM with per-attachment random IV; 12+ct+16-byte
+  on-disk layout matches the v1 format so an operator
+  decrypting backups by hand sees the same shape.
+- `rotateTenantKey(tenantId)` — mints a fresh DEK, walks
+  every attachment for the tenant (v0/v1/v2 all upgraded),
+  re-encrypts each file in place, then commits the new
+  wrapped DEK + bumps `attachments.encryption_version` to 2
+  + `key_generation` to the new generation in one
+  transaction. Synchronous on the request; rare enough that
+  background-jobbing it would just add complexity.
+
+### Storage path changes
+
+`storeAttachment()` gains a `tenantId` parameter and writes
+v2 ciphertext via the tenant's DEK whenever the KEK is
+configured. Plaintext (v0) fallback unchanged.
+
+`readAttachmentBuffer()` gains an optional `tenantId` and
+branches on the row's `encryption_version`:
+- `0` → return raw bytes
+- `1` → decrypt with the KEK directly (legacy)
+- `2` → fetch the wrapped DEK, unwrap with KEK, decrypt
+  payload with DEK
+
+Callers updated: `routes/attachments.ts` (upload + download +
+preview), `ocr/extract-service.ts` (pending-OCR walker).
+
+### Super-admin rotate flow
+
+- **`POST /api/system/tenants/:id/rotate-encryption-key`** —
+  super-admin only, audit-logged. Returns
+  `{ attachments_rewritten, new_generation }` so the operator
+  sees the impact.
+- New **Rotate key** button on each tenant row of
+  `/system/overview` between Invite admin and Delete.
+  Confirmation modal warns about the lock + reminds the
+  operator to back up first.
+
+### Tests
+
+`server/tests/unit/attachments-encryption.test.ts` rewritten
++ extended (8 cases total):
+
+- v2 ciphertext written; key_generation populated; new
+  `tenant_encryption_keys` row minted on first attachment
+- v2 round-trip through `readAttachmentBuffer` with tenantId
+- Tenant A's attachment fails GCM auth when read claiming
+  tenant B (cross-tenant isolation)
+- Pre-Phase-5 v0 plaintext still reads correctly
+- Legacy v1 (KEK-direct) still reads correctly
+- Tampering the wrapped DEK row causes the next read to fail
+- `rotateTenantKey()` rewrites every attachment + bumps
+  generation; new reads work
+- `rotateTenantKey()` upgrades legacy v1 attachments to v2 in
+  the same pass
+
+`tenant_encryption_keys` added to the test TRUNCATE list so
+rows don't leak between specs.
+
+Full suite green: 743 server + 6 web tests (was 739 + 6).
+
+### Operator notes
+
+- The KEK (`ATTACHMENT_ENCRYPTION_KEY`) is still required.
+  Without it, attachments fall back to v0 plaintext exactly
+  like before — no DEK to wrap.
+- Rotation is synchronous and holds no row lock outside the
+  final transaction, so a tenant with 10k attachments will
+  take a noticeable wall-clock time but won't block other
+  reads. The runbook should pick up a "back up first" note
+  before a real rotation.
+- Compromise of the KEK is now a smaller blast radius: an
+  attacker also needs the DB rows for each tenant. Both at
+  rest in the same datastore on a typical self-host
+  deployment, but the value is real for backup leaks or
+  read-only forensic exposure.
+- Re-running a rotation that crashed midway is safe: the DB
+  transaction at the end is the only commit point, so a
+  partial loop just leaves some files re-encrypted under a
+  DEK that nothing references yet; the next rotation reads
+  them as v2 with the old DEK (which is still the wrapped
+  one) and re-encrypts under the new one.
 
 ---
 

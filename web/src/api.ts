@@ -1477,6 +1477,15 @@ export const api = {
   systemDeleteTenant: (id: string) =>
     http<void>(`/api/system/tenants/${id}`, { method: 'DELETE' }),
 
+  // 0.16.4 — mint a fresh per-tenant attachment encryption key
+  // and re-encrypt every existing attachment under it. Returns
+  // how many files were rewritten + the new generation number.
+  systemRotateEncryptionKey: (tenantId: string) =>
+    http<{ attachments_rewritten: number; new_generation: number }>(
+      `/api/system/tenants/${tenantId}/rotate-encryption-key`,
+      { method: 'POST' },
+    ),
+
   systemAdminInvite: (tenantId: string, emailHint?: string) =>
     http<{
       invitation: { id: string; token: string; expires_at: string };

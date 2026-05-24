@@ -158,9 +158,10 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       }> = [];
       for (const item of staged) {
         const attachmentId = randomUUID();
-        const { storagePath, byteSize, safeFilename, encryptionVersion } =
+        const { storagePath, byteSize, safeFilename, encryptionVersion, keyGeneration } =
           await storeAttachment(
             attachmentId,
+            tenantId,
             item.reportedName,
             item.mimeType,
             item.buffer,
@@ -168,8 +169,8 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         const insert = await query<AttachmentRow>(
           `INSERT INTO attachments
              (id, tenant_id, transaction_id, filename, mime_type, byte_size,
-              storage_path, encryption_version)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+              storage_path, encryption_version, key_generation)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING ${PUBLIC_COLUMNS}`,
           [
             attachmentId,
@@ -180,6 +181,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
             byteSize,
             storagePath,
             encryptionVersion,
+            keyGeneration,
           ],
         );
         created.push(insert.rows[0]!);
@@ -272,6 +274,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       const buffer = await readAttachmentBuffer(
         row.storage_path,
         row.encryption_version as EncryptionVersion,
+        tenantId,
       );
       reply.header('Content-Type', row.mime_type);
       reply.header(
@@ -298,6 +301,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       const buffer = await readAttachmentBuffer(
         row.storage_path,
         row.encryption_version as EncryptionVersion,
+        tenantId,
       );
       reply.header('Content-Type', row.mime_type);
       reply.header(

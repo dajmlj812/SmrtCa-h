@@ -97,8 +97,9 @@ export async function sweepPendingOcr(
     mime_type: string;
     filename: string;
     encryption_version: number;
+    tenant_id: string;
   }>(
-    `SELECT id, storage_path, mime_type, filename, encryption_version
+    `SELECT id, storage_path, mime_type, filename, encryption_version, tenant_id
        FROM attachments
       WHERE ocr_status = 'pending'
         AND created_at < now() - make_interval(secs => $1::int)`,
@@ -109,9 +110,12 @@ export async function sweepPendingOcr(
   let failed = 0;
   for (const row of candidates.rows) {
     try {
+      // 0.16.4 — pass tenant_id so v2 (envelope-encrypted) rows
+      // resolve their per-tenant DEK. v0/v1 rows ignore it.
       const buffer = await readAttachmentBuffer(
         row.storage_path,
         row.encryption_version as EncryptionVersion,
+        row.tenant_id,
       );
       await runOcrExtraction(
         row.id,

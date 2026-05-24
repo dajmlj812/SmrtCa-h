@@ -129,6 +129,37 @@ function OverviewTab() {
     }
   }
 
+  // 0.16.4 — rotate the tenant's attachment encryption key.
+  // Synchronous on the server (re-encrypts every attachment
+  // inline). Small tenants finish in milliseconds; larger
+  // tenants can take a while — we surface the count of files
+  // rewritten in the success banner so the operator knows what
+  // happened.
+  async function rotateKey(t: TenantRow) {
+    if (
+      !window.confirm(
+        `Rotate the encryption key for "${t.name}"?\n\n` +
+          `This re-encrypts EVERY attachment owned by this tenant under a fresh key. ` +
+          `The server holds a lock for the duration of the rewrite — large tenants ` +
+          `may take a moment. ATTACHMENT_ENCRYPTION_KEY must be configured on the ` +
+          `server.\n\nIf you're not sure why you're doing this, cancel.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    try {
+      const r = await api.systemRotateEncryptionKey(t.id);
+      setSuccess(
+        `Rotated "${t.name}" to key generation ${r.new_generation} — ` +
+          `${r.attachments_rewritten} attachment(s) re-encrypted.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rotation failed');
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -197,6 +228,14 @@ function OverviewTab() {
                         onClick={() => void inviteAdmin(t.id)}
                       >
                         Invite admin
+                      </button>
+                      <button
+                        className="btn-link"
+                        type="button"
+                        onClick={() => void rotateKey(t)}
+                        title="Re-encrypt every attachment under a fresh per-tenant key"
+                      >
+                        Rotate key
                       </button>
                       <button
                         className="btn-link danger"
