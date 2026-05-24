@@ -9,10 +9,57 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.11 shipped. 0.17.11 makes "removing an account
-from the wizard" actually remove that account's transactions
-from the budget actuals — each budget row now stores its
-account scope and the actuals SQL filters by it._
+_0.17.0–0.17.12 shipped. 0.17.12 closes the last loop on
+per-period account scope: the Period Overview's Bills and
+Income sections now respect the scope alongside the actuals,
+so deselecting an account in the wizard hides ALL of that
+account's outgoing money, not just the actuals total._
+
+---
+
+## [0.17.12] — 2026-05-24 — Period overview bills + income honor scope
+
+After 0.17.11 added per-budget account scope on actuals,
+an operator reported "still showing transactions from
+unselected accounts." Investigation: the budget-vs-actual
+SQL was correctly filtering, but the **Period Overview's
+Bills and Income sections** read from the master `bills`
+and `recurring_income` tables and ignored the period's
+scope. A bill on Chase-Aadyn still appeared on a card
+scoped to Chase-5793.
+
+### Fix
+
+- `BillRow` and `IncomeRow` types gain `account_id: string | null`
+- The shared `fetchPeriodCtx` SELECT pulls `account_id`
+- `buildPeriodSummary` filters `ctx.bills` and `ctx.income`
+  by the period's scope before walking instances:
+  - Rows whose `account_id` is in the scope: included
+  - Rows with `account_id IS NULL`: **always** included
+    (household-wide bills/income apply to every account)
+  - All other rows: excluded
+- When the period has no scope (legacy / "all accounts"),
+  filter is a no-op.
+
+### Tests
+
+14 budget + wizard integration tests still pass. The shape
+of the period summary response is unchanged; only the
+per-period filter logic in the helper changed.
+
+### Net effect
+
+After this slice, every place a period's totals or events
+appear on /budgets respects the wizard's account selection:
+
+- **Bills** in Period Overview: scope-filtered (0.17.12)
+- **Income** in Period Overview: scope-filtered (0.17.12)
+- **Set aside** in Period Overview: scope-tagged on each
+  row already (0.17.11)
+- **Budget-vs-actual table** at the bottom: actuals SQL
+  scope-filtered (0.17.11)
+- **AutoMagic preview** (median + bills + income before
+  commit): scope-filtered (0.17.8)
 
 ---
 

@@ -161,10 +161,53 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.11 shipped. 0.17.11 makes &quot;removing an account
-from the wizard&quot; actually remove that account&#39;s transactions
-from the budget actuals — each budget row now stores its
-account scope and the actuals SQL filters by it.</em></p>
+<p><em>0.17.0–0.17.12 shipped. 0.17.12 closes the last loop on
+per-period account scope: the Period Overview&#39;s Bills and
+Income sections now respect the scope alongside the actuals,
+so deselecting an account in the wizard hides ALL of that
+account&#39;s outgoing money, not just the actuals total.</em></p>
+<hr>
+<h2 id="01712-2026-05-24-period-overview-bills-income-honor-scope">[0.17.12] — 2026-05-24 — Period overview bills + income honor scope<a class="heading-anchor" href="#01712-2026-05-24-period-overview-bills-income-honor-scope">#</a></h2>
+<p>After 0.17.11 added per-budget account scope on actuals,
+an operator reported &quot;still showing transactions from
+unselected accounts.&quot; Investigation: the budget-vs-actual
+SQL was correctly filtering, but the <strong>Period Overview&#39;s
+Bills and Income sections</strong> read from the master <code>bills</code>
+and <code>recurring_income</code> tables and ignored the period&#39;s
+scope. A bill on Chase-Aadyn still appeared on a card
+scoped to Chase-5793.</p>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<ul>
+<li><code>BillRow</code> and <code>IncomeRow</code> types gain <code>account_id: string | null</code></li>
+<li>The shared <code>fetchPeriodCtx</code> SELECT pulls <code>account_id</code></li>
+<li><code>buildPeriodSummary</code> filters <code>ctx.bills</code> and <code>ctx.income</code>
+by the period&#39;s scope before walking instances:<ul>
+<li>Rows whose <code>account_id</code> is in the scope: included</li>
+<li>Rows with <code>account_id IS NULL</code>: <strong>always</strong> included
+(household-wide bills/income apply to every account)</li>
+<li>All other rows: excluded</li>
+</ul>
+</li>
+<li>When the period has no scope (legacy / &quot;all accounts&quot;),
+filter is a no-op.</li>
+</ul>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>14 budget + wizard integration tests still pass. The shape
+of the period summary response is unchanged; only the
+per-period filter logic in the helper changed.</p>
+<h3 id="net-effect">Net effect<a class="heading-anchor" href="#net-effect">#</a></h3>
+<p>After this slice, every place a period&#39;s totals or events
+appear on /budgets respects the wizard&#39;s account selection:</p>
+<ul>
+<li><strong>Bills</strong> in Period Overview: scope-filtered (0.17.12)</li>
+<li><strong>Income</strong> in Period Overview: scope-filtered (0.17.12)</li>
+<li><strong>Set aside</strong> in Period Overview: scope-tagged on each
+row already (0.17.11)</li>
+<li><strong>Budget-vs-actual table</strong> at the bottom: actuals SQL
+scope-filtered (0.17.11)</li>
+<li><strong>AutoMagic preview</strong> (median + bills + income before
+commit): scope-filtered (0.17.8)</li>
+</ul>
 <hr>
 <h2 id="01711-2026-05-24-per-budget-account-scope-on-actuals">[0.17.11] — 2026-05-24 — Per-budget account scope on actuals<a class="heading-anchor" href="#01711-2026-05-24-per-budget-account-scope-on-actuals">#</a></h2>
 <p>After 0.17.8 added an &quot;Include accounts&quot; checklist to the
@@ -5966,7 +6009,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 21:52:25 UTC · commit 05df7f2</span>
+  <span>Generated 2026-05-24 22:01:55 UTC · commit 4cabb13</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

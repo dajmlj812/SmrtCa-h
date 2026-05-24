@@ -658,12 +658,14 @@ async function fetchPeriodCtx(tenantId: string): Promise<PeriodCtx> {
       [tenantId],
     ),
     pool.query<BillRow>(
-      `SELECT id, name, amount_cents, frequency, next_due_date
+      // 0.17.12 — pull account_id so buildPeriodSummary can filter
+      // bills by the period's included_account_ids scope.
+      `SELECT id, name, amount_cents, frequency, next_due_date, account_id
          FROM bills WHERE tenant_id = $1 AND active`,
       [tenantId],
     ),
     pool.query<IncomeRow>(
-      `SELECT id, name, amount_cents, frequency, next_expected_date
+      `SELECT id, name, amount_cents, frequency, next_expected_date, account_id
          FROM recurring_income WHERE tenant_id = $1 AND active`,
       [tenantId],
     ),
@@ -684,15 +686,38 @@ function buildPeriodSummary(
   activeRows: BudgetRowSummary[],
   ctx: PeriodCtx,
 ) {
+  // 0.17.12 — period-level account scope. All rows in a wizard
+  // run share the same scope by construction; we take the first
+  // row's scope as the period's. NULL = no scope, every account
+  // counts.
+  const periodScope =
+    activeRows.find((r) => r.included_account_ids !== null)
+      ?.included_account_ids ?? null;
+
+  // 0.17.12 — filter bills + income by the period's account
+  // scope BEFORE walking instances. NULL account_id on a bill
+  // or income source means "household-wide" — always included.
+  // The scope is null = include everything (legacy behavior).
+  const scopedBills = periodScope
+    ? ctx.bills.filter(
+        (b) => b.account_id === null || periodScope.includes(b.account_id),
+      )
+    : ctx.bills;
+  const scopedIncome = periodScope
+    ? ctx.income.filter(
+        (i) => i.account_id === null || periodScope.includes(i.account_id),
+      )
+    : ctx.income;
+
   const incomeEvents = instancesIn(
-    ctx.income,
+    scopedIncome,
     window.start,
     window.end,
     'next_expected_date',
   );
 
   const billInstances = instancesIn(
-    ctx.bills,
+    scopedBills,
     window.start,
     window.end,
     'next_due_date',
@@ -735,14 +760,6 @@ function buildPeriodSummary(
     net_cents: 0,
   };
   totals.net_cents = totals.income_cents - totals.bills_cents - totals.editable_cents;
-
-  // 0.17.11 — period-level account scope. All rows in a wizard
-  // run share the same scope by construction; we surface the
-  // first row's scope as the period's. NULL = no scope (every
-  // account counts).
-  const periodScope =
-    activeRows.find((r) => r.included_account_ids !== null)?.included_account_ids ??
-    null;
 
   return {
     period: window,

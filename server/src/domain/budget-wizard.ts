@@ -100,6 +100,8 @@ export interface BillRow {
   amount_cents: number;
   frequency: 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'one-time';
   next_due_date: string;
+  /** 0.17.12 — surfaced so per-period scope filtering can run. NULL = household-wide. */
+  account_id: string | null;
 }
 
 export interface IncomeRow {
@@ -108,6 +110,8 @@ export interface IncomeRow {
   amount_cents: number;
   frequency: 'weekly' | 'biweekly' | 'monthly' | 'yearly';
   next_expected_date: string;
+  /** 0.17.12 — surfaced so per-period scope filtering can run. NULL = household-wide. */
+  account_id: string | null;
 }
 
 export interface SavingsSuggestions {
