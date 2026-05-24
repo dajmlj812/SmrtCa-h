@@ -9,10 +9,81 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.2 shipped. 0.17.0 brought the doc refresh + HTML
-build; 0.17.1 made super-admin invitations actually email;
-0.17.2 disables the SMTP relay's click tracking on every send
-(it was rewriting URLs and corrupting them on the test deploy)._
+_0.17.0–0.17.3 shipped. 0.17.3 closes a verification-gate bug
+that locked out users created via paths that already proved
+email ownership (invitation accept, OIDC first-login,
+super-admin-creates-super-admin)._
+
+---
+
+## [0.17.3] — 2026-05-24 — Fix: auto-verify on proven-ownership paths
+
+**Bug.** The 0.16.0 login gate refuses any user whose
+`email_verified_at` is NULL. Three user-creation paths leave
+that column NULL despite the path itself being equivalent
+proof of email ownership:
+
+1. **Invitation acceptance** (`POST /api/invitations/:token/accept`
+   in `tenants.ts`) — clicking the invite link sent to the
+   recipient's email IS the proof, same as the signup
+   verification flow.
+2. **OIDC / SAML first-login** (`identities.ts:resolveIdentity`)
+   — the identity provider verified the email before issuing
+   tokens; we inherit that proof.
+3. **Super-admin promotes another super-admin from `/system`**
+   (`POST /api/system/users/super`) — same trust model as
+   `/api/auth/setup` (the bootstrap operator path), which
+   already auto-verifies.
+
+Surfaced during the smrtcash-test deploy when a freshly
+invited spouse user tried to log in and got the gate
+("Please confirm your email address before logging in").
+
+**Fix.** All three INSERTs now set `email_verified_at = now()`.
+The existing-user branch in invitation acceptance also UPDATEs
+unverified existing users to verified (an unverified user
+created via `/signup` who never clicked the link can be
+unstuck by accepting a tenant invite). The `/signup` →
+`/verify-email` flow stays unchanged — that's the one path
+where the user genuinely needs to prove ownership before
+login.
+
+### Files changed
+
+- `server/src/routes/tenants.ts` — new + existing-user branches
+- `server/src/auth/identities.ts` — non-local provider users
+- `server/src/routes/system.ts` — super-admin promotion
+
+### Tests
+
+All 743 server + 6 web tests still pass. (No new tests added
+in this slice; the bug is in the absence of a column-set
+operation, and the existing invite + OIDC + super-admin tests
+exercise the create paths. Dedicated regression tests land in
+the v0.18.5 email-shell slice that already touches this area.)
+
+### Operator notes
+
+If you already have users stuck in the verification gate from
+a pre-0.17.3 deploy (i.e. they accepted an invitation and now
+can't log in), the SQL one-liner to unstick them after
+upgrading is:
+
+```sql
+UPDATE users SET email_verified_at = now()
+  WHERE email_verified_at IS NULL
+    AND id IN (
+      SELECT user_id FROM memberships
+      UNION
+      SELECT user_id FROM user_identities WHERE provider != 'local'
+    );
+```
+
+That covers everyone who has either a tenant membership (came
+in through an invite) or a non-local identity (came in via
+OIDC). It deliberately doesn't touch users with only a 'local'
+identity and no memberships — those are the `/signup` users
+who genuinely should verify.
 
 ---
 

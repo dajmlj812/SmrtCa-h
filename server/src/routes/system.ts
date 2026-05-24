@@ -227,9 +227,14 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
     if (existing.rowCount && existing.rowCount > 0) {
       return reply.code(409).send({ error: 'A user with that email already exists' });
     }
+    // 0.17.3 — a super-admin promoting another super-admin from
+    // /system is the same trust model as /api/auth/setup
+    // (the bootstrap operator path), which already auto-verifies.
+    // Operators don't go through the email-verification flow; the
+    // existing super-admin vouches for the new one.
     const inserted = await query<{ id: string }>(
-      `INSERT INTO users (email, name, password_hash, is_super_admin)
-       VALUES ($1, $2, $3, true)
+      `INSERT INTO users (email, name, password_hash, is_super_admin, email_verified_at)
+       VALUES ($1, $2, $3, true, now())
        RETURNING id`,
       [email, typeof body.name === 'string' ? body.name.trim() : 'Operator', hash],
     );

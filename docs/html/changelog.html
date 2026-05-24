@@ -161,10 +161,70 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.2 shipped. 0.17.0 brought the doc refresh + HTML
-build; 0.17.1 made super-admin invitations actually email;
-0.17.2 disables the SMTP relay&#39;s click tracking on every send
-(it was rewriting URLs and corrupting them on the test deploy).</em></p>
+<p><em>0.17.0–0.17.3 shipped. 0.17.3 closes a verification-gate bug
+that locked out users created via paths that already proved
+email ownership (invitation accept, OIDC first-login,
+super-admin-creates-super-admin).</em></p>
+<hr>
+<h2 id="0173-2026-05-24-fix-auto-verify-on-proven-ownership-paths">[0.17.3] — 2026-05-24 — Fix: auto-verify on proven-ownership paths<a class="heading-anchor" href="#0173-2026-05-24-fix-auto-verify-on-proven-ownership-paths">#</a></h2>
+<p><strong>Bug.</strong> The 0.16.0 login gate refuses any user whose
+<code>email_verified_at</code> is NULL. Three user-creation paths leave
+that column NULL despite the path itself being equivalent
+proof of email ownership:</p>
+<ol>
+<li><strong>Invitation acceptance</strong> (<code>POST /api/invitations/:token/accept</code>
+in <code>tenants.ts</code>) — clicking the invite link sent to the
+recipient&#39;s email IS the proof, same as the signup
+verification flow.</li>
+<li><strong>OIDC / SAML first-login</strong> (<code>identities.ts:resolveIdentity</code>)
+— the identity provider verified the email before issuing
+tokens; we inherit that proof.</li>
+<li><strong>Super-admin promotes another super-admin from <code>/system</code></strong>
+(<code>POST /api/system/users/super</code>) — same trust model as
+<code>/api/auth/setup</code> (the bootstrap operator path), which
+already auto-verifies.</li>
+</ol>
+<p>Surfaced during the smrtcash-test deploy when a freshly
+invited spouse user tried to log in and got the gate
+(&quot;Please confirm your email address before logging in&quot;).</p>
+<p><strong>Fix.</strong> All three INSERTs now set <code>email_verified_at = now()</code>.
+The existing-user branch in invitation acceptance also UPDATEs
+unverified existing users to verified (an unverified user
+created via <code>/signup</code> who never clicked the link can be
+unstuck by accepting a tenant invite). The <code>/signup</code> →
+<code>/verify-email</code> flow stays unchanged — that&#39;s the one path
+where the user genuinely needs to prove ownership before
+login.</p>
+<h3 id="files-changed">Files changed<a class="heading-anchor" href="#files-changed">#</a></h3>
+<ul>
+<li><code>server/src/routes/tenants.ts</code> — new + existing-user branches</li>
+<li><code>server/src/auth/identities.ts</code> — non-local provider users</li>
+<li><code>server/src/routes/system.ts</code> — super-admin promotion</li>
+</ul>
+<h3 id="tests">Tests<a class="heading-anchor" href="#tests">#</a></h3>
+<p>All 743 server + 6 web tests still pass. (No new tests added
+in this slice; the bug is in the absence of a column-set
+operation, and the existing invite + OIDC + super-admin tests
+exercise the create paths. Dedicated regression tests land in
+the v0.18.5 email-shell slice that already touches this area.)</p>
+<h3 id="operator-notes">Operator notes<a class="heading-anchor" href="#operator-notes">#</a></h3>
+<p>If you already have users stuck in the verification gate from
+a pre-0.17.3 deploy (i.e. they accepted an invitation and now
+can&#39;t log in), the SQL one-liner to unstick them after
+upgrading is:</p>
+<pre><code class="language-sql">UPDATE users SET email_verified_at = now()
+  WHERE email_verified_at IS NULL
+    AND id IN (
+      SELECT user_id FROM memberships
+      UNION
+      SELECT user_id FROM user_identities WHERE provider != &#39;local&#39;
+    );
+</code></pre>
+<p>That covers everyone who has either a tenant membership (came
+in through an invite) or a non-local identity (came in via
+OIDC). It deliberately doesn&#39;t touch users with only a &#39;local&#39;
+identity and no memberships — those are the <code>/signup</code> users
+who genuinely should verify.</p>
 <hr>
 <h2 id="0172-2026-05-24-fix-disable-smtp-click-tracking-on-transactional-email">[0.17.2] — 2026-05-24 — Fix: disable SMTP click tracking on transactional email<a class="heading-anchor" href="#0172-2026-05-24-fix-disable-smtp-click-tracking-on-transactional-email">#</a></h2>
 <p><strong>Bug.</strong> Maileroo (the SMTP relay used on the test deploy) has
@@ -5389,7 +5449,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 18:18:37 UTC · commit e696120</span>
+  <span>Generated 2026-05-24 18:31:04 UTC · commit 108f10c</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -91,9 +91,15 @@ export async function resolveIdentity(
 
   // 3) Fresh user + identity in one transaction.
   return withTransaction(async (client) => {
+    // 0.17.3 — OIDC / SAML identity providers verify the user's email
+    // before issuing tokens; we inherit that proof. Set
+    // email_verified_at on create so the 0.16.0 login gate doesn't
+    // block first-login. Local-password signups still go through the
+    // /api/auth/signup → /api/auth/verify-email dance.
+    const verifyAtCreate = identity.provider !== 'local';
     const u = await client.query<{ id: string }>(
-      `INSERT INTO users (email, name)
-       VALUES ($1, $2)
+      `INSERT INTO users (email, name, email_verified_at)
+       VALUES ($1, $2, ${verifyAtCreate ? 'now()' : 'NULL'})
        RETURNING id`,
       [identity.email ?? null, identity.displayName ?? null],
     );

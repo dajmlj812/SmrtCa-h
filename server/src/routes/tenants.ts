@@ -452,6 +452,9 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
         }
 
         // Existing user with this email? Add a membership; else create.
+        // 0.17.3 — clicking the invite link is itself proof of email
+        // ownership, same as the signup verification flow. Auto-verify
+        // the user so the 0.16.0 login gate doesn't lock them out.
         const existing = await client.query<{ id: string }>(
           `SELECT id FROM users WHERE lower(email) = lower($1) LIMIT 1`,
           [email],
@@ -459,11 +462,20 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
         let userId: string;
         if (existing.rowCount && existing.rowCount > 0) {
           userId = existing.rows[0]!.id;
+          // Existing-user-accepting-invite: if they previously signed
+          // up via /signup and never confirmed, the invite acceptance
+          // also unsticks them. UPDATE is a no-op when they're
+          // already verified.
+          await client.query(
+            `UPDATE users SET email_verified_at = now()
+              WHERE id = $1 AND email_verified_at IS NULL`,
+            [userId],
+          );
         } else {
           const hash = await hashPassword(body.password as string);
           const u = await client.query<{ id: string }>(
-            `INSERT INTO users (email, name, password_hash)
-             VALUES ($1, $2, $3) RETURNING id`,
+            `INSERT INTO users (email, name, password_hash, email_verified_at)
+             VALUES ($1, $2, $3, now()) RETURNING id`,
             [email, name || email.split('@')[0], hash],
           );
           userId = u.rows[0]!.id;
