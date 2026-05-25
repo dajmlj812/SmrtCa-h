@@ -161,11 +161,18 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.22 shipped. 0.17.22 redesigns the savings
-suggestion chips: goal-required + three configurable
-percentages of post-deduction leftover (defaults 25/50/75) +
-Max (100%) — and adds a destination savings-account dropdown
-on the wizard.</em></p>
+<p><em>0.17.0–0.17.23 shipped. 0.17.23 adds an inline frequency
+picker on /bills so the user can change a bill&#39;s or income&#39;s
+cadence without re-creating it.</em></p>
+<hr>
+<h2 id="01723-2026-05-24-inline-frequency-editor-for-bills-income">[0.17.23] — 2026-05-24 — Inline frequency editor for bills + income<a class="heading-anchor" href="#01723-2026-05-24-inline-frequency-editor-for-bills-income">#</a></h2>
+<p>The PATCH endpoints already accepted <code>frequency</code>; the UI just
+didn&#39;t surface it. Adds a small <code>&lt;select&gt;</code> to each row&#39;s
+actions on /bills so the user can switch a bill from monthly
+→ biweekly (or any of the 5 bill cadences) and the change
+persists immediately via <code>PATCH /api/bills/:id</code>. Same for
+recurring income (4 cadences — no &quot;one-time&quot; for income).</p>
+<p>No schema, no test changes.</p>
 <hr>
 <h2 id="01722-2026-05-24-savings-chip-redesign-destination-account">[0.17.22] — 2026-05-24 — Savings chip redesign + destination account<a class="heading-anchor" href="#01722-2026-05-24-savings-chip-redesign-destination-account">#</a></h2>
 <h3 id="chips">Chips<a class="heading-anchor" href="#chips">#</a></h3>
@@ -6390,7 +6397,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 00:49:41 UTC · commit 815c29a</span>
+  <span>Generated 2026-05-25 00:57:30 UTC · commit 911684e</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -222,6 +222,24 @@ export function BillsPage() {
     }
   }
 
+  // 0.17.23 — inline frequency editor for bills + income.
+  async function setBillFrequency(id: string, frequency: BillFrequency) {
+    try {
+      await api.updateBill(id, { frequency });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Frequency update failed');
+    }
+  }
+  async function setIncomeFrequency(id: string, frequency: IncomeFrequency) {
+    try {
+      await api.updateRecurringIncome(id, { frequency });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Frequency update failed');
+    }
+  }
+
   function accountName(id: string | null): string {
     if (id === null) return '—';
     return accounts.find((a) => a.id === id)?.name ?? '(removed)';
@@ -356,6 +374,11 @@ export function BillsPage() {
                     accounts={accounts}
                     onChange={(v) => void setBillAccount(r.id, v)}
                   />
+                  <FrequencyPicker
+                    value={r.frequency}
+                    options={BILL_FREQUENCIES}
+                    onChange={(v) => void setBillFrequency(r.id, v as BillFrequency)}
+                  />
                   {r.active && (
                     <button
                       className="btn-link"
@@ -405,6 +428,11 @@ export function BillsPage() {
                     value={r.account_id}
                     accounts={accounts}
                     onChange={(v) => void setIncomeAccount(r.id, v)}
+                  />
+                  <FrequencyPicker
+                    value={r.frequency}
+                    options={INCOME_FREQUENCIES}
+                    onChange={(v) => void setIncomeFrequency(r.id, v as IncomeFrequency)}
                   />
                   <button
                     className="btn-link danger"
@@ -887,6 +915,36 @@ function AccountPicker({
       {accounts.map((a) => (
         <option key={a.id} value={a.id}>
           {a.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * 0.17.23 — inline frequency picker for bills + recurring income.
+ * Caller passes the allowed options (bills include 'one-time';
+ * income does not).
+ */
+function FrequencyPicker<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: readonly T[];
+  onChange: (next: T) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as T)}
+      style={{ fontSize: '0.85em', padding: '2px 6px' }}
+      title="Change how often this row recurs"
+    >
+      {options.map((f) => (
+        <option key={f} value={f}>
+          {f}
         </option>
       ))}
     </select>

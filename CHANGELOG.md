@@ -9,11 +9,22 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.22 shipped. 0.17.22 redesigns the savings
-suggestion chips: goal-required + three configurable
-percentages of post-deduction leftover (defaults 25/50/75) +
-Max (100%) — and adds a destination savings-account dropdown
-on the wizard._
+_0.17.0–0.17.23 shipped. 0.17.23 adds an inline frequency
+picker on /bills so the user can change a bill's or income's
+cadence without re-creating it._
+
+---
+
+## [0.17.23] — 2026-05-24 — Inline frequency editor for bills + income
+
+The PATCH endpoints already accepted `frequency`; the UI just
+didn't surface it. Adds a small `<select>` to each row's
+actions on /bills so the user can switch a bill from monthly
+→ biweekly (or any of the 5 bill cadences) and the change
+persists immediately via `PATCH /api/bills/:id`. Same for
+recurring income (4 cadences — no "one-time" for income).
+
+No schema, no test changes.
 
 ---
 
