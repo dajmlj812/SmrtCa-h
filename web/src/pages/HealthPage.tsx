@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import {
   api,
+  type CapacityProjection,
   type HealthSnapshot,
   type MetricSample,
   type SaasMetrics,
@@ -64,6 +65,7 @@ export function HealthPage() {
   const [snapshot, setSnapshot] = useState<HealthSnapshot | null>(null);
   const [series, setSeries] = useState<MetricSample[]>([]);
   const [saas, setSaas] = useState<SaasMetrics | null>(null);
+  const [capacity, setCapacity] = useState<CapacityProjection | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshMs, setRefreshMs] = useState<number>(() => {
     try {
@@ -79,17 +81,22 @@ export function HealthPage() {
 
   async function load() {
     try {
-      const [s, ts, sa] = await Promise.all([
+      const [s, ts, sa, cap] = await Promise.all([
         api.healthMetrics(),
         api.healthTimeseries(WINDOW_SEC),
         // SaaS metrics fail silently when Stripe + billing aren't
         // configured — the operator still wants the rest of the
         // page to load on a self-host-only deployment.
         api.healthSaas().catch(() => null),
+        // Capacity projection — needs ≥3 days of snapshots to
+        // produce a meaningful projection; the response will report
+        // sample_count low and explain it on a fresh install.
+        api.healthCapacity().catch(() => null),
       ]);
       setSnapshot(s);
       setSeries(ts.points);
       setSaas(sa);
+      setCapacity(cap);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load metrics');
@@ -162,6 +169,12 @@ export function HealthPage() {
         <p className="empty">Loading…</p>
       ) : (
         <>
+          {/* ── Capacity projection (top — what plan-ahead operators look at) ─ */}
+          {capacity && <CapacityWidget capacity={capacity} />}
+
+          {/* ── Host resources (disk free, host memory, load average) ─ */}
+          <HostWidget host={snapshot.host} />
+
           {/* ── Live gauges row ─────────────────────────────── */}
           <div className="gauge-grid">
             <Gauge
@@ -552,5 +565,245 @@ function Row({
       <span className="muted">{label}</span>
       <span className="health-value">{value}</span>
     </div>
+  );
+}
+
+/**
+ * 0.18.13 — capacity projection widget. The headline number is the
+ * recommended "prepare new environment by" date — that's what the
+ * operator wants to know to plan a server swap. Underneath we show
+ * the per-metric growth rates so the operator can see WHY they're
+ * about to need more capacity (db rows, attachments, backups).
+ */
+function CapacityWidget({ capacity }: { capacity: CapacityProjection }) {
+  const c = capacity.current;
+  const p = capacity.projection;
+  const statusClass = `capacity-status capacity-${p.status}`;
+  const statusLabel =
+    p.status === 'critical'
+      ? '🚨 Critical — disk nearly full'
+      : p.status === 'warn'
+        ? '⚠ Plan migration soon'
+        : p.status === 'ok'
+          ? '✓ On track'
+          : '— Insufficient history';
+
+  return (
+    <div className="card capacity-widget">
+      <div className="capacity-header">
+        <h3 style={{ margin: 0 }}>Server capacity</h3>
+        <span className={statusClass}>{statusLabel}</span>
+      </div>
+
+      {/* Top recommendation — biggest, most prominent */}
+      <div className="capacity-prepare">
+        {p.recommended_prepare_by ? (
+          <>
+            <div className="capacity-prepare-label muted">
+              Have a replacement environment ready to swap by
+            </div>
+            <div className="capacity-prepare-date">
+              {formatRelDate(p.recommended_prepare_by)}
+            </div>
+            <div className="capacity-prepare-detail muted">
+              ≈ {p.days_until_warn} days to warn ({formatRelDate(p.warn_date)}) ·{' '}
+              {p.days_until_critical} days to critical (
+              {formatRelDate(p.critical_date)})
+            </div>
+          </>
+        ) : (
+          <div className="capacity-prepare-detail muted">
+            {p.note ?? 'No projection available.'}
+          </div>
+        )}
+      </div>
+
+      {/* Disk usage bar */}
+      {c.disk_total_bytes != null && c.disk_used_bytes != null && (
+        <div className="capacity-disk">
+          <div className="capacity-disk-label">
+            <span>Disk usage</span>
+            <span className="muted">
+              {formatBytes(c.disk_used_bytes)} of {formatBytes(c.disk_total_bytes)}
+              {' · '}
+              {(c.disk_percent_used ?? 0).toFixed(1)}%
+            </span>
+          </div>
+          <div className="capacity-bar">
+            <div
+              className={`capacity-bar-fill ${p.status}`}
+              style={{ width: `${Math.min(100, c.disk_percent_used ?? 0)}%` }}
+            />
+            {/* 80% warn marker */}
+            <div className="capacity-bar-marker" style={{ left: '80%' }} />
+          </div>
+        </div>
+      )}
+
+      {/* Per-component growth */}
+      <div className="capacity-growth">
+        <Row
+          label="Database growth"
+          value={formatGrowth(capacity.growth.db_bytes_per_day, c.db_bytes)}
+        />
+        <Row
+          label="Attachments growth"
+          value={formatGrowth(
+            capacity.growth.attachments_bytes_per_day,
+            c.attachments_bytes,
+          )}
+        />
+        <Row
+          label="Backups growth"
+          value={formatGrowth(
+            capacity.growth.backups_bytes_per_day,
+            c.backups_bytes,
+          )}
+        />
+        {p.combined_bytes_per_day != null && (
+          <Row
+            label="Combined app growth"
+            value={
+              <strong>
+                {formatBytes(p.combined_bytes_per_day)} per day
+              </strong>
+            }
+          />
+        )}
+        <Row
+          label="Projection window"
+          value={
+            p.window
+              ? `${p.window.from} → ${p.window.to} (${p.sample_count} samples)`
+              : `${p.sample_count} samples — need ≥ 3 for a projection`
+          }
+        />
+      </div>
+
+      {p.note && p.status !== 'ok' && (
+        <div className="muted small" style={{ marginTop: 8 }}>
+          {p.note}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatGrowth(bytesPerDay: number | null, total: number): React.ReactNode {
+  if (bytesPerDay == null) return <span className="muted">— not enough data</span>;
+  if (bytesPerDay === 0) return <span className="muted">flat (no growth)</span>;
+  const yearProjected = bytesPerDay * 365;
+  return (
+    <>
+      <strong>{formatBytes(bytesPerDay)}</strong>/day · currently{' '}
+      {formatBytes(total)} · ≈ {formatBytes(yearProjected)}/yr
+    </>
+  );
+}
+
+function formatRelDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00Z');
+  const todayUtc = new Date();
+  todayUtc.setUTCHours(0, 0, 0, 0);
+  const days = Math.round(
+    (d.getTime() - todayUtc.getTime()) / (24 * 60 * 60 * 1000),
+  );
+  const niceDate = d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+  if (days <= 0) return `${niceDate} (today)`;
+  if (days === 1) return `${niceDate} (tomorrow)`;
+  return `${niceDate} (in ${days} days)`;
+}
+
+/**
+ * Host resources card — disk free per mount, host memory, load
+ * average. Complements the per-process metrics already shown in the
+ * other cards.
+ */
+function HostWidget({
+  host,
+}: {
+  host: HealthSnapshot['host'];
+}) {
+  const memPct = host.memory_percent_used;
+  const memClass =
+    memPct >= 90 ? 'warn' : memPct >= 75 ? 'caution' : 'ok';
+  return (
+    <Card title="Host resources">
+      <div className="health-grid">
+        <Row
+          label="Hostname"
+          value={
+            <>
+              {host.hostname}{' '}
+              <span className="muted">
+                ({host.platform}/{host.arch})
+              </span>
+            </>
+          }
+        />
+        <Row label="CPU cores" value={host.cpu_count} />
+        <Row
+          label="Load average"
+          value={
+            host.load_average[0] === 0 &&
+            host.load_average[1] === 0 &&
+            host.load_average[2] === 0 ? (
+              <span className="muted">— (Windows reports 0)</span>
+            ) : (
+              <>
+                {host.load_average[0].toFixed(2)} ·{' '}
+                {host.load_average[1].toFixed(2)} ·{' '}
+                {host.load_average[2].toFixed(2)}
+                <span className="muted"> (1m · 5m · 15m)</span>
+              </>
+            )
+          }
+        />
+        <Row label="Host uptime" value={formatUptime(host.uptime_seconds)} />
+        <Row
+          label="Host memory"
+          value={
+            <span className={`pill ${memClass}`}>
+              {formatBytes(host.memory_used_bytes)} /{' '}
+              {formatBytes(host.memory_total_bytes)} ·{' '}
+              {memPct.toFixed(1)}%
+            </span>
+          }
+        />
+        {host.disks.map((d) => {
+          const cls =
+            d.percent_used >= 90 ? 'warn' : d.percent_used >= 75 ? 'caution' : 'ok';
+          return (
+            <Row
+              key={d.path}
+              label={`Disk · ${d.label}`}
+              value={
+                <span className={`pill ${cls}`} title={d.path}>
+                  {formatBytes(d.used_bytes)} / {formatBytes(d.total_bytes)} ·{' '}
+                  {d.percent_used.toFixed(1)}% used ·{' '}
+                  {formatBytes(d.free_bytes)} free
+                </span>
+              }
+            />
+          );
+        })}
+        {host.disks.length === 0 && (
+          <Row
+            label="Disk"
+            value={
+              <span className="muted">
+                statfs() unavailable on this platform — capacity projection
+                cannot use disk-free signal
+              </span>
+            }
+          />
+        )}
+      </div>
+    </Card>
   );
 }

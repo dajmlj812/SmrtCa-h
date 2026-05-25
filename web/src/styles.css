@@ -3141,6 +3141,104 @@ code {
   margin: 0 4px;
 }
 
+/* ── HealthPage: capacity widget + host resources card ────────
+   0.18.13 — capacity widget at the top of /health gives the operator
+   a single "prepare a replacement environment by" date so server
+   planning isn't a guessing game. */
+.capacity-widget {
+  margin-bottom: 16px;
+}
+.capacity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.capacity-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.capacity-ok       { background: rgba(34, 197, 94, 0.12); color: rgb(22, 101, 52); }
+.capacity-warn     { background: rgba(234, 179, 8, 0.18); color: rgb(133, 77, 14); }
+.capacity-critical { background: rgba(220, 38, 38, 0.18); color: rgb(127, 29, 29); }
+.capacity-unknown  { background: rgba(0, 0, 0, 0.08); color: var(--muted); }
+
+.capacity-prepare {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.06), rgba(79, 70, 229, 0.02));
+  border-left: 4px solid var(--accent, #4f46e5);
+  padding: 14px 18px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.capacity-prepare-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.capacity-prepare-date {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.capacity-prepare-detail {
+  font-size: 13px;
+}
+
+.capacity-disk {
+  margin-bottom: 16px;
+}
+.capacity-disk-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.capacity-bar {
+  height: 12px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+.capacity-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease-out;
+}
+.capacity-bar-fill.ok       { background: rgb(34, 197, 94); }
+.capacity-bar-fill.warn     { background: rgb(234, 179, 8); }
+.capacity-bar-fill.critical { background: rgb(220, 38, 38); }
+.capacity-bar-fill.unknown  { background: rgba(0, 0, 0, 0.2); }
+.capacity-bar-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  transform: translateX(-50%);
+}
+
+.capacity-growth {
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 12px;
+}
+
+/* Status pills used in HostWidget for disk + memory utilization. */
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.pill.ok       { background: rgba(34, 197, 94, 0.12); color: rgb(22, 101, 52); }
+.pill.caution  { background: rgba(234, 179, 8, 0.18); color: rgb(133, 77, 14); }
+.pill.warn     { background: rgba(220, 38, 38, 0.18); color: rgb(127, 29, 29); }
+
 /* ── Split modals: attachment preview alongside editor ────────
    0.18.13 — when a transaction has a receipt attached, show it
    beside the splits editor (SplitsModal for category splits and

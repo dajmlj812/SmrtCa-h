@@ -921,6 +921,55 @@ export interface HealthSnapshot {
     backups_bytes: number;
     backup_count: number;
   };
+  host: {
+    hostname: string;
+    platform: string;
+    arch: string;
+    cpu_count: number;
+    load_average: [number, number, number];
+    uptime_seconds: number;
+    memory_total_bytes: number;
+    memory_free_bytes: number;
+    memory_used_bytes: number;
+    memory_percent_used: number;
+    disks: Array<{
+      path: string;
+      label: string;
+      total_bytes: number;
+      free_bytes: number;
+      used_bytes: number;
+      percent_used: number;
+    }>;
+  };
+}
+
+export interface CapacityProjection {
+  current: {
+    db_bytes: number;
+    attachments_bytes: number;
+    backups_bytes: number;
+    disk_total_bytes: number | null;
+    disk_free_bytes: number | null;
+    disk_used_bytes: number | null;
+    disk_percent_used: number | null;
+  };
+  growth: {
+    db_bytes_per_day: number | null;
+    attachments_bytes_per_day: number | null;
+    backups_bytes_per_day: number | null;
+  };
+  projection: {
+    sample_count: number;
+    window: { from: string; to: string } | null;
+    combined_bytes_per_day: number | null;
+    warn_date: string | null;
+    critical_date: string | null;
+    days_until_warn: number | null;
+    days_until_critical: number | null;
+    recommended_prepare_by: string | null;
+    status: 'ok' | 'warn' | 'critical' | 'unknown';
+    note: string | null;
+  };
 }
 
 export interface MetricSample {
@@ -2930,6 +2979,11 @@ export const api = {
     http<{ latest: MetricSample | null }>('/api/health/live'),
 
   healthSaas: () => http<SaasMetrics>('/api/health/saas'),
+
+  // 0.18.13 — capacity projection. Server-side records a snapshot per
+  // call so the projection window keeps refreshing as the operator
+  // visits the page.
+  healthCapacity: () => http<CapacityProjection>('/api/health/capacity'),
 
   // ── Backups (Phase 7.6) ──────────────────────────────────
   listBackupsHistory: () =>

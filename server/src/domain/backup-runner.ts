@@ -220,6 +220,18 @@ export async function runBackup(input: RunBackupInput): Promise<BackupRecord> {
         RETURNING ${COLUMNS}`,
       [dbBytes, attachmentsBytes, total, secondaryWarning ?? null, id],
     );
+
+    // 0.18.13 — record a capacity snapshot after every successful
+    // backup. The backup scheduler runs at least daily on configured
+    // instances, so this guarantees the projection always has fresh
+    // data. Imported lazily to avoid a circular import (capacity-
+    // projector imports collectHealth which references backup-runner).
+    void import('./capacity-projector.js')
+      .then((m) => m.recordCapacitySnapshot())
+      .catch(() => {
+        /* best-effort: capacity snapshot failure must never block backup */
+      });
+
     return r.rows[0]!;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

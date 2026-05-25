@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { collectHealth } from '../domain/health.js';
 import { metricsRecorder } from '../domain/metrics-recorder.js';
 import { collectSaasMetrics } from '../domain/saas-health.js';
+import { projectCapacity } from '../domain/capacity-projector.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
 
 /**
@@ -51,5 +52,14 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/health/saas', async (req, reply) => {
     if (!requireSuperAdmin(req, reply)) return;
     return collectSaasMetrics();
+  });
+
+  // 0.18.13 — capacity projection. Writes a fresh snapshot for today
+  // as a side effect (so the next read has one more data point) and
+  // returns the bytes-per-day growth + projected "days until 80%/95%
+  // full" + a recommended swap-prep date.
+  app.get('/api/health/capacity', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+    return projectCapacity();
   });
 }

@@ -44,6 +44,7 @@ application — nothing is "all or nothing."
 | **0.20.x** | **Agentic AI moat — proactive insights, staged actions, voice** | 📋 Planned |
 | **0.21.x** | **Universal customer asks competitors haven't delivered** | 📋 Planned |
 | **0.22.x** | **Production launch readiness — Stripe live, ToS, observability** | 🔜 Tomorrow |
+| **0.23.x** | **Scaling — vertical upgrade runbook + horizontal architecture (read replicas, multi-instance app, object-store attachments)** | 📋 Planned |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -960,6 +961,76 @@ version bump:
 - **Native mobile** — re-evaluate at 12 months. The PWA
   story has to fail (drop-off attributable to install/UX)
   before a native build earns its complexity.
+
+---
+
+## 0.23.x — Scaling 📋
+
+**Goal:** Stop reaching for "stand up a new server" as the answer to "we're running out of capacity." Build the runbook for vertical upgrades and the architecture for horizontal scale so growth doesn't require an emergency migration.
+
+The trigger for this series is the **/health → Server capacity** widget (0.18.13). Once that widget says "prepare a replacement environment by [date]," we want the migration to be a 1-hour boring procedure, not a project.
+
+### 0.23.0 — Vertical-scale runbook ⬆️
+
+Document and rehearse the cheapest answer to "we need more capacity": **bigger box.** Until traffic justifies the architectural complexity of horizontal scale, vertical is the right move.
+
+Deliverables:
+- `docs/RUNBOOK_VERTICAL_SCALE.md` — step-by-step for moving SmrtCash to a beefier VM with minimal downtime:
+  - Pre-flight: take a backup (`scripts/backup.mjs`), confirm `health-capacity` projection vs. the new VM's capacity ceiling, schedule maintenance window.
+  - Provision the new VM (CPU/RAM/disk sized to the next 12 months of projected growth + 50% headroom).
+  - Sync: copy `/data` via rsync while the old box is still serving, then short maintenance window for final delta + DB freeze.
+  - DNS swap via Cloudflare (low TTL ahead of time).
+  - Verification: hit `/api/health`, walk a smoke checklist (login, dashboard, attach receipt, run scan, sync transactions, view Stripe portal).
+  - Rollback: keep the old VM warm for 24h.
+- **Reusable migration script** at `scripts/migrate-server.sh` that rolls those steps into one prompt-driven flow.
+- **Capacity ceiling estimates** documented per Hostinger VM tier (or chosen host's equivalent) so the operator knows when the next-bigger tier still won't be enough.
+
+Expected lifespan of vertical-only scaling: probably good through low-thousands of paying tenants. Beyond that → 0.23.1+.
+
+### 0.23.1 — Stateless app + shared session store ↔️
+
+Today the app is single-instance: one container, in-memory rate limit state, file-system attachments. Sharing instances behind a load balancer requires eliminating per-instance state.
+
+Deliverables:
+- **Redis (or Valkey) integration** for the rolling rate-limit counters (when F-01 lands those — see security audit), the OCR retry queue, and any short-lived process-bound state.
+- **Sessions stay in Postgres** (already there — `sessions` table). No change needed; this slice is mostly about NOT introducing new instance-local state going forward.
+- **Health-check endpoint** that returns 200 once the app is ready to accept traffic and 503 during startup migrations. Required for a load balancer to do anything sensible during deploys.
+- **Multi-instance Docker compose** sample at `docker-compose.scale.yml` showing N app containers behind an Nginx LB on a single host — the "scale up before scale out" intermediate step.
+
+### 0.23.2 — Attachments to object storage 📦
+
+Today receipts live on the app's local filesystem encrypted with the per-tenant DEK. That's a hard ceiling on horizontal scale because every app instance needs the same files.
+
+Deliverables:
+- **S3-compatible client** (R2 / Backblaze B2 / Wasabi / actual AWS S3) behind a small adapter — the encryption layer stays in our process; the storage layer just gets a new backend.
+- **Migration script** `scripts/migrate-attachments-to-s3.mjs` that walks `/data/attachments`, uploads each file as `<bucket>/<tenant_id>/<attachment_id>`, verifies the upload, then deletes the local file. Resumable.
+- **Setting**: `ATTACHMENT_STORAGE=local|s3` with `S3_*` config keys. Defaults to `local` so self-host installs aren't surprised.
+- **Backup script** updates: when `ATTACHMENT_STORAGE=s3`, backups skip the attachments tar and the operator relies on S3 lifecycle/versioning for that side.
+- **F-31 hardening**: container can finally run with `read-only` rootfs since attachments no longer write to the local FS.
+
+### 0.23.3 — Postgres read replica + connection pooling 📊
+
+Once we're running N app instances, the DB becomes the next bottleneck. Two moves:
+
+Deliverables:
+- **PgBouncer** in front of Postgres (transaction-mode pooling) so app instances don't each consume a fan-out of long-held connections.
+- **Read-replica routing** — a `pool.replicaQuery()` helper that targets a read-only Postgres replica for the dashboard, reports, and assistant read tools. Writes still go to the primary. Transparent to the rest of the codebase because we wrap the existing `pool.query()` with the replica choice at the call site.
+- **Replica lag awareness** — if the replica is more than 30s behind, fall back to the primary so the user never sees stale data.
+- **Documentation** at `docs/RUNBOOK_HORIZONTAL_SCALE.md` covering the cutover.
+
+### 0.23.4 — Multi-region (optional, customer-driven) 🌎
+
+Probably 2027+. Only worth doing once we have measurable EU/AU/AP customer base. Sketch only:
+- Postgres logical replication across regions
+- S3 cross-region replication (or per-region buckets)
+- Latency-based DNS routing
+- Per-region data residency for GDPR (revisit F-33's deferred-EU decision when we get here)
+
+### What's deliberately out of scope (and why)
+
+- **Sharding Postgres**. Useless at SmrtCash's scale and a constant complexity tax. Don't go there unless we see >100M txn rows per tenant (Personal Finance Lover's Million-Row Power User is a real edge case but not a planning constraint).
+- **Microservices**. The monolith is right for this product. Splitting `assistant` or `billing` into separate services would multiply the deploy surface for no real isolation benefit — they all share the same tenant data anyway.
+- **Server-side rendering**. The PWA model works for personal finance. SSR would add a node runtime in front of the static SPA assets for no measurable benefit.
 
 ---
 

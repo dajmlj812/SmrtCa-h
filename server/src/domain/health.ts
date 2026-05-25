@@ -1,5 +1,6 @@
-import { stat, readdir } from 'node:fs/promises';
+import { stat, readdir, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
+import os from 'node:os';
 import v8 from 'node:v8';
 import { pool } from '../db/pool.js';
 import { config } from '../config.js';
@@ -56,11 +57,48 @@ export interface StorageMetrics {
   backup_count: number;
 }
 
+/**
+ * Host-level metrics — anything that comes from the OS rather than from
+ * the Node process or the application database. Drives the capacity
+ * widget on /health: without disk-free we'd have no way to project
+ * "days until full." `os.freemem()` / `os.totalmem()` reflect the
+ * cgroup-visible memory inside a container, which is what we want.
+ *
+ * On Windows, `os.loadavg()` returns [0, 0, 0] (POSIX-only concept).
+ * The frontend handles that case explicitly.
+ */
+export interface DiskMount {
+  /** The on-disk path we asked about. Two paths in two cgroups can share a mount. */
+  path: string;
+  /** `mount` label — for prod this is usually just the mount or "/" path the path resolves to */
+  label: string;
+  total_bytes: number;
+  free_bytes: number;
+  used_bytes: number;
+  percent_used: number;
+}
+
+export interface HostMetrics {
+  hostname: string;
+  platform: string;
+  arch: string;
+  cpu_count: number;
+  /** UNIX 1/5/15-minute load averages. [0,0,0] on Windows. */
+  load_average: [number, number, number];
+  uptime_seconds: number;
+  memory_total_bytes: number;
+  memory_free_bytes: number;
+  memory_used_bytes: number;
+  memory_percent_used: number;
+  disks: DiskMount[];
+}
+
 export interface HealthSnapshot {
   generated_at: string;
   app: AppMetrics;
   db: DbMetrics;
   storage: StorageMetrics;
+  host: HostMetrics;
 }
 
 const APP_VERSION = process.env.npm_package_version ?? '0.7.6';
@@ -77,17 +115,99 @@ const TRACKED_TABLES = [
 ];
 
 export async function collectHealth(): Promise<HealthSnapshot> {
-  const [app, db, storage] = await Promise.all([
+  const [app, db, storage, host] = await Promise.all([
     collectApp(),
     collectDb(),
     collectStorage(),
+    collectHost(),
   ]);
   return {
     generated_at: new Date().toISOString(),
     app,
     db,
     storage,
+    host,
   };
+}
+
+/**
+ * Host CPU / memory / disk snapshot.
+ *
+ * Disk: we statfs() each of the directories the application actually
+ * writes to (attachments + backups). Inside a container these often
+ * resolve to the same physical mount, which is fine — the widget
+ * deduplicates on the resolved label.
+ *
+ * Memory: `os.totalmem()` and `os.freemem()` honor container cgroup
+ * limits on modern Node (v22), so values reflect the container's
+ * memory ceiling, not the entire host's RAM. That's what we want for
+ * capacity planning when the app runs in a container.
+ */
+async function collectHost(): Promise<HostMetrics> {
+  const memoryTotal = os.totalmem();
+  const memoryFree = os.freemem();
+  const memoryUsed = memoryTotal - memoryFree;
+
+  const disks = await collectDisks();
+
+  return {
+    hostname: os.hostname(),
+    platform: os.platform(),
+    arch: os.arch(),
+    cpu_count: os.cpus().length,
+    load_average: os.loadavg() as [number, number, number],
+    uptime_seconds: Math.floor(os.uptime()),
+    memory_total_bytes: memoryTotal,
+    memory_free_bytes: memoryFree,
+    memory_used_bytes: memoryUsed,
+    memory_percent_used:
+      memoryTotal > 0 ? (memoryUsed / memoryTotal) * 100 : 0,
+    disks,
+  };
+}
+
+async function collectDisks(): Promise<DiskMount[]> {
+  // We probe the dirs the app writes to. Operators on a multi-mount
+  // setup who put attachments on a different volume than backups will
+  // see two separate entries. On a typical single-volume install both
+  // entries resolve to the same statfs and dedup below collapses them.
+  const probePaths = [
+    { path: config.attachmentsDir, label: 'attachments' },
+    { path: await resolveBackupDir(), label: 'backups' },
+  ];
+  const results: DiskMount[] = [];
+  const seen = new Set<string>();
+  for (const probe of probePaths) {
+    try {
+      const fs = await statfs(probe.path);
+      const total = fs.blocks * fs.bsize;
+      const free = fs.bavail * fs.bsize;
+      const used = total - free;
+      // Dedupe across probes that resolve to the same fs (same total
+      // bytes + bavail is a near-certain match in practice).
+      const key = `${total}:${fs.bavail}`;
+      if (seen.has(key)) {
+        // Already covered — just rename the label to show both purposes.
+        const existing = results.find(
+          (r) => r.total_bytes === total && r.free_bytes === free,
+        );
+        if (existing) existing.label += ` + ${probe.label}`;
+        continue;
+      }
+      seen.add(key);
+      results.push({
+        path: probe.path,
+        label: probe.label,
+        total_bytes: total,
+        free_bytes: free,
+        used_bytes: used,
+        percent_used: total > 0 ? (used / total) * 100 : 0,
+      });
+    } catch {
+      /* missing path or unsupported platform — skip silently */
+    }
+  }
+  return results;
 }
 
 function collectApp(): Promise<AppMetrics> {
