@@ -9,12 +9,43 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.16 shipped. 0.17.16 introduces per-account
-budget plans — tenants can run AutoMagic multiple times,
-each producing a named plan scoped to its own accounts and
-paycheck cadence. The Paycheck-to-Paycheck section groups
-its cards by plan; the Monthly Budget rolls all plans up
-into one combined view._
+_0.17.0–0.17.17 shipped. 0.17.17 drops the "household-wide"
+NULL-account fallback for bills and recurring income — an
+untagged bill no longer leaks onto every plan's card._
+
+---
+
+## [0.17.17] — 2026-05-24 — Strict account scope for bills + income
+
+Pre-0.17.17 a bill or recurring income source with
+`account_id = NULL` was treated as "household-wide" — it
+joined every period card regardless of that period's plan
+scope. That was fine when a tenant had ONE budget; with
+per-account plans (0.17.16) it leaks the untagged item onto
+EVERY plan's card.
+
+Concrete case: GM Financial and We Energies on the test box
+had NULL `account_id` (migration 036's first-word heuristic
+didn't match any transactions for them). Both showed on the
+Chase-5793 plan's period card even though they shouldn't
+belong to that scope.
+
+### Change
+
+`/api/budgets/period(s)` and `buildWizardPreview` now apply
+a strict filter: when a plan/scope is set, only bills and
+income tagged to one of the scope's accounts appear. NULL
+`account_id` rows are excluded from every scoped plan.
+Unscoped queries (no plan filter) still show everything.
+
+### Migration
+
+No schema change. Existing untagged bills + income will
+silently stop appearing on plan cards until their
+`account_id` is set. The next slice will add UI to assign
+account_id from /bills.
+
+15 budget + wizard tests pass.
 
 ---
 

@@ -456,18 +456,20 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
       ? input.savingsLeftoverPctOverride
       : savingsLeftoverPctGlobal;
 
-  // 0.17.8 — when accountIds is set, include bills/income tied to
-  // those accounts AS WELL AS rows with NULL account_id (the
-  // "household-wide" set). Null-account rows apply to every
-  // account by design, so excluding them when the user picks a
-  // subset would silently drop legitimate items.
+  // 0.17.17 — strict scope. Pre-0.17.16 we included NULL
+  // account_id rows as "household-wide" so a tenant with only
+  // one budget wouldn't lose untagged bills. With per-account
+  // plans this leaks: an untagged bill would join every plan's
+  // preview. Now: if the wizard runs with an account filter,
+  // ONLY bills/income tagged to one of those accounts feed in.
+  // No filter = include everything (untagged + tagged).
   const bills = (
     await pool.query<BillRow>(
       `SELECT id, name, amount_cents, frequency, next_due_date
          FROM bills
         WHERE active
           AND tenant_id = $1
-          AND ($2::uuid[] IS NULL OR account_id IS NULL OR account_id = ANY($2::uuid[]))`,
+          AND ($2::uuid[] IS NULL OR account_id = ANY($2::uuid[]))`,
       [input.tenantId, accountIds],
     )
   ).rows;
@@ -477,7 +479,7 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
          FROM recurring_income
         WHERE active
           AND tenant_id = $1
-          AND ($2::uuid[] IS NULL OR account_id IS NULL OR account_id = ANY($2::uuid[]))`,
+          AND ($2::uuid[] IS NULL OR account_id = ANY($2::uuid[]))`,
       [input.tenantId, accountIds],
     )
   ).rows;

@@ -161,12 +161,34 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.16 shipped. 0.17.16 introduces per-account
-budget plans — tenants can run AutoMagic multiple times,
-each producing a named plan scoped to its own accounts and
-paycheck cadence. The Paycheck-to-Paycheck section groups
-its cards by plan; the Monthly Budget rolls all plans up
-into one combined view.</em></p>
+<p><em>0.17.0–0.17.17 shipped. 0.17.17 drops the &quot;household-wide&quot;
+NULL-account fallback for bills and recurring income — an
+untagged bill no longer leaks onto every plan&#39;s card.</em></p>
+<hr>
+<h2 id="01717-2026-05-24-strict-account-scope-for-bills-income">[0.17.17] — 2026-05-24 — Strict account scope for bills + income<a class="heading-anchor" href="#01717-2026-05-24-strict-account-scope-for-bills-income">#</a></h2>
+<p>Pre-0.17.17 a bill or recurring income source with
+<code>account_id = NULL</code> was treated as &quot;household-wide&quot; — it
+joined every period card regardless of that period&#39;s plan
+scope. That was fine when a tenant had ONE budget; with
+per-account plans (0.17.16) it leaks the untagged item onto
+EVERY plan&#39;s card.</p>
+<p>Concrete case: GM Financial and We Energies on the test box
+had NULL <code>account_id</code> (migration 036&#39;s first-word heuristic
+didn&#39;t match any transactions for them). Both showed on the
+Chase-5793 plan&#39;s period card even though they shouldn&#39;t
+belong to that scope.</p>
+<h3 id="change">Change<a class="heading-anchor" href="#change">#</a></h3>
+<p><code>/api/budgets/period(s)</code> and <code>buildWizardPreview</code> now apply
+a strict filter: when a plan/scope is set, only bills and
+income tagged to one of the scope&#39;s accounts appear. NULL
+<code>account_id</code> rows are excluded from every scoped plan.
+Unscoped queries (no plan filter) still show everything.</p>
+<h3 id="migration">Migration<a class="heading-anchor" href="#migration">#</a></h3>
+<p>No schema change. Existing untagged bills + income will
+silently stop appearing on plan cards until their
+<code>account_id</code> is set. The next slice will add UI to assign
+account_id from /bills.</p>
+<p>15 budget + wizard tests pass.</p>
 <hr>
 <h2 id="01716-2026-05-24-per-account-budget-plans">[0.17.16] — 2026-05-24 — Per-account budget plans<a class="heading-anchor" href="#01716-2026-05-24-per-account-budget-plans">#</a></h2>
 <p>Pre-0.17.16 a tenant effectively had one budget — the wizard
@@ -6200,7 +6222,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-24 23:14:36 UTC · commit f88c092</span>
+  <span>Generated 2026-05-25 00:03:58 UTC · commit 8197a37</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

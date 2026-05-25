@@ -800,18 +800,22 @@ function buildPeriodSummary(
     activeRows.find((r) => r.included_account_ids !== null)
       ?.included_account_ids ?? null;
 
-  // 0.17.12 — filter bills + income by the period's account
-  // scope BEFORE walking instances. NULL account_id on a bill
-  // or income source means "household-wide" — always included.
-  // The scope is null = include everything (legacy behavior).
+  // 0.17.12 — filter bills + income by the period's account scope.
+  // 0.17.17 — strict semantics: a bill/income WITHOUT an
+  // account_id no longer leaks onto scoped plans as "household-
+  // wide." With multiple plans per tenant, "show on every plan"
+  // double-counts; the user must tag the bill to an account
+  // (or leave it untagged and accept that it doesn't appear on
+  // any plan card). NULL scope (no plan filter) still shows
+  // everything.
   const scopedBills = periodScope
     ? ctx.bills.filter(
-        (b) => b.account_id === null || periodScope.includes(b.account_id),
+        (b) => b.account_id !== null && periodScope.includes(b.account_id),
       )
     : ctx.bills;
   const scopedIncome = periodScope
     ? ctx.income.filter(
-        (i) => i.account_id === null || periodScope.includes(i.account_id),
+        (i) => i.account_id !== null && periodScope.includes(i.account_id),
       )
     : ctx.income;
 
