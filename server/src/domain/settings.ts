@@ -296,16 +296,20 @@ export function applyToConfig(key: SettingKey, value: string): void {
       // Same story — the buffer was parsed at boot. We could re-parse
       // here but the routes that READ encrypted attachments use the
       // already-captured value. Restart required.
+      //
+      // Hex check first: a 64-char hex string also matches the base64
+      // regex below and would decode to 48 bytes (wrong answer). Hex
+      // is the stricter format so it goes first.
       try {
         const trimmed = value.trim();
-        if (/^[A-Za-z0-9+/]+=*$/.test(trimmed)) {
+        if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+          (config as { attachmentEncryptionKey: Buffer | null }).attachmentEncryptionKey =
+            Buffer.from(trimmed, 'hex');
+        } else if (/^[A-Za-z0-9+/]+=*$/.test(trimmed)) {
           const b = Buffer.from(trimmed, 'base64');
           if (b.length === 32) {
             (config as { attachmentEncryptionKey: Buffer | null }).attachmentEncryptionKey = b;
           }
-        } else if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-          (config as { attachmentEncryptionKey: Buffer | null }).attachmentEncryptionKey =
-            Buffer.from(trimmed, 'hex');
         }
       } catch {
         /* tolerate parse failure; restart will fix */

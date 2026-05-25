@@ -14,6 +14,7 @@
     "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix web",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
+    "rotate-kek": "node scripts/rotate-kek.mjs",
     "create-super-admin": "node scripts/create-super-admin.mjs",
     "docs:html": "node scripts/build-docs-html.mjs"
   },

@@ -326,21 +326,20 @@ Code review of `attachments/tenant-keys.ts`: well-structured. Rotation function 
 
 ---
 
-### F-15 — No KEK rotation function (P2)
+### F-15 — No KEK rotation function (P2) ✅ Fixed 2026-05-25
 
-The codebase has `rotateTenantKey()` which rotates a tenant's DEK (re-encrypts everything under the new DEK, rewraps with the **current** KEK). There is **no function that rotates the KEK itself**.
+**Status: RESOLVED.** This finding bit us in real-time during the audit when we rotated the test-server KEK without re-wrapping the DEKs — every subsequent attachment upload hit "Unsupported state or unable to authenticate data" (AES-GCM tag mismatch).
 
-To rotate the KEK an operator would have to:
-1. Read every `tenant_encryption_keys.wrapped_dek` row,
-2. Unwrap with the old KEK,
-3. Rewrap with the new KEK,
-4. Update the rows.
+**Resolution**:
+- Added `server/src/attachments/kek-rotation.ts` exporting `rotateKek(oldKek, newKek)` that rewraps every `tenant_encryption_keys.wrapped_dek`, re-encrypts every `plaid_items.access_token_encrypted`, and re-encrypts every `ofx_dc_connections.{username,password}_encrypted` in a single DB transaction.
+- Added `scripts/rotate-kek.mjs` CLI (npm script `rotate-kek`) that generates a fresh KEK (or accepts a specific one), confirms with the operator, runs the rotation, and atomically swaps `.env` with a `.env.bak.<timestamp>` backup.
+- Added `docs/RUNBOOK_KEK_ROTATION.md` with the full procedure, pre-flight checks (take a backup!), and recovery paths.
+- Side-fix in `server/src/domain/settings.ts:295-309`: the `ATTACHMENT_ENCRYPTION_KEY` setter checked base64-regex before hex-regex, but a 64-char hex string also matches the base64 regex and decodes to 48 bytes (wrong). Reordered: hex check first.
+- Integration test at `server/tests/integration/kek-rotation.test.ts` (7 cases) pins the contract.
 
-Without this function, swapping `ATTACHMENT_ENCRYPTION_KEY` to a new value bricks every existing attachment (DEKs can no longer be unwrapped). The vision doc (`docs/ROADMAP.md`) mentions a "one-click rotation flow at `/system/tenants/:id/rotate-encryption-key`" — that's DEK rotation, not KEK rotation. Naming is misleading.
+**Original finding text** (preserved for context):
 
-**Fix**: add `rotateKek(oldKek, newKek)` that does the rewrap-all-DEKs loop in a transaction. Wire to a super-admin endpoint. Document the runbook: "set NEW_ATTACHMENT_ENCRYPTION_KEY → call rotateKek → swap env var → restart".
-
-File: add to `server/src/attachments/tenant-keys.ts`.
+> The codebase has `rotateTenantKey()` which rotates a tenant's DEK (re-encrypts everything under the new DEK, rewraps with the **current** KEK). There is **no function that rotates the KEK itself**. Swapping `ATTACHMENT_ENCRYPTION_KEY` to a new value bricks every existing attachment (DEKs can no longer be unwrapped).
 
 ---
 
