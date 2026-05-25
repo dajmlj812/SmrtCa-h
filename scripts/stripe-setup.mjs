@@ -75,11 +75,15 @@ const PLANS = [
 // ── Arg parsing ──────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const args = { dryRun: false, portalOnly: false };
+  const args = { dryRun: false, portalOnly: false, allowLive: false };
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--dry-run') args.dryRun = true;
     else if (flag === '--portal-only') args.portalOnly = true;
+    // 0.18.14 — explicit opt-in for live mode. Without this flag, an
+    // sk_live_... key trips the constructor guard. Required for the
+    // prod-cutover provisioning flow.
+    else if (flag === '--allow-live') args.allowLive = true;
     else if (flag === '--help' || flag === '-h') args.help = true;
   }
   return args;
@@ -89,9 +93,10 @@ function usage() {
   console.log(
     [
       'Usage:',
-      '  node scripts/stripe-setup.mjs                # create / verify products + prices',
-      '  node scripts/stripe-setup.mjs --portal-only  # just configure Customer Portal',
-      '  node scripts/stripe-setup.mjs --dry-run      # print what would happen',
+      '  node scripts/stripe-setup.mjs                  # create / verify products + prices',
+      '  node scripts/stripe-setup.mjs --portal-only    # just configure Customer Portal',
+      '  node scripts/stripe-setup.mjs --dry-run        # print what would happen',
+      '  node scripts/stripe-setup.mjs --allow-live     # opt in to live mode (prod cutover)',
     ].join('\n'),
   );
 }
@@ -103,23 +108,25 @@ function fmt(cents) {
 }
 
 class Stripe {
-  constructor(secretKey) {
+  constructor(secretKey, allowLive = false) {
     if (!secretKey) {
       throw new Error('STRIPE_SECRET_KEY is required (set it in .env).');
     }
-    if (secretKey.startsWith('sk_live_')) {
+    if (secretKey.startsWith('sk_live_') && !allowLive) {
       throw new Error(
-        'Refusing to run against a LIVE key (sk_live_...). This script is ' +
-          'for test-mode setup only. Re-run with a sk_test_... key.',
+        'Refusing to run against a LIVE key (sk_live_...). Re-run with ' +
+          '--allow-live to provision your live Stripe account. Required ' +
+          'for the prod cutover; otherwise this script is for test mode.',
       );
     }
     if (!secretKey.startsWith('sk_')) {
       throw new Error(
         `STRIPE_SECRET_KEY doesn't look right (got "${secretKey.slice(0, 8)}..."). ` +
-          'It should start with "sk_test_" for test mode.',
+          'It should start with "sk_test_" (test mode) or "sk_live_" (prod, with --allow-live).',
       );
     }
     this.secretKey = secretKey;
+    this.isLive = secretKey.startsWith('sk_live_');
   }
 
   async req(method, path, params) {
@@ -370,15 +377,21 @@ async function main() {
     usage();
     process.exit(0);
   }
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const baseUrl = process.env.STRIPE_PUBLIC_BASE_URL ?? 'http://localhost:4000';
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, args.allowLive);
+  const baseUrl =
+    process.env.PUBLIC_BASE_URL ??
+    process.env.STRIPE_PUBLIC_BASE_URL ??
+    'http://localhost:4000';
 
   console.log(
     args.dryRun
       ? '── DRY RUN — no changes will be written ──'
       : '── stripe-setup ──',
   );
-  console.log(`  mode:     test (key prefix ${stripe.secretKey.slice(0, 8)}...)`);
+  console.log(`  mode:     ${stripe.isLive ? '🔴 LIVE' : 'test'} (key prefix ${stripe.secretKey.slice(0, 8)}...)`);
+  if (stripe.isLive && !args.dryRun) {
+    console.log('  ⚠️  This will create / verify products + prices in the LIVE Stripe account.');
+  }
   console.log(`  base url: ${baseUrl}`);
   console.log('');
 
