@@ -766,7 +766,6 @@ function SettingRow({
         setting.restart_required ? 'is-restart' : 'is-live'
       } ${recentlySaved ? 'settings-row-saved' : ''}`}
     >
-      <div className="settings-row-accent" aria-hidden />
       <div className="settings-row-body">
         <div className="settings-row-head">
           <div className="settings-row-label">
@@ -936,6 +935,7 @@ function SettingRow({
           </button>
         )}
       </div>
+      <div className="settings-row-accent" aria-hidden />
     </div>
   );
 }
