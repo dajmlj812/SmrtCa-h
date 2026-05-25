@@ -957,6 +957,30 @@ export interface HealthSlowQuery {
   param_count: number;
 }
 
+export interface PerformanceRecommendation {
+  id: string;
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  summary: string;
+  evidence: string;
+  recommendation: string;
+  effort: 'low' | 'medium' | 'high';
+}
+
+export interface PerformanceReport {
+  generated_at: string;
+  duration_ms: number;
+  checks_run: number;
+  recommendations: PerformanceRecommendation[];
+}
+
+export interface PerformanceState {
+  latest: PerformanceReport | null;
+  next_scheduled_at: string | null;
+  running: boolean;
+  interval_hours: number;
+}
+
 export interface CapacityProjection {
   current: {
     db_bytes: number;
@@ -3010,6 +3034,13 @@ export const api = {
     http<{ threshold_ms: number; entries: HealthSlowQuery[] }>(
       `/api/health/slow-queries?limit=${limit}`,
     ),
+
+  // 0.18.13 — performance recommendations (scheduler + last-run).
+  healthPerformance: () => http<PerformanceState>('/api/health/performance'),
+
+  // 0.18.13 — force the analyzer to run immediately. Super-admin only.
+  healthPerformanceRun: () =>
+    http<PerformanceState>('/api/health/performance/run', { method: 'POST' }),
 
   // ── Backups (Phase 7.6) ──────────────────────────────────
   listBackupsHistory: () =>

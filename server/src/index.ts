@@ -2,6 +2,7 @@ import { buildApp } from './app.js';
 import { config } from './config.js';
 import { getOcrProvider } from './ocr/factory.js';
 import { sweepPendingOcr } from './ocr/extract-service.js';
+import { startPerformanceScheduler } from './domain/performance-scheduler.js';
 
 const app = await buildApp({ logger: true });
 
@@ -23,3 +24,8 @@ if (ocrProvider) {
     })
     .catch((err) => app.log.warn({ err }, 'OCR sweep failed'));
 }
+
+// 0.18.13 — fire up the performance analyzer scheduler. First run
+// happens ~30s after boot; subsequent runs honor the
+// PERFORMANCE_ANALYSIS_INTERVAL_HOURS setting.
+startPerformanceScheduler();

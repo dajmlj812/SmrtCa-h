@@ -15,6 +15,8 @@ import {
   type HealthSlowQuery,
   type HealthSnapshot,
   type MetricSample,
+  type PerformanceRecommendation,
+  type PerformanceState,
   type SaasMetrics,
 } from '../api';
 
@@ -173,6 +175,9 @@ export function HealthPage() {
         <>
           {/* ── Capacity projection (top — what plan-ahead operators look at) ─ */}
           {capacity && <CapacityWidget capacity={capacity} />}
+
+          {/* ── Performance recommendations (scheduled + on-demand) ─ */}
+          <PerformanceWidget />
 
           {/* ── Host resources (disk free, host memory, load average) ─ */}
           <HostWidget host={snapshot.host} />
@@ -972,4 +977,184 @@ function formatLogTs(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleTimeString([], { hour12: false });
+}
+
+/**
+ * 0.18.13 — performance recommendations widget.
+ *
+ * Shows the latest scheduled analysis result + scheduler metadata
+ * (next-run, interval setting, currently-running flag). Auto-loads on
+ * page open + auto-refreshes every 60s so the next-run countdown
+ * stays current (the actual analysis runs on the server every
+ * PERFORMANCE_ANALYSIS_INTERVAL_HOURS hours). The "Run now" button
+ * fires an immediate run for ad-hoc investigation.
+ *
+ * Severity grouping: critical at top, then warning, then info. Empty
+ * state ("everything looks fine") matters too — it's positive
+ * feedback that the system is healthy.
+ */
+function PerformanceWidget() {
+  const [state, setState] = useState<PerformanceState | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const r = await api.healthPerformance();
+      setState(r);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load performance report');
+    }
+  }
+  async function runNow() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.healthPerformanceRun();
+      setState(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to run analyzer');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // Refresh the scheduler metadata every 60s so the "next run in
+    // X" indicator stays roughly current. The actual analysis runs
+    // server-side on its own schedule (default 24h).
+    const t = setInterval(() => void load(), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (!state) {
+    return (
+      <Card title="Performance recommendations">
+        <p className="empty">Loading…</p>
+      </Card>
+    );
+  }
+
+  const latest = state.latest;
+  const recs = latest?.recommendations ?? [];
+  const counts = {
+    critical: recs.filter((r) => r.severity === 'critical').length,
+    warning: recs.filter((r) => r.severity === 'warning').length,
+    info: recs.filter((r) => r.severity === 'info').length,
+  };
+
+  return (
+    <div className="card performance-widget">
+      <div className="performance-header">
+        <div>
+          <h3 style={{ margin: 0 }}>Performance recommendations</h3>
+          <div className="muted small" style={{ marginTop: 4 }}>
+            {latest
+              ? `Last analyzed ${relativeTime(latest.generated_at)} · ${latest.checks_run} checks · ${latest.duration_ms} ms`
+              : 'No analysis has run yet (boot-time analysis kicks off ~30 s after restart).'}
+            {state.next_scheduled_at &&
+              ` · Next ${relativeTime(state.next_scheduled_at)}`}
+            {` · Every ${state.interval_hours}h`}
+          </div>
+        </div>
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => void runNow()}
+          disabled={loading || state.running}
+        >
+          {loading || state.running ? 'Running…' : 'Run now'}
+        </button>
+      </div>
+
+      {error && <div className="banner error">{error}</div>}
+
+      {!latest ? (
+        <p className="muted">Click "Run now" to generate the first report.</p>
+      ) : recs.length === 0 ? (
+        <div className="performance-clean">
+          ✅ <strong>All checks passed.</strong>{' '}
+          <span className="muted">
+            No issues detected across {latest.checks_run} runtime checks.
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="performance-counts">
+            {counts.critical > 0 && (
+              <span className="pill warn">
+                {counts.critical} critical
+              </span>
+            )}
+            {counts.warning > 0 && (
+              <span className="pill caution">{counts.warning} warning</span>
+            )}
+            {counts.info > 0 && (
+              <span className="pill ok">{counts.info} info</span>
+            )}
+          </div>
+          <div className="performance-list">
+            {recs.map((r) => (
+              <RecommendationCard key={r.id} rec={r} />
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="muted small performance-config-hint">
+        Adjust the refresh interval in /settings →{' '}
+        <code>PERFORMANCE_ANALYSIS_INTERVAL_HOURS</code> (1-168 hours,
+        default 24).
+      </div>
+    </div>
+  );
+}
+
+function RecommendationCard({ rec }: { rec: PerformanceRecommendation }) {
+  const sevClass =
+    rec.severity === 'critical'
+      ? 'critical'
+      : rec.severity === 'warning'
+        ? 'warning'
+        : 'info';
+  return (
+    <details className={`rec-card rec-${sevClass}`}>
+      <summary>
+        <span className={`pill ${sevClass === 'critical' ? 'warn' : sevClass === 'warning' ? 'caution' : 'ok'}`}>
+          {rec.severity}
+        </span>
+        <span className="rec-title">{rec.title}</span>
+        <span className="muted small rec-effort">{rec.effort} effort</span>
+      </summary>
+      <div className="rec-body">
+        <div className="rec-section">
+          <strong>What's happening</strong>
+          <p>{rec.summary}</p>
+        </div>
+        <div className="rec-section">
+          <strong>Evidence</strong>
+          <p className="rec-evidence">{rec.evidence}</p>
+        </div>
+        <div className="rec-section">
+          <strong>Recommendation</strong>
+          <p>{rec.recommendation}</p>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function relativeTime(iso: string): string {
+  const d = new Date(iso).getTime();
+  const diff = d - Date.now();
+  const abs = Math.abs(diff);
+  const min = Math.round(abs / 60_000);
+  if (min < 1) return 'just now';
+  if (min < 60) return diff < 0 ? `${min}m ago` : `in ${min}m`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return diff < 0 ? `${hr}h ago` : `in ${hr}h`;
+  const days = Math.round(hr / 24);
+  return diff < 0 ? `${days}d ago` : `in ${days}d`;
 }

@@ -4,6 +4,11 @@ import { metricsRecorder } from '../domain/metrics-recorder.js';
 import { collectSaasMetrics } from '../domain/saas-health.js';
 import { projectCapacity } from '../domain/capacity-projector.js';
 import { diagnosticsRecorder } from '../domain/diagnostics-recorder.js';
+import {
+  getCurrentIntervalHours,
+  getSchedulerState,
+  runManualAnalysis,
+} from '../domain/performance-scheduler.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
 
 /**
@@ -89,4 +94,28 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
       };
     },
   );
+
+  // 0.18.13 — performance recommendations (dynamic).
+  //
+  // GET returns the latest scheduled-analysis result + scheduler
+  // metadata (when the next run will fire, current interval setting).
+  // The analyzer runs ~30s after boot, then every
+  // PERFORMANCE_ANALYSIS_INTERVAL_HOURS — but the operator can also
+  // POST to force an immediate rerun. POST is super-admin only;
+  // GET is super-admin only too because the contents leak operational
+  // posture (slow queries observed, error rates, etc.).
+  app.get('/api/health/performance', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+    const state = getSchedulerState();
+    const intervalHours = await getCurrentIntervalHours();
+    return { ...state, interval_hours: intervalHours };
+  });
+
+  app.post('/api/health/performance/run', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+    await runManualAnalysis();
+    const state = getSchedulerState();
+    const intervalHours = await getCurrentIntervalHours();
+    return { ...state, interval_hours: intervalHours };
+  });
 }

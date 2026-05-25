@@ -3228,6 +3228,105 @@ code {
   padding-top: 12px;
 }
 
+/* 0.18.13 — performance recommendations widget. */
+.performance-widget {
+  margin-bottom: 16px;
+}
+.performance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.performance-counts {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.performance-clean {
+  padding: 12px 14px;
+  background: rgba(34, 197, 94, 0.10);
+  border-left: 4px solid rgb(34, 197, 94);
+  border-radius: 6px;
+  font-size: 14px;
+}
+.performance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.performance-config-hint {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.rec-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.rec-card.rec-critical { border-left: 4px solid rgb(220, 38, 38); }
+.rec-card.rec-warning  { border-left: 4px solid rgb(234, 179, 8); }
+.rec-card.rec-info     { border-left: 4px solid rgb(59, 130, 246); }
+
+.rec-card summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+.rec-card summary::-webkit-details-marker { display: none; }
+.rec-card summary::after {
+  content: '▸';
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform 0.15s;
+}
+.rec-card[open] summary::after { transform: rotate(90deg); }
+.rec-title {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+.rec-effort {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rec-body {
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rec-section { margin-bottom: 10px; }
+.rec-section:last-child { margin-bottom: 0; }
+.rec-section strong {
+  display: block;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.rec-section p { margin: 0; }
+.rec-evidence {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  word-break: break-all;
+}
+
 /* 0.18.13 — on-demand diagnostics (logs + slow queries) panels. */
 .diag-grid {
   display: grid;

@@ -131,6 +131,10 @@ export const KNOWN_SETTINGS = [
   // Super-admin owns this because it's a security-policy decision
   // applied across every user on the instance.
   { key: 'WEB_INACTIVITY_TIMEOUT_MINUTES', isSecret: false, restartRequired: false, superOnly: true, label: 'Web — idle auto-logout (minutes; 0 = disabled)' },
+  // 0.18.13 — how often the /health performance analyzer reruns.
+  // Default 24 hours. Range 1-168 (one week). Operators can run
+  // ad-hoc via the "Run now" button regardless of this setting.
+  { key: 'PERFORMANCE_ANALYSIS_INTERVAL_HOURS', isSecret: false, restartRequired: false, superOnly: true, label: 'Performance analysis — refresh interval (hours; 1-168)' },
 ] as const;
 
 /**
