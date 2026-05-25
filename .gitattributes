@@ -1,0 +1,4 @@
+# Keep shell scripts in LF — the Docker entrypoint runs inside Alpine,
+# and `/bin/sh\r` won't find the shebang if Windows checkout converted
+# the line endings.
+*.sh    text eol=lf
