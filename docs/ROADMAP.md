@@ -2,12 +2,23 @@
 
 ## Vision
 
-SmrtCash is a personal-finance manager in the spirit of Quicken and Monarch.
-It is built to run **self-hosted** as a single Docker container on hardware
-you control, **or as a SaaS** on infrastructure the operator deploys. The
-self-host path stays first-class; the SaaS path layers Stripe billing,
-public signup, and per-tenant encryption rotation on top of the same
-single-tenant code.
+SmrtCash is a personal-finance manager in the spirit of Quicken and
+Monarch, delivered as **SaaS**. Customers sign up, get a tenant,
+pay via Stripe, and use the app at our URL. The single-container
+Dockerfile remains in the repo (it's the dev-loop image, and it's
+what the SaaS itself runs in production behind Nginx Proxy
+Manager) but **self-hosting is not a marketed customer option** —
+the business model is recurring SaaS revenue.
+
+Two real moats vs every cloud competitor:
+
+- **Per-tenant envelope encryption** (DEK wrapped by KEK,
+  rotatable per tenant via `/system/tenants/:id/rotate-encryption-key`).
+  Monarch, Simplifi, Empower, CountAbout, Rocket Money all use a
+  single platform key.
+- **Agentic AI assistant** — 17 audit-logged tools today. Monarch
+  shipped a weak "Ask Monarch" chatbot in 2024; nobody else has
+  AI that does work, not just answers.
 
 The product is delivered in phases + slices. Each one produces a usable
 application — nothing is "all or nothing."
@@ -29,6 +40,10 @@ application — nothing is "all or nothing."
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
 | **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | ✅ Complete — 0.18.0…0.18.12 shipped 2026-05-24 |
+| **0.19.x** | **Reconciliation, investment analysis, ops debt** | 📋 Planned |
+| **0.20.x** | **Agentic AI moat — proactive insights, staged actions, voice** | 📋 Planned |
+| **0.21.x** | **Universal customer asks competitors haven't delivered** | 📋 Planned |
+| **0.22.x** | **Production launch readiness — Stripe live, ToS, observability** | 🔜 Tomorrow |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -36,28 +51,44 @@ Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
 ## Product positioning
 
-A competitive review of Monarch, Simplifi, Empower, Banktivity, CountAbout,
-Rocket Money, Moneydance and others shaped this roadmap. The conclusion:
+A competitive review of Monarch, Simplifi, Empower, Banktivity,
+CountAbout, Rocket Money, Moneydance, YNAB and Lunch Money shaped
+this roadmap. The conclusion:
 
-- **Table-stakes features** (budgeting, categorization, recurring expenses,
-  net worth, investment tracking, mobile access) must all arrive — they are
-  expected of any serious money app.
-- **But none of those competitors offer SmrtCash's wedge:** every cloud app
-  (Monarch, Simplifi, Empower, CountAbout, Rocket Money) holds your data on
-  *their* servers; the desktop apps (Banktivity, Moneydance) are closed and
-  unextensible. **SmrtCash wins on privacy, data ownership, and your-own-AI.**
+- **Table-stakes features** (budgeting, categorization, recurring
+  expenses, net worth, investment tracking, mobile access) must
+  all arrive — they are expected of any serious money app. The
+  0.1.x → 0.18.x series got us through them.
+- **The SaaS pivot reframes the wedge.** Earlier roadmap copy
+  leaned on "self-host OR SaaS" as a dual-deploy differentiator;
+  that's no longer the pitch. SaaS-only means we compete on
+  **what we do**, not where we run. Two real moats remain:
 
-So the roadmap adopts the universal features but delivers them *without*
-breaking the self-hosted model. Three direction-setting decisions:
+  - **Per-tenant envelope encryption.** Every other cloud PFM
+    (Monarch, Simplifi, Empower, CountAbout, Rocket Money) uses
+    one platform key. We give each tenant its own DEK wrapped
+    by the platform KEK and ship a one-click rotation flow at
+    `/system/tenants/:id/rotate-encryption-key`. A KEK leak
+    doesn't expose any tenant's plaintext attachments.
+  - **Agentic AI assistant.** 17 audit-logged tools today. The
+    assistant doesn't just answer questions — it *does* things,
+    and every write is reversible from the audit log. Monarch
+    shipped a weak "Ask Monarch" chatbot in 2024; everyone else
+    has nothing. The 0.20.x series doubles down on this.
 
-- **Bank connectivity — offer all three options.** File import stays the
-  always-available, fully-local baseline; OFX Direct Connect and an opt-in
-  Plaid integration are added as *choices*, via a pluggable data-source layer
-  (the same pattern as the pluggable AI normalizer).
-- **Balanced focus** — build budgeting depth first (Phase 6), then wealth and
-  net worth (Phase 7).
-- **Mobile via an installable PWA** — responsive web, installable to a phone,
-  one codebase, no app stores, still self-hosted.
+- **Pricing.** We price below Monarch ($14.99/mo) and at parity
+  with Simplifi ($5.99/mo, more limited). Annual at ~58% off
+  monthly. The 0.19.0 slice ships a visible "Save 41%" badge on
+  the annual tier to lead users there.
+
+- **Mobile via PWA.** Responsive web, installable to phone, one
+  codebase, no app stores. Native re-evaluated only if PWA
+  retention story fails — listed in 0.21.x deferred items.
+
+- **Bank connectivity.** File import (CSV/OFX/QFX/QIF), OFX
+  Direct Connect, and Plaid all available. Plaid is the
+  customer-default for the SaaS; the others remain for users
+  whose banks don't support Plaid or who prefer manual control.
 
 ---
 
@@ -410,7 +441,7 @@ without a build pipeline.
 
 ---
 
-## 0.18.x — Competitive parity & depth 📋
+## 0.18.x — Competitive parity & depth ✅
 
 Competitive read after v0.17 surfaced specific moats competitors
 own that SmrtCash hasn't yet contested. Each slice closes one
@@ -576,22 +607,6 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   styled the `.hint.warn` CSS class that 3 pre-existing
   call sites were using without any rule. 6 new unit tests.
 
-### Deeper bench (slice TBD)
-
-These showed up in the competitive read but are heavier; they
-may slip to v0.19+ depending on what early traffic asks for.
-
-- **Investment analysis (Empower-class)** — fee analyzer
-  (you have all the holdings; analyze expense ratios), asset
-  allocation chart, Monte Carlo on the retirement projection.
-- **Cleared / uncleared reconciliation (Banktivity-class)** —
-  per-transaction cleared toggle + "reconcile against your
-  statement" workflow with running difference.
-- **Bill negotiation assist** — for detected recurring
-  utilities, surface the company's billing-dispute URL +
-  template. Same pattern as 0.18.1 but for an adjacent
-  category.
-
 ### Positioning / marketing (non-code, runs in parallel)
 
 These don't need a release version — they live on the BITS
@@ -614,25 +629,337 @@ features that justify them.
 
 ---
 
-## Beyond — v0.19+
+## 0.19.x — Reconciliation, investment analysis, ops debt 📋
 
-Items deferred from earlier series that don't yet have a slice:
+Pulled forward the surviving deferred items from the 0.18.x
+competitive read plus the operational-debt list that had been
+parked in a "Beyond v0.19+" section. Ordering is by
+impact-per-day so the early wins compound.
 
-- **Stripe Tax dashboard setup** — enabling automatic tax
-  requires Stripe Tax → Settings to be configured with a tax
-  origin address (and country-by-country registrations for EU
-  VAT MOSS). Out of the codebase; flag in `/settings` is wired.
-- **ToS + Privacy lawyer review** — the placeholder stubs in
-  `docs/TERMS_OF_SERVICE.md` and `docs/PRIVACY_POLICY.md` need
-  jurisdiction-specific copy before commercial launch.
-- **Observability** — structured request logs, Sentry-equivalent
-  error tracking, slow-query / slow-route alerts. The /health
-  page covers process metrics; an external sink is the gap.
-- **Annual-pre-pay discount UX** — pricing already shows the
-  yearly tier at a ~58% discount; a visible "Save 41%" badge
-  on /billing would lift annual conversion.
-- **Native mobile** — re-evaluate at 12 months if the PWA
-  retention story isn't holding.
+### Planned slices (ordered by impact-per-day)
+
+- **0.19.0** 📋 — **Annual-pre-pay discount badge** (~half
+  day). Pricing already shows the yearly tier at ~58% off
+  the equivalent monthly cost; the /billing page presents both
+  options without leading the user toward annual. Adds a
+  visible "Save 41%" badge on the annual card + a subtitle
+  framing the yearly price in monthly-equivalent terms. No
+  pricing change, no Stripe change — pure presentation lift.
+  Quickest win in the series; ships first so the conversion
+  signal is live before the heavier slices land.
+- **0.19.1** 📋 — **Bill negotiation assist** (~1 day). Same
+  pattern as 0.18.1 (cancellation help) but for an adjacent
+  category. For detected recurring utilities (electric, gas,
+  water, internet, cell), surface the company's
+  billing-dispute URL + a canned email template the user can
+  copy. Seeded library at
+  `server/src/domain/negotiation-library.ts` covering the
+  big-N national providers; per-bill override fields on the
+  existing bill row carry user-specific edits. Reuses the
+  modal pattern from 0.18.1 — small additional code, large
+  user-value lift.
+- **0.19.2** 📋 — **Cleared / uncleared reconciliation**
+  (~2–3 days). The Banktivity / Moneydance power-user gap.
+  Adds `transactions.cleared_at timestamptz` (nullable). A
+  new account-detail "Reconcile" workflow lets the user enter
+  the statement's closing balance + date, walks through
+  uncleared transactions in date order, and shows a running
+  difference. When the difference hits zero, the user can
+  commit (sets `cleared_at = statement_date` on the touched
+  rows). Per-row cleared toggle on the Transactions table for
+  ad-hoc marking. New "as-of cleared balance" available in
+  the account balance API.
+- **0.19.3** 📋 — **Investment analysis (Empower-class)**
+  (~3–5 days). Three sub-features on the existing
+  `holdings` + `retirement_projections` data:
+  - **Fee analyzer** — accepts a per-holding `expense_ratio`
+    field (% per year), surfaces total annual fee drag
+    across the portfolio and the 30-year compounded
+    opportunity cost.
+  - **Asset allocation chart** — per-holding `asset_class`
+    tag (stocks / bonds / cash / alts / real-estate), pie
+    chart with the breakdown, deviation-from-target chart
+    if the user sets a target allocation.
+  - **Monte Carlo on retirement** — Monte Carlo over the
+    existing retirement projection (10,000 trials, normal
+    distribution around the assumed return ± stddev), shows
+    the percentile fan (10th / 50th / 90th) instead of a
+    single deterministic line.
+- **0.19.4** 📋 — **Observability** (~2–3 days). Today the
+  /health page covers process metrics; an external sink is
+  the gap. This slice ships:
+  - **Structured request logs** — JSON-line per HTTP request
+    with `tenant_id`, `user_id`, `route`, `status`, `ms`,
+    `req_id`. Pino has the format already; this just turns
+    it on and documents the field set.
+  - **Sentry-equivalent error tracking** — pluggable error
+    sink with a Sentry adapter (free for a single-project
+    deploy) and an env-var-disabled no-op default. Captures
+    server-side exceptions + the React error boundary on
+    the web side.
+  - **Slow-query / slow-route alerts** — middleware logs any
+    request > 1000ms or any pg query > 500ms with the SQL
+    + bind values redacted. Optional SMTP digest (reuses
+    the anomaly-alert pattern from 0.13.2).
+
+---
+
+## 0.20.x — Agentic AI moat 📋
+
+The single biggest unexploited lever in this space. SmrtCash
+already has 17 audit-logged tool calls in the assistant; no
+competitor has more than a handful, and Monarch's 2024
+"Ask Monarch" is the only one out there at all. This series
+pushes the assistant from "answers questions" → "does the work"
+→ "proactively flags and suggests."
+
+Re-cast positioning: this is *the* differentiator post-pivot. We
+don't compete on "your hardware" anymore — we compete on what
+the assistant does on your behalf.
+
+### Planned slices (ordered by impact-per-day)
+
+- **0.20.0** 📋 — **Proactive insight cards on the dashboard**
+  (~2–3 days). Every morning the assistant scans the prior
+  24h + 30-day trends and surfaces 0–3 "noticed this" cards on
+  the dashboard: an anomaly above the existing scanner
+  threshold; a budget category trending to overspend by month-
+  end; an unusual recurring charge; a goal whose pace has
+  slipped. Each card includes a one-line *why* and a one-click
+  action (snooze / take action / dismiss). The signals all
+  already exist (anomalies 0.13.2, cash-flow forecast 0.18.0,
+  goal pace 0.18.5) — this slice wraps them in AI-curated copy
+  and dashboard placement. **Changes the perceptual feel of the
+  product more than any other ~3-day slice.**
+- **0.20.1** 📋 — **Multi-step staged actions in the assistant**
+  (~2–3 days). Today the assistant fires one tool call at a
+  time and changes are immediate. This slice adds a "stage,
+  preview, commit" wrapper: the assistant proposes a diff
+  ("Move $200 to emergency fund; create budget for Dining at
+  $400; subscribe to weekly over-budget email"), the user
+  reviews + clicks Apply, every change is audit-logged, and a
+  single "undo this batch" button reverts the whole thing.
+  Unlocks user trust for complex requests like "reorganize my
+  budgets along Ramsey 50/30/20."
+- **0.20.2** 📋 — **Voice-first PWA assistant** (~3–5 days).
+  Open the assistant on mobile, tap a mic icon, say "Log a $87
+  Costco run, split 60/40 grocery/household." Whisper.cpp WASM
+  for on-device speech-to-text (no audio leaves the phone),
+  pipes the transcript into the existing assistant text path.
+  Use case: hands-free logging while driving / shopping. No
+  competitor can match this because they'd need device → their
+  server → LLM → back; we run end-to-end on the user's
+  device + our backend.
+
+### Stretch / TBD
+
+- **Agent that proactively reaches out via email** — weekly
+  "here's what your money did this week" summary email
+  composed by the assistant. Optional and off by default.
+  Slice TBD; depends on 0.20.0 landing first to validate the
+  insight-cards model.
+
+---
+
+## 0.21.x — Universal customer asks 📋
+
+These are the loudest unmet asks on r/MonarchMoney, r/Simplifi,
+the YNAB forums, and Empower reviews. None of the cloud PFM
+competitors have shipped them; that's our opening. Ordered by
+"how often does the complaint show up + how hard is the lift."
+
+### Planned slices (ordered by impact-per-day)
+
+- **0.21.0** 📋 — **Real tax export** (~3–4 days). Schedule C
+  for self-employed users, mileage from the existing
+  `vehicles` + `commute_routes` data, home-office tracking
+  as a category flag. Output as a TurboTax-importable TXF
+  file + a CSV that follows the IRS line-numbering
+  convention. **Mint had this; nobody else does** — was a
+  #1 reason people stuck with Mint and a #1 grief since the
+  shutdown. Probably the biggest "obvious unmet ask" in the
+  market.
+- **0.21.1** 📋 — **Refund / chargeback tracking** (~1–2
+  days). New `transactions.refund_status` column ('pending',
+  'refunded', 'denied') + optional refund-link to the
+  original transaction. UI: a "Dispute" / "Mark refunded"
+  action on every transaction row; a dashboard tile showing
+  pending disputes. No PFM closes this loop today — users
+  manually track refunds in a spreadsheet.
+- **0.21.2** 📋 — **Receipt → warranty tracking** (~2 days).
+  Existing receipt OCR (Phase 3) already extracts
+  merchant + amount + date. Add an optional "this item is
+  under warranty until" field; render a `/warranties`
+  view of all items with expiry dates, sortable by
+  expiring-soonest. Email reminder 30 days before expiry.
+- **0.21.3** 📋 — **Non-traditional household models**
+  (~3–5 days). Today the tenant ↔ user model assumes "one
+  household, one couple." Real households are messier:
+  divorced co-parents splitting kid expenses 50/50,
+  adult children managing aging parents' bills under a
+  separate-but-visible context, polycules, financially-
+  cohabiting roommates. Three sub-features:
+  - **Per-account "shared-with"** — extends the per-account
+    RBAC from 0.13.4 with a "split-percentage" config.
+    Mark account X as 60% me / 40% other-tenant; the
+    aggregations show me 60% of every transaction.
+  - **Cross-tenant visibility (read-only)** — invite
+    another tenant's user to see specific accounts as a
+    read-only observer. Eldercare use case.
+  - **Custody-period assignment** — for shared-kid
+    expenses, tag a date range as "user A's custody";
+    spend in that range is attributed accordingly for
+    reimbursement reporting.
+- **0.21.4** 📋 — **Investment performance analysis**
+  (~2–3 days). The 0.19.3 fee-analyzer slice handles the
+  cost side; this slice handles returns. Per-holding TWRR
+  (time-weighted return), portfolio IRR (money-weighted),
+  vs-benchmark (S&P 500 / 60/40 default; user-overridable).
+  Empower shows positions but not these metrics; users
+  ask for them constantly.
+- **0.21.5** 📋 — **Scenario cash-flow forecasting**
+  (~2–3 days). Extends the 0.18.0 cash-flow hero with
+  "what-if" sliders: income loss for N months, one-time
+  big expense, rate change on a debt. Re-runs the
+  projection in real time. Simplifi shows a single
+  deterministic line; nobody offers scenario modeling.
+- **0.21.6** 📋 — **Subscription cancellation execution**
+  (~5–7 days, legally risky). 0.18.1 ships cancellation
+  *instructions*; this slice adds **execution**.
+  Consent-based headless browser (Playwright in a worker
+  container) that logs into the merchant with credentials
+  the user provides, navigates the cancel flow, captures
+  proof. Rocket Money charges $9/mo for this and won't
+  let people self-host. Legal review required per
+  jurisdiction before flagging this for actual users —
+  the slice covers the technical build only.
+- **0.21.7** 📋 — **Truly portable data export** (~2
+  days). The existing portability export (0.13.0) is
+  CSV + JSON of the raw tables. This slice adds a
+  single-file `.smrtcash` bundle: every table + every
+  attachment + the tenant's DEK (unwrapped, so the export
+  is self-decrypting on import elsewhere). Round-trips
+  back into the importer cleanly. The Mint-shutdown
+  audience cares about this in a deep way.
+
+### Stretch / TBD
+
+- **Bank connection reliability** — the #1 complaint on every
+  cloud PFM is Plaid disconnects. Adding a "your bank
+  disconnected; here's the one-click reconnect" flow surfaced
+  in the dashboard would reduce the universal pain. Slice TBD
+  pending Plaid usage in production.
+
+---
+
+## 0.22.x — Production launch readiness 🔜
+
+The series that gets us to a live, paying-customer production
+deploy. Goal: **production deploy tomorrow.** Some items are
+codeable slices, others are one-time operator workflows
+captured as runbooks.
+
+### Codeable slices
+
+- **0.22.0** 🔜 — **Annual-pre-pay discount badge**
+  (~½ day). Promoted from 0.19.0. Visible "Save 41%" badge
+  on the annual card on `/billing`, plus a subtitle framing
+  the yearly price in monthly-equivalent terms. No pricing
+  change, no Stripe change — pure presentation lift. Ships
+  before launch so the conversion signal is live on day 1.
+- **0.22.1** 🔜 — **Live-mode Stripe configuration verifier**
+  (~half day). A new `/system/saas-readiness` super-only
+  panel checks: live-mode secret key present, live-mode
+  webhook secret present, all 4 plan products + price
+  lookup-keys resolvable in live mode, customer portal
+  enabled, automatic-tax setting matches operator intent.
+  Each check is green/red with a one-line "how to fix" link
+  to STRIPE_SETUP.md. Prevents the most-common cause of
+  "I switched to live and now everything 500s."
+- **0.22.2** 🔜 — **Pricing + landing copy polish** (~1 day).
+  Review every customer-facing copy surface (login, signup,
+  /billing, dunning, verification email, support footer) and
+  reset for paid SaaS:
+  - Drop any remaining "self-host" mentions from customer
+    surfaces (the dev/operator docs keep their detail).
+  - Re-cast the value prop on /billing as "AI that does the
+    work + encryption your provider can't see into."
+  - Show pricing in monthly-equivalent next to annual to
+    pair with the 0.22.0 badge.
+
+### Operational runbooks (no slice, but tracked)
+
+These get checked off in the launch playbook, not via a
+version bump:
+
+- **Provision production box** — fresh VPS, follow
+  `docs/SAAS_DEPLOY.md` from 0.18.11. Separate from the
+  test box; the test box stays for pre-prod verification.
+- **DNS for production domain** — point the production
+  domain (TBD with operator) at the new box's IP, A record
+  + AAAA if IPv6 available. Cloudflare proxying optional.
+- **NPM proxy host + Let's Encrypt** — same recipe as
+  test box.
+- **Stripe live-mode setup** — create live-mode products at
+  agreed prices (or copy from test mode), capture the live
+  `pk_live_*` + `sk_live_*` + `whsec_*` secrets, paste into
+  `/settings`. The 0.22.1 verifier confirms.
+- **SMTP relay sender-domain verification** for production
+  domain (test box's verified domain doesn't transfer).
+- **Bootstrap first super-admin** via
+  `scripts/create-super-admin.mjs`.
+- **Stripe Tax setup** if enabling automatic tax — Stripe
+  → Settings → tax origin + per-jurisdiction
+  registrations. Flag is wired; out-of-codebase work.
+
+### Pre-launch sanity gates (must pass before announcing)
+
+- ToS + Privacy stubs have *at minimum* a "draft — not yet
+  reviewed by counsel" banner. Real lawyer review parked
+  but blocked-on-launch is too strong; gate is "doesn't
+  pretend to be reviewed."
+- A test signup completes end-to-end: signup → verification
+  email → click link → first-time UI → pick a plan →
+  Checkout in live mode with a real card → returns to
+  app → premium features unlocked → dunning email arrives
+  for a forced payment failure.
+- Webhook delivery verified live (Stripe dashboard shows
+  ≥1 successful delivery to the production URL).
+- Backups: `npm run backup` runs and produces both DB and
+  attachment tarballs; restore tested into a scratch
+  Postgres.
+
+---
+
+### Positioning / marketing (non-code, runs alongside 0.22.x)
+
+- **Landing page** at the production domain leading with
+  "AI personal finance that does the work" + the
+  per-tenant-encryption + pricing pitch.
+- **Comparison table** on the landing page: SmrtCash vs
+  Monarch / Simplifi / Empower / Rocket Money on price,
+  agentic AI count, encryption shape, multi-household
+  model. Drop the "self-host" row that was in the old
+  comparison copy.
+- **Publish the encryption design** as a short page — the
+  KEK/DEK envelope, rotation flow, what a KEK leak does
+  and doesn't expose. Security-curious users notice what
+  competitors hide.
+
+---
+
+### Deferred / external (no codeable slice)
+
+- **ToS + Privacy lawyer review** — placeholder stubs ship
+  with a "draft" banner; counsel review parked. Not a
+  launch blocker per current decision, but every additional
+  customer raises the cost of getting this wrong.
+- **SOC 2 readiness** — eventually a B2B-grade SaaS needs
+  this; not a launch blocker for individual consumers.
+  Re-evaluate at 12 months / first enterprise interest.
+- **Native mobile** — re-evaluate at 12 months. The PWA
+  story has to fail (drop-off attributable to install/UX)
+  before a native build earns its complexity.
 
 ---
 
