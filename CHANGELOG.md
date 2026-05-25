@@ -9,11 +9,42 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.9 fixes washed-out form inputs in dark mode. Several inputs
-without explicit `type=` attributes (the Categories tax-tag
-autocomplete, the Import file picker, anywhere `<input list="...">`
-is used) were falling through to an older rule that hardcoded
-`background: #fff`, producing a bright-white block on dark UI._
+_0.18.10 audits every dropdown / popover lifecycle for
+mouse-move-causes-close issues and drops the CSS transition on
+`<select>:focus` as a defensive guard against a known Chromium
+bug._
+
+---
+
+## [0.18.10] — 2026-05-24 — Dropdown lifecycle audit + defensive fix
+
+User reported that some dropdowns were retracting when the mouse
+was moved. By the time we looked, the behavior wasn't reproducing
+(likely a transient Chromium hiccup), but the audit was worth
+running.
+
+**Audit findings (all green):**
+- Every custom popover uses `mousedown` outside-click detection,
+  never `mousemove` or `mouseleave`. Column chooser
+  (FilterableTable), every modal (Profile, CancelInfo, Goal,
+  Income, Vehicle, etc.), and the mobile sidebar drawer all
+  pass.
+- No React portals; menu trees stay within their `ref` container
+  so checkbox/label clicks inside the menu don't trigger
+  outside-click close.
+- No `onMouseLeave`-driven close anywhere except the drag/drop
+  hover state on AttachmentsModal (legitimate use).
+- No `setTimeout`-driven close.
+- No CSS `:hover { display: ... }` menus.
+
+**Defensive change:**
+- Dropped the `transition: border-color 0.12s ease, box-shadow
+  0.12s ease` from `<select>` specifically. Chromium has had
+  reported bugs where a focus transition on a `<select>` can
+  interrupt the native dropdown's render and cause it to
+  retract mid-interaction. The transition is preserved on
+  `<input>` and `<textarea>` where it's a useful visual cue
+  (and has no native-dropdown overlay to clash with).
 
 ---
 

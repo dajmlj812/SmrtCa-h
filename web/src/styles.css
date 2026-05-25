@@ -2284,6 +2284,14 @@ input, select, textarea {
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
+}
+/* Transitions on focus styling — applied to inputs + textareas only.
+ * `<select>` is intentionally excluded: Chromium has had bugs where
+ * a CSS transition on a focused <select> interrupts the native
+ * dropdown render and causes it to retract mid-interaction. The
+ * border-color + box-shadow change is a small visual nicety on
+ * inputs; the cost of a transitionless select is invisible. */
+input, textarea {
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 /* Checkboxes + radios are visual primitives, not text fields —

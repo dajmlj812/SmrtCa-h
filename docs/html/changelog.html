@@ -161,11 +161,40 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.9 fixes washed-out form inputs in dark mode. Several inputs
-without explicit <code>type=</code> attributes (the Categories tax-tag
-autocomplete, the Import file picker, anywhere <code>&lt;input list=&quot;...&quot;&gt;</code>
-is used) were falling through to an older rule that hardcoded
-<code>background: #fff</code>, producing a bright-white block on dark UI.</em></p>
+<p><em>0.18.10 audits every dropdown / popover lifecycle for
+mouse-move-causes-close issues and drops the CSS transition on
+<code>&lt;select&gt;:focus</code> as a defensive guard against a known Chromium
+bug.</em></p>
+<hr>
+<h2 id="01810-2026-05-24-dropdown-lifecycle-audit-defensive-fix">[0.18.10] — 2026-05-24 — Dropdown lifecycle audit + defensive fix<a class="heading-anchor" href="#01810-2026-05-24-dropdown-lifecycle-audit-defensive-fix">#</a></h2>
+<p>User reported that some dropdowns were retracting when the mouse
+was moved. By the time we looked, the behavior wasn&#39;t reproducing
+(likely a transient Chromium hiccup), but the audit was worth
+running.</p>
+<p><strong>Audit findings (all green):</strong></p>
+<ul>
+<li>Every custom popover uses <code>mousedown</code> outside-click detection,
+never <code>mousemove</code> or <code>mouseleave</code>. Column chooser
+(FilterableTable), every modal (Profile, CancelInfo, Goal,
+Income, Vehicle, etc.), and the mobile sidebar drawer all
+pass.</li>
+<li>No React portals; menu trees stay within their <code>ref</code> container
+so checkbox/label clicks inside the menu don&#39;t trigger
+outside-click close.</li>
+<li>No <code>onMouseLeave</code>-driven close anywhere except the drag/drop
+hover state on AttachmentsModal (legitimate use).</li>
+<li>No <code>setTimeout</code>-driven close.</li>
+<li>No CSS <code>:hover { display: ... }</code> menus.</li>
+</ul>
+<p><strong>Defensive change:</strong></p>
+<ul>
+<li>Dropped the <code>transition: border-color 0.12s ease, box-shadow 0.12s ease</code> from <code>&lt;select&gt;</code> specifically. Chromium has had
+reported bugs where a focus transition on a <code>&lt;select&gt;</code> can
+interrupt the native dropdown&#39;s render and cause it to
+retract mid-interaction. The transition is preserved on
+<code>&lt;input&gt;</code> and <code>&lt;textarea&gt;</code> where it&#39;s a useful visual cue
+(and has no native-dropdown overlay to clash with).</li>
+</ul>
 <hr>
 <h2 id="0189-2026-05-24-form-contrast-fix-washed-out-inputs">[0.18.9] — 2026-05-24 — Form contrast fix (washed-out inputs)<a class="heading-anchor" href="#0189-2026-05-24-form-contrast-fix-washed-out-inputs">#</a></h2>
 <p>Root cause: <code>styles.css</code> had two competing input rules. The newer
@@ -6776,7 +6805,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 03:22:10 UTC · commit c6f4253</span>
+  <span>Generated 2026-05-25 03:32:09 UTC · commit 7453a6b</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
