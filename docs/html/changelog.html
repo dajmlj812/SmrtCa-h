@@ -161,10 +161,22 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.18 shipped. 0.17.18 audits transaction imports
-(all clean — DB-enforced NOT NULL) and ships migration 038 +
-inline account pickers so the user can tag any straggler
-bills or income to their correct account from the UI.</em></p>
+<p><em>0.17.0–0.17.19 shipped. 0.17.19 is a one-liner fix for
+migration 038: it joined tenant via transactions.tenant_id
+(unpopulated on this deploy) instead of accounts.tenant_id.
+039 re-runs the backfill with the right join.</em></p>
+<hr>
+<h2 id="01719-2026-05-24-fix-migration-038-tenant-join">[0.17.19] — 2026-05-24 — Fix migration 038 tenant join<a class="heading-anchor" href="#01719-2026-05-24-fix-migration-038-tenant-join">#</a></h2>
+<p>Migration 038 silently no-op&#39;d: it joined transactions via
+<code>t.tenant_id = b.tenant_id</code>, but <code>transactions.tenant_id</code> is
+unpopulated on this deploy — every other read path in the
+codebase joins through <code>accounts.tenant_id</code>. 038 was the
+outlier and matched zero rows.</p>
+<p>Migration 039 re-runs the same backfill but joins
+transactions through their <code>account_id → accounts.tenant_id</code>
+chain, matching the rest of the codebase.</p>
+<p>Confirmed on test box: 2 NULL bills (GM Financial, We
+Energies) are correctly assigned to Chase-5793 after the fix.</p>
 <hr>
 <h2 id="01718-2026-05-24-bills-income-account-tagging">[0.17.18] — 2026-05-24 — Bills + income account tagging<a class="heading-anchor" href="#01718-2026-05-24-bills-income-account-tagging">#</a></h2>
 <p>Followup to 0.17.17&#39;s strict scope: now that untagged bills
@@ -6266,7 +6278,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 00:16:12 UTC · commit d58f0b0</span>
+  <span>Generated 2026-05-25 00:19:07 UTC · commit d52e3eb</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

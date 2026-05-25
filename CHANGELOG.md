@@ -9,10 +9,27 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.18 shipped. 0.17.18 audits transaction imports
-(all clean — DB-enforced NOT NULL) and ships migration 038 +
-inline account pickers so the user can tag any straggler
-bills or income to their correct account from the UI._
+_0.17.0–0.17.19 shipped. 0.17.19 is a one-liner fix for
+migration 038: it joined tenant via transactions.tenant_id
+(unpopulated on this deploy) instead of accounts.tenant_id.
+039 re-runs the backfill with the right join._
+
+---
+
+## [0.17.19] — 2026-05-24 — Fix migration 038 tenant join
+
+Migration 038 silently no-op'd: it joined transactions via
+`t.tenant_id = b.tenant_id`, but `transactions.tenant_id` is
+unpopulated on this deploy — every other read path in the
+codebase joins through `accounts.tenant_id`. 038 was the
+outlier and matched zero rows.
+
+Migration 039 re-runs the same backfill but joins
+transactions through their `account_id → accounts.tenant_id`
+chain, matching the rest of the codebase.
+
+Confirmed on test box: 2 NULL bills (GM Financial, We
+Energies) are correctly assigned to Chase-5793 after the fix.
 
 ---
 
