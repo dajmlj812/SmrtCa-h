@@ -76,6 +76,38 @@ export async function getBackup(id: string): Promise<BackupRecord | null> {
 }
 
 /**
+ * Build the env-snapshot payload that ships inside a backup.
+ *
+ * Exported so the unit test can verify the security contract — never
+ * write a secret-class env var to disk — without spinning up a full
+ * backup run. Pure: depends only on KNOWN_SETTINGS and the env source
+ * passed in.
+ *
+ * F-13 (security audit 2026-05-25): a leaked backup file used to give
+ * the holder SESSION_SECRET (forge any session), ATTACHMENT_ENCRYPTION_KEY
+ * (unwrap every tenant's DEK and decrypt receipts + Plaid tokens), and
+ * STRIPE_SECRET_KEY (full Stripe account access). Now we exclude every
+ * KNOWN_SETTINGS entry marked isSecret:true. Operators must re-provision
+ * secrets from a separate secret-management process on restore.
+ */
+export function buildEnvSnapshot(envSource: NodeJS.ProcessEnv): {
+  envSnapshot: Record<string, string>;
+  omittedSecrets: string[];
+} {
+  const envSnapshot: Record<string, string> = {};
+  const omittedSecrets: string[] = [];
+  for (const m of KNOWN_SETTINGS) {
+    if (m.isSecret) {
+      omittedSecrets.push(m.key);
+      continue;
+    }
+    const v = envSource[m.key];
+    if (v !== undefined && v !== '') envSnapshot[m.key] = v;
+  }
+  return { envSnapshot, omittedSecrets };
+}
+
+/**
  * Run a backup synchronously (caller awaits). Records timing + sizes +
  * any failure on the `backups` row.
  */
@@ -136,18 +168,19 @@ export async function runBackup(input: RunBackupInput): Promise<BackupRecord> {
     //    sanitized snapshot here so a restore can put them back even
     //    after a full host wipe.
     const envSnapshotPath = join(backupPath, 'env.snapshot.json');
-    const envSnapshot: Record<string, string> = {};
-    for (const m of KNOWN_SETTINGS) {
-      const v = process.env[m.key];
-      if (v !== undefined && v !== '') envSnapshot[m.key] = v;
-    }
+    const { envSnapshot, omittedSecrets } = buildEnvSnapshot(process.env);
     await writeFile(
       envSnapshotPath,
       JSON.stringify(
         {
           captured_at: new Date().toISOString(),
-          note: 'Env values for KNOWN_SETTINGS at the moment of backup. app_settings rows are inside db.dump.',
+          note:
+            'Non-secret env values for KNOWN_SETTINGS at the moment of backup. ' +
+            'Secret-class keys (isSecret=true) are intentionally omitted and must be ' +
+            're-provisioned by the operator from a separate secret-management process. ' +
+            'app_settings rows (including any secrets stored in the DB) are inside db.dump.',
           env: envSnapshot,
+          omitted_secret_keys: omittedSecrets,
         },
         null,
         2,
