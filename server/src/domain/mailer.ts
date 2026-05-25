@@ -149,6 +149,64 @@ export async function verifyConnection(): Promise<{
 }
 
 /**
+ * 0.18.7 — shared HTML shell for every outbound email.
+ *
+ * Goal: every BITS email gets the same header/footer/button styling
+ * so operators can recognize the SmrtCash brand at a glance, and so
+ * a single visual update doesn't need 4 edits. The shell is
+ * inline-styled (no <head><style>) because the major email clients
+ * (Gmail, Outlook, iOS Mail) strip <style> blocks but respect
+ * inline style attributes.
+ *
+ * Callers pass:
+ *   - title       — the H1 (e.g. "Reset your SmrtCash password")
+ *   - intro       — a short paragraph above the CTA (escaped)
+ *   - ctaText     — button label (e.g. "Reset password")
+ *   - ctaUrl      — the URL the button points at + the fallback
+ *                   "or paste this URL" block uses
+ *   - bodyHtmlSafe — extra trailing HTML (already escaped — caller
+ *                    is responsible). Used for "this link expires
+ *                    at X" footnotes.
+ *   - ctaColor    — optional brand color for the button. Defaults
+ *                   to BITS indigo (#4f46e5).
+ */
+export interface EmailShellOptions {
+  title: string;
+  intro: string;
+  ctaText: string;
+  ctaUrl: string;
+  bodyHtmlSafe?: string;
+  ctaColor?: string;
+}
+
+const BITS_HEADER_BG = '#0f172a';
+const BRAND_LINK = 'https://builditsmrt.com';
+
+export function renderEmailShell(opts: EmailShellOptions): string {
+  const cta = opts.ctaColor ?? '#4f46e5';
+  return [
+    `<!doctype html><html><body style="margin:0;padding:0;background:#f6f8fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a">`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:24px 12px">`,
+    `<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.08)">`,
+    `<tr><td style="background:${BITS_HEADER_BG};padding:18px 24px;color:#ffffff;font-weight:700;font-size:18px;letter-spacing:-0.01em">`,
+    `Smrt<span style="color:#4f8cff">Cash</span>`,
+    `</td></tr>`,
+    `<tr><td style="padding:24px">`,
+    `<h1 style="margin:0 0 12px;font-size:20px;letter-spacing:-0.01em">${escapeHtml(opts.title)}</h1>`,
+    `<p style="margin:0 0 18px;line-height:1.5">${escapeHtml(opts.intro)}</p>`,
+    `<p style="margin:0 0 18px"><a href="${escapeAttr(opts.ctaUrl)}" style="display:inline-block;padding:10px 18px;background:${cta};color:#ffffff;border-radius:6px;text-decoration:none;font-weight:600">${escapeHtml(opts.ctaText)}</a></p>`,
+    `<p style="margin:0 0 6px;color:#6b7280;font-size:13px">Or paste this URL into your browser:</p>`,
+    `<p style="margin:0 0 18px;word-break:break-all"><code style="background:#f6f8fa;padding:4px 6px;border-radius:4px;font-size:12px">${escapeHtml(opts.ctaUrl)}</code></p>`,
+    opts.bodyHtmlSafe ? `<div style="color:#6b7280;font-size:13px;line-height:1.5">${opts.bodyHtmlSafe}</div>` : '',
+    `</td></tr>`,
+    `<tr><td style="background:#f6f8fa;padding:14px 24px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb">`,
+    `SmrtCash &middot; developed by <a href="${BRAND_LINK}" style="color:#6b7280">BuildITSmrt, LLC.</a>`,
+    `</td></tr>`,
+    `</table></td></tr></table></body></html>`,
+  ].join('');
+}
+
+/**
  * 0.15.4 — dunning email for a failed Stripe payment. Sent from
  * the `invoice.payment_failed` webhook handler. Body keeps it short
  * and points at /billing where the Stripe Customer Portal link
@@ -176,18 +234,14 @@ export function renderDunningEmail(opts: {
     `If the card on file is correct and you're seeing this in error, the`,
     `billing page above also lets you contact us directly.`,
   ].join('\n');
-  const html = [
-    `<p>${escapeHtml(greeting)}</p>`,
-    `<p>We tried to charge your card for <strong>${escapeHtml(amount)}</strong>`,
-    `but the payment didn't go through. Your subscription is in a short`,
-    `grace period &mdash; features stay available for the next few days`,
-    `while we retry.</p>`,
-    `<p><a href="${escapeAttr(opts.billingUrl)}"`,
-    `style="display:inline-block;padding:10px 18px;background:#ef4444;`,
-    `color:#fff;border-radius:4px;text-decoration:none">Update payment method</a></p>`,
-    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
-    `<code>${escapeHtml(opts.billingUrl)}</code></p>`,
-  ].join(' ');
+  const html = renderEmailShell({
+    title: subject,
+    intro: `${greeting} we tried to charge your card for ${amount} but the payment didn't go through. Your subscription is in a short grace period — features stay available for the next few days while we retry.`,
+    ctaText: 'Update payment method',
+    ctaUrl: opts.billingUrl,
+    ctaColor: '#ef4444',
+    bodyHtmlSafe: `If the card on file is correct and you're seeing this in error, the billing page above also lets you contact us directly.`,
+  });
   return { subject, text, html };
 }
 
@@ -219,17 +273,13 @@ export function renderPasswordResetEmail(opts: {
     `password won't change unless someone with this link sets a`,
     `new one.`,
   ].join('\n');
-  const html = [
-    `<p>We received a request to reset your SmrtCash password.</p>`,
-    `<p>Click the button below to choose a new password:</p>`,
-    `<p><a href="${escapeAttr(opts.resetUrl)}"`,
-    `style="display:inline-block;padding:10px 18px;background:#6366f1;`,
-    `color:#fff;border-radius:4px;text-decoration:none">Reset password</a></p>`,
-    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
-    `<code>${escapeHtml(opts.resetUrl)}</code></p>`,
-    `<p style="color:#6b7280;font-size:0.85em">Link expires ${escapeHtml(opts.expiresAt)}.`,
-    `If you didn't request a reset, ignore this email — your password won't change.</p>`,
-  ].join(' ');
+  const html = renderEmailShell({
+    title: subject,
+    intro: 'We received a request to reset your SmrtCash password. Click the button below to choose a new one.',
+    ctaText: 'Reset password',
+    ctaUrl: opts.resetUrl,
+    bodyHtmlSafe: `Link expires ${escapeHtml(opts.expiresAt)}. If you didn't request a reset, ignore this email — your password won't change unless someone with this link sets a new one.`,
+  });
   return { subject, text, html };
 }
 
@@ -255,17 +305,14 @@ export function renderVerificationEmail(opts: {
     `SmrtCash you can safely ignore this email — the address you`,
     `received it at will not be used for anything else.`,
   ].join('\n');
-  const html = [
-    `<p>Welcome to SmrtCash!</p>`,
-    `<p>Click the button below to confirm your email address and`,
-    `finish creating your account:</p>`,
-    `<p><a href="${escapeAttr(opts.verifyUrl)}"`,
-    `style="display:inline-block;padding:10px 18px;background:#10b981;`,
-    `color:#fff;border-radius:4px;text-decoration:none">Confirm email</a></p>`,
-    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
-    `<code>${escapeHtml(opts.verifyUrl)}</code></p>`,
-    `<p style="color:#6b7280;font-size:0.85em">Link expires ${escapeHtml(opts.expiresAt)}.</p>`,
-  ].join(' ');
+  const html = renderEmailShell({
+    title: 'Welcome to SmrtCash',
+    intro: 'Click the button below to confirm your email address and finish creating your account.',
+    ctaText: 'Confirm email',
+    ctaUrl: opts.verifyUrl,
+    ctaColor: '#10b981',
+    bodyHtmlSafe: `Link expires ${escapeHtml(opts.expiresAt)}. If you didn't sign up for SmrtCash you can safely ignore this email — the address you received it at will not be used for anything else.`,
+  });
   return { subject, text, html };
 }
 
@@ -290,17 +337,13 @@ export function renderInvitationEmail(opts: {
     `If you weren't expecting this email, you can safely ignore it — the`,
     `link is only useful to whoever you forward it to.`,
   ].join('\n');
-  const html = [
-    `<p>${escapeHtml(opts.inviterName)} has invited you to join`,
-    `<strong>${escapeHtml(opts.tenantName)}</strong> on SmrtCash`,
-    `as a <strong>${escapeHtml(opts.role)}</strong>.</p>`,
-    `<p><a href="${escapeAttr(opts.acceptUrl)}"`,
-    `style="display:inline-block;padding:10px 18px;background:#6366f1;`,
-    `color:#fff;border-radius:4px;text-decoration:none">Accept invitation</a></p>`,
-    `<p style="color:#6b7280;font-size:0.9em">Or paste this URL into your browser:<br>`,
-    `<code>${escapeHtml(opts.acceptUrl)}</code></p>`,
-    `<p style="color:#6b7280;font-size:0.85em">This invitation expires ${escapeHtml(opts.expiresAt)}.</p>`,
-  ].join(' ');
+  const html = renderEmailShell({
+    title: `You're invited to ${opts.tenantName}`,
+    intro: `${opts.inviterName} has invited you to join "${opts.tenantName}" on SmrtCash as a ${opts.role}.`,
+    ctaText: 'Accept invitation',
+    ctaUrl: opts.acceptUrl,
+    bodyHtmlSafe: `This invitation expires ${escapeHtml(opts.expiresAt)}. If you weren't expecting this email, you can safely ignore it — the link is only useful to whoever you forward it to.`,
+  });
   return { subject, text, html };
 }
 

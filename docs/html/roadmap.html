@@ -246,7 +246,7 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <tr>
 <td><strong>0.18.x</strong></td>
 <td><strong>Competitive parity &amp; depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower</strong></td>
-<td>🔜 In progress — 0.18.0…0.18.6 shipped 2026-05-24</td>
+<td>🔜 In progress — 0.18.0…0.18.7 shipped 2026-05-24</td>
 </tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
@@ -711,19 +711,14 @@ avalanche calculators (capped at 600 months, flags
 unpayable). New <code>/debt-payoff</code> page with inline editors,
 extra-payment input, tab strip between strategies, and per-
 account result table.</li>
-<li><strong>0.18.7</strong> 📋 — <strong>Branded HTML email shell + audit</strong> (~1
-day). Every outward email already returns both <code>text</code> and
-<code>html</code> from its renderer (verification, password reset,
-dunning, tenant + super-admin invitations), but the HTML
-bodies are minimal and each renderer hand-codes its own
-styling. Slice goal: a shared HTML wrapper
-(<code>renderEmailShell({title, intro, ctaText, ctaUrl, body})</code>)
-with a consistent BITS header, button styling, and footer,
-used by all four renderers. Add a CI assertion that every
-<code>tryMail()</code> call site receives an <code>html</code> field so a future
-contributor can&#39;t ship a text-only email by accident.
-Driven by the test-deploy finding that operators want
-visually polished invitations, not raw monospace text.</li>
+<li><strong>0.18.7</strong> ✅ (released 2026-05-24) — <strong>Branded HTML email
+shell</strong>. New <code>renderEmailShell({title, intro, ctaText, ctaUrl, bodyHtmlSafe, ctaColor})</code> in <code>domain/mailer.ts</code> —
+a 560px inline-styled table with navy BITS header, branded
+CTA button, monospace URL fallback, BuildITSmrt footer link.
+All four renderers (verification, password reset, invitation,
+dunning) now route through it. New <code>email-shell.test.ts</code>
+asserts each renderer&#39;s html contains the footer marker so
+a future contributor can&#39;t ship a hand-rolled email.</li>
 <li><strong>0.18.8</strong> 📋 — <strong>Unify base URL settings</strong> (~1 day).
 Currently there are two settings that answer the same
 question — &quot;what URL should outgoing email links use?&quot;:
@@ -845,7 +840,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 02:57:39 UTC · commit 45282bc</span>
+  <span>Generated 2026-05-25 03:00:44 UTC · commit 0c88c37</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.6 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.7 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -529,19 +529,15 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   unpayable). New `/debt-payoff` page with inline editors,
   extra-payment input, tab strip between strategies, and per-
   account result table.
-- **0.18.7** 📋 — **Branded HTML email shell + audit** (~1
-  day). Every outward email already returns both `text` and
-  `html` from its renderer (verification, password reset,
-  dunning, tenant + super-admin invitations), but the HTML
-  bodies are minimal and each renderer hand-codes its own
-  styling. Slice goal: a shared HTML wrapper
-  (`renderEmailShell({title, intro, ctaText, ctaUrl, body})`)
-  with a consistent BITS header, button styling, and footer,
-  used by all four renderers. Add a CI assertion that every
-  `tryMail()` call site receives an `html` field so a future
-  contributor can't ship a text-only email by accident.
-  Driven by the test-deploy finding that operators want
-  visually polished invitations, not raw monospace text.
+- **0.18.7** ✅ (released 2026-05-24) — **Branded HTML email
+  shell**. New `renderEmailShell({title, intro, ctaText,
+  ctaUrl, bodyHtmlSafe, ctaColor})` in `domain/mailer.ts` —
+  a 560px inline-styled table with navy BITS header, branded
+  CTA button, monospace URL fallback, BuildITSmrt footer link.
+  All four renderers (verification, password reset, invitation,
+  dunning) now route through it. New `email-shell.test.ts`
+  asserts each renderer's html contains the footer marker so
+  a future contributor can't ship a hand-rolled email.
 - **0.18.8** 📋 — **Unify base URL settings** (~1 day).
   Currently there are two settings that answer the same
   question — "what URL should outgoing email links use?":

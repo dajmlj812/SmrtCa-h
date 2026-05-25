@@ -161,8 +161,28 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.6 adds a /debt-payoff page that computes snowball + avalanche
-plans for every loan and credit-card account.</em></p>
+<p><em>0.18.7 unifies the HTML look of every outbound email behind a
+single <code>renderEmailShell</code> helper with a BITS header + footer.</em></p>
+<hr>
+<h2 id="0187-2026-05-24-branded-html-email-shell">[0.18.7] — 2026-05-24 — Branded HTML email shell<a class="heading-anchor" href="#0187-2026-05-24-branded-html-email-shell">#</a></h2>
+<p>Driven by test-deploy feedback that invitation emails looked
+plain. Every outbound email now goes through a shared
+<code>renderEmailShell({ title, intro, ctaText, ctaUrl, bodyHtmlSafe, ctaColor })</code> helper in <code>server/src/domain/mailer.ts</code> — a 560px
+table-layout shell with a navy &quot;SmrtCash&quot; header, branded CTA
+button, monospace URL fallback, and a &quot;developed by BuildITSmrt,
+LLC.&quot; footer that links to builditsmrt.com.</p>
+<p>Applied to all four existing renderers:</p>
+<ul>
+<li><code>renderVerificationEmail</code> (green CTA, &quot;Confirm email&quot;)</li>
+<li><code>renderPasswordResetEmail</code> (indigo CTA, &quot;Reset password&quot;)</li>
+<li><code>renderInvitationEmail</code> (indigo CTA, &quot;Accept invitation&quot;)</li>
+<li><code>renderDunningEmail</code> (red CTA, &quot;Update payment method&quot;)</li>
+</ul>
+<p>Inline styles only — the major clients (Gmail, Outlook, iOS
+Mail) strip <code>&lt;style&gt;</code> blocks but respect <code>style=&quot;...&quot;</code> attrs.</p>
+<p>New <code>tests/unit/email-shell.test.ts</code> asserts every renderer&#39;s
+html includes the shell footer marker (&quot;BuildITSmrt, LLC.&quot;) so
+a future contributor can&#39;t ship a hand-rolled email by accident.</p>
 <hr>
 <h2 id="0186-2026-05-24-debt-payoff-plans">[0.18.6] — 2026-05-24 — Debt payoff plans<a class="heading-anchor" href="#0186-2026-05-24-debt-payoff-plans">#</a></h2>
 <p>Closes the YNAB gap on debt-payoff workflows.</p>
@@ -6680,7 +6700,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 02:57:38 UTC · commit 45282bc</span>
+  <span>Generated 2026-05-25 03:00:43 UTC · commit 0c88c37</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

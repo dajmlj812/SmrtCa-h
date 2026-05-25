@@ -9,8 +9,33 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.6 adds a /debt-payoff page that computes snowball + avalanche
-plans for every loan and credit-card account._
+_0.18.7 unifies the HTML look of every outbound email behind a
+single `renderEmailShell` helper with a BITS header + footer._
+
+---
+
+## [0.18.7] — 2026-05-24 — Branded HTML email shell
+
+Driven by test-deploy feedback that invitation emails looked
+plain. Every outbound email now goes through a shared
+`renderEmailShell({ title, intro, ctaText, ctaUrl, bodyHtmlSafe,
+ctaColor })` helper in `server/src/domain/mailer.ts` — a 560px
+table-layout shell with a navy "SmrtCash" header, branded CTA
+button, monospace URL fallback, and a "developed by BuildITSmrt,
+LLC." footer that links to builditsmrt.com.
+
+Applied to all four existing renderers:
+- `renderVerificationEmail` (green CTA, "Confirm email")
+- `renderPasswordResetEmail` (indigo CTA, "Reset password")
+- `renderInvitationEmail` (indigo CTA, "Accept invitation")
+- `renderDunningEmail` (red CTA, "Update payment method")
+
+Inline styles only — the major clients (Gmail, Outlook, iOS
+Mail) strip `<style>` blocks but respect `style="..."` attrs.
+
+New `tests/unit/email-shell.test.ts` asserts every renderer's
+html includes the shell footer marker ("BuildITSmrt, LLC.") so
+a future contributor can't ship a hand-rolled email by accident.
 
 ---
 
