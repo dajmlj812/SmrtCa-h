@@ -1,4 +1,5 @@
 import { monitorEventLoopDelay, type EventLoopUtilization, performance } from 'node:perf_hooks';
+import { getHeapStatistics } from 'node:v8';
 
 /**
  * In-process rolling buffer of operational metrics for the Health page.
@@ -28,7 +29,10 @@ export interface MetricSample {
   /** Resident-set size in bytes (real memory). */
   rss_bytes: number;
   heap_used_bytes: number;
+  /** V8's currently-allocated heap. Grows on demand up to heap_size_limit_bytes — NOT a memory ceiling. */
   heap_total_bytes: number;
+  /** V8's hard heap ceiling (= --max-old-space-size). Constant after boot. The real OOM line. */
+  heap_size_limit_bytes: number;
   /** Mean event-loop delay over the window, in ms. */
   event_loop_mean_ms: number;
   /** 99th-percentile event-loop delay over the window, in ms. */
@@ -71,6 +75,10 @@ class MetricsRecorder {
 
   // Event-loop delay observer — non-blocking, populated by the runtime.
   private eluHistogram = monitorEventLoopDelay({ resolution: 20 });
+
+  // V8's hard heap ceiling. Computed once at boot — it's set from
+  // --max-old-space-size and doesn't change at runtime.
+  private heapSizeLimit = getHeapStatistics().heap_size_limit;
 
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -156,6 +164,7 @@ class MetricsRecorder {
       rss_bytes: mem.rss,
       heap_used_bytes: mem.heapUsed,
       heap_total_bytes: mem.heapTotal,
+      heap_size_limit_bytes: this.heapSizeLimit,
       event_loop_mean_ms: round(eluMean, 2),
       event_loop_p99_ms: round(eluP99, 2),
       event_loop_util: round(eluUtil, 3),

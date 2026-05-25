@@ -191,9 +191,14 @@ async function checkHeapPressure(): Promise<Recommendation[]> {
   const samples = metricsRecorder.getTimeseries(60);
   if (samples.length === 0) return [];
   const latest = samples[samples.length - 1]!;
-  // Use V8's hard limit, not heap_total (which fluctuates).
-  const limit = metricsRecorder.latest()?.heap_total_bytes ?? 1; // best fallback we have inline
-  const ratio = latest.heap_used_bytes / Math.max(limit, 1);
+  // heap_size_limit_bytes is V8's hard ceiling (= --max-old-space-size).
+  // The OLD code used heap_total_bytes, which is V8's currently-allocated
+  // heap — that grows on demand, so heap_used / heap_total is almost
+  // always close to 1.0 and produced false "OOM imminent" recommendations
+  // even on a process holding 32 MB.
+  const limit = latest.heap_size_limit_bytes;
+  if (!limit || limit < 1) return [];
+  const ratio = latest.heap_used_bytes / limit;
   if (ratio > 0.85) {
     return [
       {

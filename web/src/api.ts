@@ -1048,6 +1048,7 @@ export interface MetricSample {
   rss_bytes: number;
   heap_used_bytes: number;
   heap_total_bytes: number;
+  heap_size_limit_bytes: number;
   event_loop_mean_ms: number;
   event_loop_p99_ms: number;
   event_loop_util: number;
