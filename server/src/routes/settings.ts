@@ -12,6 +12,7 @@ import {
 } from '../domain/settings.js';
 import { tryMail, verifyConnection } from '../domain/mailer.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
+import { recordAudit } from '../domain/audit.js';
 
 interface PublicSettingRow {
   key: string;
@@ -205,8 +206,29 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         if (err) return reply.code(400).send({ error: err });
       }
 
+      // Capture pre-write value for the audit diff. For secrets we
+      // only log the masked tail (last 4 chars) so plaintext never
+      // lands in audit_log — operators see "key rotated from
+      // ●●●●xyz9 to ●●●●ab12" which is enough to identify which
+      // value was where, without exposing either secret.
+      const oldValue = await getDbValue(key);
       await setDbValue(key, value);
       applyToConfig(key, value);
+      await recordAudit({
+        actorUserId: req.user?.id ?? null,
+        actorKind: req.user?.isSuperAdmin ? 'super_admin' : 'tenant_user',
+        action: 'setting.changed',
+        targetKind: 'setting',
+        targetId: key,
+        details: {
+          previousValue: oldValue === null
+            ? null
+            : meta.isSecret ? maskValue(oldValue) : oldValue,
+          newValue: meta.isSecret ? maskValue(value) : value,
+          isSecret: meta.isSecret,
+          restartRequired: meta.restartRequired,
+        },
+      });
       return {
         ok: true,
         restart_required: meta.restartRequired,
@@ -225,12 +247,27 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       if (meta.superOnly && !req.user?.isSuperAdmin) {
         return reply.code(403).send({ error: 'Super admin only' });
       }
+      const oldValue = await getDbValue(key as SettingKey);
       await clearSetting(key as SettingKey);
       // For live keys, clearing means "revert to env" — restore env value
       // to the in-memory config so the next call sees the env fallback.
       if (!meta.restartRequired) {
         applyToConfig(key as SettingKey, process.env[key] ?? '');
       }
+      await recordAudit({
+        actorUserId: req.user?.id ?? null,
+        actorKind: req.user?.isSuperAdmin ? 'super_admin' : 'tenant_user',
+        action: 'setting.cleared',
+        targetKind: 'setting',
+        targetId: key,
+        details: {
+          previousValue: oldValue === null
+            ? null
+            : meta.isSecret ? maskValue(oldValue) : oldValue,
+          isSecret: meta.isSecret,
+          restartRequired: meta.restartRequired,
+        },
+      });
       return reply.code(204).send();
     },
   );

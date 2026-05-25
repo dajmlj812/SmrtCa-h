@@ -10,6 +10,7 @@ import {
 import { getEffectiveValue } from '../domain/settings.js';
 import { isUuid } from '../util.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
+import { recordAudit } from '../domain/audit.js';
 
 /**
  * Backup management routes for the /backups page.
@@ -57,6 +58,18 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/backups/run', async (req, reply) => {
     if (!requireSuperAdmin(req, reply)) return;
     const backup = await runBackup({ kind: 'manual' });
+    await recordAudit({
+      actorUserId: req.user?.id ?? null,
+      actorKind: 'super_admin',
+      action: 'backup.run',
+      targetKind: 'backup',
+      targetId: backup.id,
+      details: {
+        status: backup.status,
+        db_bytes: backup.db_bytes,
+        total_bytes: backup.total_bytes,
+      },
+    });
     return { backup };
   });
 
@@ -65,6 +78,12 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     const retention =
       Number(await getEffectiveValue('BACKUP_RETENTION_DAYS')) || 30;
     const removed = await pruneOldBackups(retention);
+    await recordAudit({
+      actorUserId: req.user?.id ?? null,
+      actorKind: 'super_admin',
+      action: 'backup.prune',
+      details: { retentionDays: retention, removed },
+    });
     return { removed };
   });
 
@@ -86,8 +105,27 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
       }
       try {
         const result = await restoreFromBackup(req.params.id);
+        // Audit BEFORE returning — the restore overwrites everything
+        // including audit_log. The fresh DB will have this entry as
+        // one of the first rows, marking the recovery point in time.
+        await recordAudit({
+          actorUserId: req.user?.id ?? null,
+          actorKind: 'super_admin',
+          action: 'backup.restore',
+          targetKind: 'backup',
+          targetId: req.params.id,
+          details: result as unknown as Record<string, unknown>,
+        });
         return result;
       } catch (err) {
+        await recordAudit({
+          actorUserId: req.user?.id ?? null,
+          actorKind: 'super_admin',
+          action: 'backup.restore_failed',
+          targetKind: 'backup',
+          targetId: req.params.id,
+          details: { error: err instanceof Error ? err.message : 'unknown' },
+        });
         return reply.code(500).send({
           error: err instanceof Error ? err.message : 'Restore failed',
         });
@@ -103,6 +141,13 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Invalid backup id' });
       const ok = await deleteBackup(req.params.id);
       if (!ok) return reply.code(404).send({ error: 'Backup not found' });
+      await recordAudit({
+        actorUserId: req.user?.id ?? null,
+        actorKind: 'super_admin',
+        action: 'backup.deleted',
+        targetKind: 'backup',
+        targetId: req.params.id,
+      });
       return reply.code(204).send();
     },
   );
