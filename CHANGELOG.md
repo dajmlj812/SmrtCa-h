@@ -9,8 +9,50 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.7 unifies the HTML look of every outbound email behind a
-single `renderEmailShell` helper with a BITS header + footer._
+_0.18.8 collapses APP_BASE_URL + STRIPE_PUBLIC_BASE_URL into a
+single PUBLIC_BASE_URL key, behind one shared `resolveBaseUrl`
+helper. Prevents the "two settings, one source of truth, drift in
+between" class of bug that consumed hours during the smrtcash-test
+deploy._
+
+---
+
+## [0.18.8] — 2026-05-24 — Unify base URL settings
+
+Pre-0.18.8 there were two operator settings that answered the
+same question — "what URL should outgoing links use?":
+
+- `APP_BASE_URL` (read by invitations + super-admin admin-invite)
+- `STRIPE_PUBLIC_BASE_URL` (read by signup verification, password
+  reset, dunning, Stripe Checkout redirects)
+
+with different fallback orders, plus two `resolveBaseUrl()`
+helpers (one each in tenants.ts + system.ts) that also disagreed.
+
+During the smrtcash-test deploy an operator typo'd `APP_BASE_URL`
+with `@` instead of `.`; only the invitation flow broke (the
+verification flow read the *other* key). Hours of misdirected
+debugging followed (the symptoms looked like Maileroo URL
+mangling).
+
+**Changes:**
+- New `PUBLIC_BASE_URL` setting in `KNOWN_SETTINGS`; old two
+  keys removed.
+- Migration 048 backfills `PUBLIC_BASE_URL` from
+  `STRIPE_PUBLIC_BASE_URL` first, else `APP_BASE_URL`, then
+  deletes the old rows.
+- New `server/src/domain/base-url.ts` with one `resolveBaseUrl()`
+  helper. Priority: `PUBLIC_BASE_URL` setting → legacy
+  `STRIPE_PUBLIC_BASE_URL` env → legacy `APP_BASE_URL` env →
+  `Origin` header → `Host`+`X-Forwarded-Proto` → dev localhost.
+  Legacy env fallback preserves back-compat for `.env` files
+  that still use the old names.
+- Both local `resolveBaseUrl` helpers (tenants.ts, system.ts) +
+  the local `publicBaseUrl` shims in auth.ts, billing.ts, and
+  webhook-handlers.ts now all import from one place.
+
+Regression bar: 102 tests pass (tenant-isolation, auth,
+api-keys, email-shell).
 
 ---
 

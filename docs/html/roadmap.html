@@ -246,7 +246,7 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <tr>
 <td><strong>0.18.x</strong></td>
 <td><strong>Competitive parity &amp; depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower</strong></td>
-<td>🔜 In progress — 0.18.0…0.18.7 shipped 2026-05-24</td>
+<td>🔜 In progress — 0.18.0…0.18.8 shipped 2026-05-24</td>
 </tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
@@ -719,24 +719,16 @@ All four renderers (verification, password reset, invitation,
 dunning) now route through it. New <code>email-shell.test.ts</code>
 asserts each renderer&#39;s html contains the footer marker so
 a future contributor can&#39;t ship a hand-rolled email.</li>
-<li><strong>0.18.8</strong> 📋 — <strong>Unify base URL settings</strong> (~1 day).
-Currently there are two settings that answer the same
-question — &quot;what URL should outgoing email links use?&quot;:
-<code>APP_BASE_URL</code> (read by tenant invitations and the
-super-admin admin-invite added in 0.17.1) and
-<code>STRIPE_PUBLIC_BASE_URL</code> (read by signup verification,
-password reset, dunning, and Stripe Checkout redirects).
-Their fallback orders differ. During the smrtcash-test
-deploy, an operator typo&#39;d <code>APP_BASE_URL</code> with <code>@</code>
-instead of <code>.</code>; only the invitation flow broke (the
-signup-verification path was fine because it reads the
-other key). The bug was incredibly time-consuming to
-diagnose because the symptoms looked like SMTP-relay URL
-mangling. Slice goal: collapse both keys into a single
-<code>PUBLIC_BASE_URL</code>, migrate existing rows, replace all
-<code>resolveBaseUrl()</code> helpers with one. Prevents this exact
-category of &quot;two settings, one source of truth, drift in
-between&quot; bug.</li>
+<li><strong>0.18.8</strong> ✅ (released 2026-05-24) — <strong>Unify base URL
+settings</strong>. New <code>PUBLIC_BASE_URL</code> setting replaces both
+<code>APP_BASE_URL</code> and <code>STRIPE_PUBLIC_BASE_URL</code>. Migration 048
+backfills from the existing rows (Stripe key first, then
+app key) and deletes them. New
+<code>server/src/domain/base-url.ts</code> with one shared
+<code>resolveBaseUrl()</code> helper used by every callsite (auth,
+billing, webhook, tenant invites, super-admin invites).
+Legacy env-var names still work as fallback so operators
+with old <code>.env</code> files keep working. 102 tests still pass.</li>
 <li><strong>0.18.9</strong> 📋 — <strong>SaaS deploy guide + runbook gaps</strong> (~3
 hours, docs-only). Two artifacts left over from the
 smrtcash-test deploy:<ul>
@@ -840,7 +832,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 03:00:44 UTC · commit 0c88c37</span>
+  <span>Generated 2026-05-25 03:07:58 UTC · commit d2e8914</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

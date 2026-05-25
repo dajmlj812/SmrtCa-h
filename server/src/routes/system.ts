@@ -11,7 +11,7 @@ import { handleSubscriptionUpsert } from '../billing/webhook-handlers.js';
 import { PLAN_FEATURES, type Plan } from '../auth/entitlements.js';
 import { rotateTenantKey } from '../attachments/tenant-keys.js';
 import { renderInvitationEmail, tryMail } from '../domain/mailer.js';
-import { getEffectiveValue } from '../domain/settings.js';
+import { resolveBaseUrl } from '../domain/base-url.js';
 
 /**
  * Super-admin console endpoints. Gated by `req.user.isSuperAdmin`.
@@ -595,26 +595,5 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
   );
 }
 
-/**
- * Mirror of the helper in tenants.ts. Kept local to avoid an
- * inter-route import cycle — the function is small and the
- * priority list is identical: APP_BASE_URL setting wins, then
- * STRIPE_PUBLIC_BASE_URL (used elsewhere for outgoing links),
- * then request headers, then dev default.
- */
-async function resolveBaseUrl(headers: Record<string, unknown>): Promise<string> {
-  const fromAppBase = (await getEffectiveValue('APP_BASE_URL')).trim();
-  if (fromAppBase !== '') return fromAppBase.replace(/\/+$/, '');
-  const fromStripe = (await getEffectiveValue('STRIPE_PUBLIC_BASE_URL')).trim();
-  if (fromStripe !== '') return fromStripe.replace(/\/+$/, '');
-  const origin = headers['origin'];
-  if (typeof origin === 'string' && origin.startsWith('http')) {
-    return origin.replace(/\/+$/, '');
-  }
-  const proto = headers['x-forwarded-proto'] ?? 'http';
-  const host = headers['host'];
-  if (typeof host === 'string') {
-    return `${String(proto)}://${host}`.replace(/\/+$/, '');
-  }
-  return 'http://localhost:4000';
-}
+// 0.18.8 — base URL resolution moved to domain/base-url.ts;
+// import added at the top of this file.

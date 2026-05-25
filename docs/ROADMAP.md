@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.7 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.8 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -538,24 +538,16 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   dunning) now route through it. New `email-shell.test.ts`
   asserts each renderer's html contains the footer marker so
   a future contributor can't ship a hand-rolled email.
-- **0.18.8** 📋 — **Unify base URL settings** (~1 day).
-  Currently there are two settings that answer the same
-  question — "what URL should outgoing email links use?":
-  `APP_BASE_URL` (read by tenant invitations and the
-  super-admin admin-invite added in 0.17.1) and
-  `STRIPE_PUBLIC_BASE_URL` (read by signup verification,
-  password reset, dunning, and Stripe Checkout redirects).
-  Their fallback orders differ. During the smrtcash-test
-  deploy, an operator typo'd `APP_BASE_URL` with `@`
-  instead of `.`; only the invitation flow broke (the
-  signup-verification path was fine because it reads the
-  other key). The bug was incredibly time-consuming to
-  diagnose because the symptoms looked like SMTP-relay URL
-  mangling. Slice goal: collapse both keys into a single
-  `PUBLIC_BASE_URL`, migrate existing rows, replace all
-  `resolveBaseUrl()` helpers with one. Prevents this exact
-  category of "two settings, one source of truth, drift in
-  between" bug.
+- **0.18.8** ✅ (released 2026-05-24) — **Unify base URL
+  settings**. New `PUBLIC_BASE_URL` setting replaces both
+  `APP_BASE_URL` and `STRIPE_PUBLIC_BASE_URL`. Migration 048
+  backfills from the existing rows (Stripe key first, then
+  app key) and deletes them. New
+  `server/src/domain/base-url.ts` with one shared
+  `resolveBaseUrl()` helper used by every callsite (auth,
+  billing, webhook, tenant invites, super-admin invites).
+  Legacy env-var names still work as fallback so operators
+  with old `.env` files keep working. 102 tests still pass.
 - **0.18.9** 📋 — **SaaS deploy guide + runbook gaps** (~3
   hours, docs-only). Two artifacts left over from the
   smrtcash-test deploy:

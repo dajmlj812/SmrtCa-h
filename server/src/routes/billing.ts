@@ -11,7 +11,7 @@ import {
   type Plan,
 } from '../auth/entitlements.js';
 import { automaticTaxEnabled, getStripe, isStripeConfigured } from '../billing/stripe.js';
-import { getEffectiveValue } from '../domain/settings.js';
+import { resolveBaseUrl } from '../domain/base-url.js';
 import { isKnownLookupKey } from '../billing/plans.js';
 import {
   handleSubscriptionUpsert,
@@ -33,13 +33,12 @@ import {
 const TRIAL_PERIOD_DAYS = 14;
 
 /**
- * 0.16.3 — base URL for Stripe Checkout success/cancel + portal
- * return. Sourced through getEffectiveValue so the operator can
- * change it from /settings; defaults to localhost for dev.
+ * 0.18.8 — Stripe Checkout success/cancel + portal return URLs
+ * resolve through the unified PUBLIC_BASE_URL helper. Shim kept
+ * so this file's callers stay readable.
  */
 async function publicBaseUrl(): Promise<string> {
-  const v = (await getEffectiveValue('STRIPE_PUBLIC_BASE_URL')).trim();
-  return (v || 'http://localhost:4000').replace(/\/+$/, '');
+  return resolveBaseUrl({});
 }
 
 /**

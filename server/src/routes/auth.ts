@@ -27,6 +27,7 @@ import {
   tryMail,
 } from '../domain/mailer.js';
 import { getEffectiveValue } from '../domain/settings.js';
+import { resolveBaseUrl } from '../domain/base-url.js';
 
 const OIDC_STATE_COOKIE = 'smrtcash_oidc_state';
 
@@ -98,15 +99,13 @@ const VERIFICATION_TTL_HOURS = 24;
 const PASSWORD_RESET_TTL_MINUTES = 60;
 
 /**
- * 0.16.3 — base URL for outgoing email links (verification,
- * reset) and Stripe Checkout success/cancel. Sourced through
- * getEffectiveValue so the operator can change it from
- * /settings without touching the env file. Falls back to the
- * dev default when nothing is configured.
+ * 0.18.8 — verification + reset links now resolve through the
+ * unified PUBLIC_BASE_URL helper. The legacy local helper is
+ * preserved as a thin shim so the rest of this file (and any
+ * future callsite in here) doesn't need to import another file.
  */
 async function publicBaseUrl(): Promise<string> {
-  const v = (await getEffectiveValue('STRIPE_PUBLIC_BASE_URL')).trim();
-  return (v || 'http://localhost:4000').replace(/\/+$/, '');
+  return resolveBaseUrl({});
 }
 
 /**

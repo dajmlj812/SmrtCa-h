@@ -70,8 +70,12 @@ export const KNOWN_SETTINGS = [
   { key: 'SMTP_PASS', isSecret: true, restartRequired: false, superOnly: true, label: 'SMTP password' },
   { key: 'SMTP_FROM', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP from address' },
   { key: 'SMTP_SECURE', isSecret: false, restartRequired: false, superOnly: true, label: 'SMTP TLS-on-connect (port 465)' },
-  // App base URL — for outgoing email links. Super-admin only.
-  { key: 'APP_BASE_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'App base URL (for email links)' },
+  // 0.18.8 — unified public base URL. Replaces APP_BASE_URL +
+  // STRIPE_PUBLIC_BASE_URL (both retired). Used by every outgoing
+  // link: email verification, password reset, invitations, dunning,
+  // Stripe Checkout redirects, all of it. Migration 048 backfills
+  // from whichever old key was set.
+  { key: 'PUBLIC_BASE_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'Public base URL (for email links + Stripe redirects)' },
   // Security — super-admin only, restart required
   { key: 'SESSION_SECRET', isSecret: true, restartRequired: true, superOnly: true, label: 'Session secret' },
   { key: 'ATTACHMENT_ENCRYPTION_KEY', isSecret: true, restartRequired: true, superOnly: true, label: 'Attachment encryption key' },
@@ -113,7 +117,6 @@ export const KNOWN_SETTINGS = [
   // them in the DB now takes effect on the next request.
   { key: 'STRIPE_SECRET_KEY', isSecret: true, restartRequired: false, superOnly: true, label: 'Stripe — secret key (sk_…)' },
   { key: 'STRIPE_WEBHOOK_SECRET', isSecret: true, restartRequired: false, superOnly: true, label: 'Stripe — webhook signing secret (whsec_…)' },
-  { key: 'STRIPE_PUBLIC_BASE_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'Public base URL (Stripe + verification + reset email links)' },
   { key: 'STRIPE_AUTOMATIC_TAX', isSecret: false, restartRequired: false, superOnly: true, label: 'Stripe — automatic tax (true/false)' },
   { key: 'PUBLIC_SIGNUP_ENABLED', isSecret: false, restartRequired: false, superOnly: true, label: 'Public signup at /signup (true/false)' },
   // Support / feedback URL (0.16.3). Surfaced in sidebar footers
@@ -319,9 +322,9 @@ export function applyToConfig(key: SettingKey, value: string): void {
       _resetStripeClientForTests();
       break;
     case 'STRIPE_WEBHOOK_SECRET':
-    case 'STRIPE_PUBLIC_BASE_URL':
     case 'STRIPE_AUTOMATIC_TAX':
     case 'PUBLIC_SIGNUP_ENABLED':
+    case 'PUBLIC_BASE_URL':
     case 'SUPPORT_URL':
       // Read fresh from getEffectiveValue() each request; no
       // caching, so a DB write takes effect immediately. We still

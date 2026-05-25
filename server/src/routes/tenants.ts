@@ -10,7 +10,7 @@ import {
 import { createSession, setSessionTenant, SESSION_COOKIE } from '../auth/sessions.js';
 import { config } from '../config.js';
 import { renderInvitationEmail, tryMail } from '../domain/mailer.js';
-import { getEffectiveValue } from '../domain/settings.js';
+import { resolveBaseUrl } from '../domain/base-url.js';
 import { requireHouseholdSeat } from '../auth/entitlements.js';
 
 /**
@@ -518,26 +518,5 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
   );
 }
 
-/**
- * Resolve the public base URL for outgoing links. Priority:
- *   1. APP_BASE_URL setting (operator-set; required for headless sends
- *      where the request that creates the invite has no real headers).
- *   2. The request's Origin / Host header (best-effort fallback when
- *      the create-invite call came from a browser session).
- */
-async function resolveBaseUrl(headers: Record<string, unknown>): Promise<string> {
-  const fromSettings = (await getEffectiveValue('APP_BASE_URL')).trim();
-  if (fromSettings !== '') {
-    return fromSettings.replace(/\/+$/, '');
-  }
-  const origin = headers['origin'];
-  if (typeof origin === 'string' && origin.startsWith('http')) {
-    return origin.replace(/\/+$/, '');
-  }
-  const proto = headers['x-forwarded-proto'] ?? 'http';
-  const host = headers['host'];
-  if (typeof host === 'string') {
-    return `${String(proto)}://${host}`.replace(/\/+$/, '');
-  }
-  return 'http://localhost:4000';
-}
+// 0.18.8 — base URL resolution moved to domain/base-url.ts;
+// import added at the top of this file.

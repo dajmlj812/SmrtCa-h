@@ -161,8 +161,46 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.7 unifies the HTML look of every outbound email behind a
-single <code>renderEmailShell</code> helper with a BITS header + footer.</em></p>
+<p><em>0.18.8 collapses APP_BASE_URL + STRIPE_PUBLIC_BASE_URL into a
+single PUBLIC_BASE_URL key, behind one shared <code>resolveBaseUrl</code>
+helper. Prevents the &quot;two settings, one source of truth, drift in
+between&quot; class of bug that consumed hours during the smrtcash-test
+deploy.</em></p>
+<hr>
+<h2 id="0188-2026-05-24-unify-base-url-settings">[0.18.8] — 2026-05-24 — Unify base URL settings<a class="heading-anchor" href="#0188-2026-05-24-unify-base-url-settings">#</a></h2>
+<p>Pre-0.18.8 there were two operator settings that answered the
+same question — &quot;what URL should outgoing links use?&quot;:</p>
+<ul>
+<li><code>APP_BASE_URL</code> (read by invitations + super-admin admin-invite)</li>
+<li><code>STRIPE_PUBLIC_BASE_URL</code> (read by signup verification, password
+reset, dunning, Stripe Checkout redirects)</li>
+</ul>
+<p>with different fallback orders, plus two <code>resolveBaseUrl()</code>
+helpers (one each in tenants.ts + system.ts) that also disagreed.</p>
+<p>During the smrtcash-test deploy an operator typo&#39;d <code>APP_BASE_URL</code>
+with <code>@</code> instead of <code>.</code>; only the invitation flow broke (the
+verification flow read the <em>other</em> key). Hours of misdirected
+debugging followed (the symptoms looked like Maileroo URL
+mangling).</p>
+<p><strong>Changes:</strong></p>
+<ul>
+<li>New <code>PUBLIC_BASE_URL</code> setting in <code>KNOWN_SETTINGS</code>; old two
+keys removed.</li>
+<li>Migration 048 backfills <code>PUBLIC_BASE_URL</code> from
+<code>STRIPE_PUBLIC_BASE_URL</code> first, else <code>APP_BASE_URL</code>, then
+deletes the old rows.</li>
+<li>New <code>server/src/domain/base-url.ts</code> with one <code>resolveBaseUrl()</code>
+helper. Priority: <code>PUBLIC_BASE_URL</code> setting → legacy
+<code>STRIPE_PUBLIC_BASE_URL</code> env → legacy <code>APP_BASE_URL</code> env →
+<code>Origin</code> header → <code>Host</code>+<code>X-Forwarded-Proto</code> → dev localhost.
+Legacy env fallback preserves back-compat for <code>.env</code> files
+that still use the old names.</li>
+<li>Both local <code>resolveBaseUrl</code> helpers (tenants.ts, system.ts) +
+the local <code>publicBaseUrl</code> shims in auth.ts, billing.ts, and
+webhook-handlers.ts now all import from one place.</li>
+</ul>
+<p>Regression bar: 102 tests pass (tenant-isolation, auth,
+api-keys, email-shell).</p>
 <hr>
 <h2 id="0187-2026-05-24-branded-html-email-shell">[0.18.7] — 2026-05-24 — Branded HTML email shell<a class="heading-anchor" href="#0187-2026-05-24-branded-html-email-shell">#</a></h2>
 <p>Driven by test-deploy feedback that invitation emails looked
@@ -6700,7 +6738,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 03:00:43 UTC · commit 0c88c37</span>
+  <span>Generated 2026-05-25 03:07:57 UTC · commit d2e8914</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
