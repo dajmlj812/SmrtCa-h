@@ -412,11 +412,7 @@ function OcrSummary({
   transaction: Transaction;
 }) {
   if (attachment.ocr_status === 'pending') {
-    return (
-      <div className="ocr-summary pending">
-        <span className="spinner" aria-hidden /> Scanning receipt…
-      </div>
-    );
+    return <OcrScanningProgress createdAt={attachment.created_at} />;
   }
   if (attachment.ocr_status === 'skipped') {
     return (
@@ -509,4 +505,86 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * 0.18.13 — Live OCR progress UI.
+ *
+ * Replaces the static "Scanning receipt…" spinner with an elapsed
+ * counter + asymptotic progress bar + phase hints. The Claude vision
+ * API takes ~60-90 seconds for a typical receipt and there's no
+ * granular phase signal from the API, so the bar is time-based: ramp
+ * to 95% over the expected duration, then crawl toward 99%. The phase
+ * hint text changes over time so the user always sees the UI doing
+ * something.
+ *
+ * If scanning exceeds the slow threshold (3 minutes), the panel
+ * surfaces a "taking longer than usual" message — the back-end
+ * timeout will eventually mark the row 'failed' regardless, but
+ * users shouldn't have to stare at a moving bar for 3+ minutes
+ * without explanation.
+ */
+const OCR_EXPECTED_MS = 90_000;
+const OCR_SLOW_MS = 180_000;
+const OCR_TICK_MS = 500;
+
+function OcrScanningProgress({ createdAt }: { createdAt: string }) {
+  const startedAt = new Date(createdAt).getTime();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), OCR_TICK_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Clamp at zero — if the client clock is ahead of the server, the
+  // first frame would otherwise show a negative elapsed.
+  const elapsedMs = Math.max(0, now - startedAt);
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+
+  // Asymptotic curve so the bar visibly moves but never claims to be
+  // about to finish when we don't actually know.
+  const pct =
+    elapsedMs < OCR_EXPECTED_MS
+      ? (elapsedMs / OCR_EXPECTED_MS) * 95
+      : Math.min(99, 95 + (elapsedMs - OCR_EXPECTED_MS) / 30_000);
+
+  const isSlow = elapsedMs >= OCR_SLOW_MS;
+
+  const mm = Math.floor(elapsedSec / 60);
+  const ss = elapsedSec % 60;
+  const elapsedLabel =
+    mm > 0 ? `${mm}:${ss.toString().padStart(2, '0')}` : `${ss}s`;
+
+  return (
+    <div className="ocr-summary pending">
+      <div className="ocr-pending-header">
+        <span className="spinner" aria-hidden />
+        <span>
+          <strong>Scanning receipt…</strong>{' '}
+          <span className="muted">{elapsedLabel}</span>
+        </span>
+      </div>
+      <div className="ocr-progress-bar" aria-hidden>
+        <div className="ocr-progress-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="muted small ocr-progress-hint">
+        {isSlow ? (
+          <>
+            Taking longer than usual — still working. You can keep this open or
+            come back later; the scan keeps running in the background.
+          </>
+        ) : (
+          phaseHint(elapsedMs)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function phaseHint(elapsedMs: number): string {
+  if (elapsedMs < 5_000) return 'Sending image to the AI…';
+  if (elapsedMs < 20_000) return 'AI is reading the receipt…';
+  if (elapsedMs < 50_000) return 'Extracting merchant, amount, and date…';
+  if (elapsedMs < OCR_EXPECTED_MS) return 'Finalizing the scan…';
+  return 'Still scanning — most receipts finish in about 90 seconds.';
 }

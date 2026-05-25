@@ -894,6 +894,27 @@ select:focus {
   background: #eff6ff;
   color: #1e40af;
 }
+/* 0.18.13 — live OCR progress inside .ocr-summary.pending */
+.ocr-pending-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ocr-progress-bar {
+  height: 6px;
+  background: rgba(30, 64, 175, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ocr-progress-fill {
+  height: 100%;
+  background: #1e40af;
+  border-radius: 3px;
+  transition: width 0.4s ease-out;
+}
+.ocr-progress-hint {
+  color: rgba(30, 64, 175, 0.85);
+}
 .ocr-summary.failed {
   background: #fef2f2;
   color: #991b1b;

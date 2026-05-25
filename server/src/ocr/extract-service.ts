@@ -6,6 +6,16 @@ import {
 import type { OcrProvider } from './types.js';
 
 /**
+ * Hard cap on a single OCR call. The Claude vision API normally finishes
+ * in 60-90 seconds for a typical receipt; anything past 3 minutes
+ * almost certainly means the upstream connection is wedged. Without
+ * this cap, the row sits at ocr_status='pending' until the next server
+ * restart triggers the sweepPendingOcr retry — and the user sees a
+ * spinner that genuinely doesn't move.
+ */
+const OCR_TIMEOUT_MS = 180_000;
+
+/**
  * Run OCR on one attachment and persist the result. Designed to be called
  * fire-and-forget AFTER the upload response is sent — failures are caught
  * and stored on the row (status='failed' with the error in ocr_note) so the
@@ -23,7 +33,28 @@ export async function runOcrExtraction(
   filename: string,
 ): Promise<void> {
   try {
-    const result = await provider.extract({ buffer, mimeType, filename });
+    // Wrap with a hard timeout so a wedged Claude call resolves to
+    // 'failed' instead of sitting at 'pending' until the next restart.
+    // The provider doesn't expose an AbortSignal interface today so we
+    // race the call against a setTimeout. The provider call keeps
+    // running in the background if we lose the race — the only effect
+    // is that the row is marked 'failed' so the UI moves on. (When the
+    // late response eventually comes back, it'll resolve into the
+    // already-stored 'failed' row's catch path and be discarded.)
+    const result = await Promise.race([
+      provider.extract({ buffer, mimeType, filename }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `OCR timed out after ${OCR_TIMEOUT_MS / 1000} seconds — provider did not respond. The image was saved; you can re-trigger OCR by re-uploading.`,
+              ),
+            ),
+          OCR_TIMEOUT_MS,
+        ),
+      ),
+    ]);
     await pool.query(
       `UPDATE attachments
           SET extracted_amount_cents = $1,
