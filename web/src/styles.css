@@ -1698,7 +1698,606 @@ tr.selected {
   border-top: 1px solid var(--card-border, #e5e7eb);
 }
 
-/* ── Phase 7.2: settings page ────────────────────────────── */
+/* ──────────────────────────────────────────────────────────
+   0.18.13 — Settings console redesign.
+
+   Aesthetic direction: operator console, not marketing page. The
+   audience is sysadmins; the goal is dense-but-scannable.
+
+   Layout: sticky left rail nav (section list with counts +
+   restart-required badge) and a scrolling content pane on the
+   right. The top of the content pane is a toolbar (search +
+   filter chips) followed by a "recently changed" strip.
+
+   Chrome: monospace key codes, color-coded status chips, amber
+   left-edge accents on restart-required rows. Reuses the project
+   CSS variables (--accent / --text / --muted / --card-bg /
+   --border) so it stays cohesive with the rest of the app and
+   inherits dark-mode automatically.
+
+   The selectors below come AFTER the legacy `.settings-row` block
+   so they override (CSS cascade-by-order). Existing children
+   (.settings-row-name / .settings-row-key) get re-themed; the
+   grid layout is reset.
+   ────────────────────────────────────────────────────────── */
+
+/* CSS variables for the status-chip palette. Picked so each
+   sits cleanly on both light + dark backgrounds; alpha-channel
+   backgrounds blend with the card surface. */
+:root {
+  --console-live:    rgb(16, 185, 129);   /* emerald */
+  --console-restart: rgb(245, 158, 11);   /* amber */
+  --console-env:     rgb(99, 102, 241);   /* indigo */
+  --console-gui:     rgb(100, 116, 139);  /* slate */
+  --console-secret:  rgb(239, 68, 68);    /* rose */
+  --console-saved:   rgb(34, 197, 94);    /* green */
+}
+
+.settings-shell {
+  /* Cap width so the left rail doesn't drift into infinity on
+     ultra-wide monitors. The console look is denser content
+     centered in the viewport. */
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.settings-pageheader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 8px 0 20px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.settings-h1 {
+  font-size: 26px;
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+/* The /// tick is a typographic flourish that ties the page to the
+   "console" idiom — like an editor's leading prompt. */
+.settings-h1-tick {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 18px;
+  color: var(--accent, #4f46e5);
+  font-weight: 600;
+  transform: translateY(-1px);
+}
+.settings-subtitle {
+  color: var(--muted, #6b7280);
+  font-size: 13px;
+}
+.settings-staged {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--console-restart);
+  font-weight: 600;
+}
+.settings-staged-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--console-restart);
+  display: inline-block;
+  animation: settings-pulse 1.6s ease-in-out infinite;
+}
+@keyframes settings-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.25); }
+}
+.settings-restart-btn {
+  white-space: nowrap;
+}
+
+/* ── Two-column body ───────────────────────────────────── */
+.settings-body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ── Left rail nav ─────────────────────────────────────── */
+.settings-nav {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  padding: 14px 4px 14px 4px;
+  border-right: 1px solid var(--border, #e5e7eb);
+}
+.settings-nav-label {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--muted, #6b7280);
+  margin: 0 12px 10px;
+}
+.settings-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.settings-nav-item {
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-radius: 5px;
+  transition: background 0.12s;
+}
+.settings-nav-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.settings-nav-title {
+  /* Subtle left tick that becomes the active indicator on hover/focus */
+  position: relative;
+}
+.settings-nav-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-nav-count {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  min-width: 18px;
+  text-align: right;
+}
+.settings-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--console-restart) 18%, transparent);
+  color: var(--console-restart);
+}
+
+/* ── Toolbar (search + filters) ────────────────────────── */
+.settings-content {
+  min-width: 0;
+}
+.settings-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.settings-search {
+  position: relative;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.settings-search input {
+  width: 100%;
+  padding: 9px 44px 9px 36px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--card-bg, #fff);
+  color: var(--text);
+  font-size: 14px;
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+}
+.settings-search input:focus {
+  outline: none;
+  border-color: var(--accent, #4f46e5);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #4f46e5) 18%, transparent);
+}
+.settings-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted, #6b7280);
+  pointer-events: none;
+  font-size: 16px;
+}
+.settings-search-kbd {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  background: var(--surface-3, #f1f5f9);
+  border: 1px solid var(--border, #e5e7eb);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.settings-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.settings-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  background: var(--card-bg, #fff);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.settings-filter-chip:hover {
+  border-color: var(--accent, #4f46e5);
+}
+.settings-filter-chip.active {
+  background: var(--text);
+  color: var(--card-bg, #fff);
+  border-color: var(--text);
+}
+.settings-filter-chip.active.gui     { background: var(--console-gui); border-color: var(--console-gui); }
+.settings-filter-chip.active.restart { background: var(--console-restart); border-color: var(--console-restart); }
+.settings-filter-chip.active.env     { background: var(--console-env); border-color: var(--console-env); }
+.settings-filter-chip.active.secret  { background: var(--console-secret); border-color: var(--console-secret); }
+.settings-filter-count {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* ── Recently changed strip ────────────────────────────── */
+.settings-recent {
+  margin-bottom: 24px;
+  padding: 12px 14px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+}
+.settings-recent-label {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--muted, #6b7280);
+  margin-bottom: 8px;
+}
+.settings-recent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.settings-recent-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 6px 10px;
+  background: var(--surface-3, #f1f5f9);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.12s, transform 0.12s;
+  font-size: 12px;
+  color: var(--text);
+}
+.settings-recent-chip:hover {
+  border-color: var(--accent, #4f46e5);
+  transform: translateY(-1px);
+}
+.settings-recent-key {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-weight: 600;
+}
+.settings-recent-time {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+}
+
+/* ── Section header ────────────────────────────────────── */
+.settings-section {
+  margin-bottom: 28px;
+  scroll-margin-top: 24px;
+}
+.settings-section-head {
+  margin-bottom: 10px;
+  padding-left: 4px;
+  border-left: 3px solid var(--accent, #4f46e5);
+}
+.settings-section.has-restart .settings-section-head {
+  border-left-color: var(--console-restart);
+}
+.settings-section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.settings-section-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+  line-height: 1.5;
+}
+
+/* ── Row (overrides the legacy grid layout above) ──────── */
+.settings-list {
+  padding: 0;
+}
+.settings-row {
+  /* Replace the legacy 3-column grid with accent + body + actions */
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  gap: 16px;
+  padding: 14px 16px 14px 0;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  align-items: start;
+  position: relative;
+  transition: background 0.2s;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-accent {
+  background: var(--console-live);
+  border-radius: 2px;
+  align-self: stretch;
+}
+.settings-row.is-restart .settings-row-accent {
+  background: var(--console-restart);
+}
+.settings-row-body {
+  min-width: 0;
+}
+.settings-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.settings-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.settings-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+.settings-row-key {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  /* Reset legacy .settings-row-key styles. */
+  margin-top: 0;
+}
+.settings-row-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.settings-row-value {
+  font-size: 14px;
+  margin-top: 4px;
+}
+.settings-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.settings-display-value code {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  background: var(--surface-3, #f1f5f9);
+  color: var(--text);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.settings-display-source {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted, #6b7280);
+  text-transform: uppercase;
+}
+.settings-row-actions {
+  display: flex;
+  gap: 4px;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-top: 1px;
+}
+.settings-row-actions .btn-link {
+  font-size: 12px;
+}
+
+/* Save flash. The keyframe is short and explicit so the operator
+   sees confirmation without it feeling laggy. */
+.settings-row-saved {
+  animation: settings-row-saved 2.2s ease-out;
+}
+@keyframes settings-row-saved {
+  0%   { background: color-mix(in srgb, var(--console-saved) 22%, transparent); }
+  100% { background: transparent; }
+}
+.settings-row-pulse {
+  animation: settings-row-pulse 1.2s ease-out;
+}
+@keyframes settings-row-pulse {
+  0%, 100% { background: transparent; }
+  50%      { background: color-mix(in srgb, var(--accent, #4f46e5) 12%, transparent); }
+}
+
+/* ── Status pill variants ──────────────────────────────── */
+/* These supplement the existing .pill base + .pill.ok/.pill.caution
+   /.pill.warn. Designed so the chip row reads at a glance: green=live,
+   amber=staged, indigo=env, slate=gui, rose=secret. */
+.pill.live {
+  background: color-mix(in srgb, var(--console-live) 16%, transparent);
+  color: var(--console-live);
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.pill.restart {
+  background: color-mix(in srgb, var(--console-restart) 18%, transparent);
+  color: var(--console-restart);
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.pill.restart::before {
+  content: '⟳';
+  font-size: 11px;
+}
+.pill.gui {
+  background: color-mix(in srgb, var(--console-gui) 16%, transparent);
+  color: var(--console-gui);
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.pill.env {
+  background: color-mix(in srgb, var(--console-env) 16%, transparent);
+  color: var(--console-env);
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.pill.secret {
+  background: color-mix(in srgb, var(--console-secret) 14%, transparent);
+  color: var(--console-secret);
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.pill.saved {
+  background: color-mix(in srgb, var(--console-saved) 18%, transparent);
+  color: var(--console-saved);
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  animation: settings-saved-pop 2.2s ease-out;
+}
+@keyframes settings-saved-pop {
+  0%   { transform: scale(0.85); opacity: 0; }
+  10%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1);    opacity: 0; }
+}
+
+/* ── Empty + utility states ────────────────────────────── */
+.settings-empty {
+  padding: 28px;
+  text-align: center;
+  color: var(--muted, #6b7280);
+}
+.settings-empty code {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  background: var(--surface-3, #f1f5f9);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.settings-hint {
+  font-size: 12px;
+}
+
+/* ── SMTP test panel (kept lightweight) ────────────────── */
+.settings-smtp-test {
+  border-top: 1px solid var(--border, #e5e7eb);
+  margin-top: 8px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Responsive: collapse to single column on tablet/mobile ── */
+@media (max-width: 900px) {
+  .settings-body {
+    grid-template-columns: 1fr;
+  }
+  .settings-nav {
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+  }
+  .settings-nav-list {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding-bottom: 4px;
+    /* Hide scrollbar but keep scrolling on mobile */
+    scrollbar-width: thin;
+  }
+  .settings-nav-list li {
+    flex-shrink: 0;
+  }
+  .settings-nav-item {
+    border: 1px solid var(--border, #e5e7eb);
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+  .settings-nav-label {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .settings-row {
+    grid-template-columns: 3px 1fr;
+  }
+  .settings-row-actions {
+    grid-column: 2;
+    flex-direction: row;
+    justify-content: flex-end;
+    padding-top: 6px;
+  }
+  .settings-row-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .settings-search input {
+    padding-right: 12px;
+  }
+  .settings-search-kbd {
+    display: none;
+  }
+}
+
+/* ── Phase 7.2: settings page (legacy — kept for non-page uses) ── */
 
 .settings-list {
   display: flex;
