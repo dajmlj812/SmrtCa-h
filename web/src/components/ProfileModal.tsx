@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { api, type MeResponse } from '../api';
+import { ApiKeysSection } from './ApiKeysSection';
 
 interface Props {
   me: MeResponse;
@@ -151,6 +152,10 @@ export function ProfileModal({ me, onClose, onSaved }: Props) {
             </button>
           </div>
         </form>
+
+        <hr style={{ margin: '24px 0', border: 0, borderTop: '1px solid var(--border, #d0d7de)' }} />
+
+        <ApiKeysSection />
       </div>
     </div>
   );

@@ -161,9 +161,71 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.3 adds two requested controls: an operator-configurable
-idle-timeout that auto-logs-out inactive browsers, and a per-user
-IANA timezone preference that drives every datetime display.</em></p>
+<p><em>0.18.4 ships the public read-only API. Each signed-in user can
+mint up to 10 API keys; tokens authenticate <code>GET</code> requests to the
+existing routes, scoped to whichever tenant they were minted under.
+Mutating requests (POST/PATCH/DELETE) are blocked. Closes Lunch
+Money&#39;s developer-audience moat.</em></p>
+<hr>
+<h2 id="0184-2026-05-24-public-read-only-api-per-user-keys">[0.18.4] — 2026-05-24 — Public read-only API + per-user keys<a class="heading-anchor" href="#0184-2026-05-24-public-read-only-api-per-user-keys">#</a></h2>
+<p>Personal-access-token model (GitHub / Stripe style) layered on top
+of the existing session-cookie auth. Same routes the web app uses
+become available over <code>Authorization: Bearer smrt_…</code> for read
+operations.</p>
+<p><strong>Schema</strong> (migration 045):</p>
+<ul>
+<li><code>api_keys (id, user_id, tenant_id, key_hash, key_prefix, label, scopes, last_used_at, last_used_ip, revoked_at, created_at)</code>. Token stored as SHA-256 hash; prefix kept
+separately for display.</li>
+</ul>
+<p><strong>Auth path</strong> (<code>server/src/app.ts</code>):</p>
+<ul>
+<li>preHandler falls back to Bearer when no session cookie is
+present. <code>req.user.via</code> records <code>&#39;session&#39; | &#39;apikey&#39;</code>.</li>
+<li>New second hook rejects non-GET (and non-HEAD/OPTIONS) for
+apikey-authed requests. A leaked token cannot mutate data.</li>
+<li>Tenant binding comes from the <code>api_keys</code> row, never the
+request — a token minted under tenant A can&#39;t see tenant
+B&#39;s data even if the caller crafts headers/queries to try.</li>
+</ul>
+<p><strong>Routes</strong> (<code>server/src/routes/api-keys.ts</code>):</p>
+<ul>
+<li><code>GET /api/me/api-keys</code> — list (prefix + metadata only,
+never the raw token).</li>
+<li><code>POST /api/me/api-keys {label}</code> — mint. Returns the token
+EXACTLY ONCE. Capped at 10 active keys per user. Audit log
+records <code>api_key.create</code>.</li>
+<li><code>DELETE /api/me/api-keys/:id</code> — soft revoke (sets
+<code>revoked_at</code>; row kept for audit + UI history). Logs
+<code>api_key.revoke</code>.</li>
+</ul>
+<p><strong>Web</strong> (<code>ProfileModal</code> → new <code>ApiKeysSection</code>):</p>
+<ul>
+<li>Table of existing keys with prefix, label, last-used
+relative time, revoke button.</li>
+<li>One-line create row. On success the modal shows the full
+token inside a yellow warning banner with a Copy button +
+&quot;I&#39;ve saved it — dismiss&quot; link.</li>
+</ul>
+<p><strong>Docs</strong>: new <code>docs/PUBLIC_API.md</code> with curl examples for the
+most useful read endpoints (accounts, transactions, cash-flow,
+insights, calendar) and a callout that this is NOT a write
+scope or OAuth flow.</p>
+<p><strong>Tests</strong>: 6 new integration tests in
+<code>tests/integration/api-keys.test.ts</code>:</p>
+<ul>
+<li>mint → list (prefix only) → use → returns 200</li>
+<li>POST/PATCH/DELETE with a Bearer token → 403</li>
+<li>bogus or missing Bearer → 401</li>
+<li>revoked key → 401</li>
+<li>token minted in tenant A cannot see tenant B&#39;s accounts</li>
+<li>11th key creation → 400 (cap)</li>
+</ul>
+<p>All 92 tenant-isolation + auth tests still pass.</p>
+<p>Closes roadmap slice 0.18.4 (Public read-only API). Slice
+renumbering note: this was originally planned as 0.18.2 in
+the v0.17.0-era roadmap; it became 0.18.4 after 0.18.2 was
+re-used for the vendor-attribution fix and 0.18.3 for idle
+auto-logout + timezones.</p>
 <hr>
 <h2 id="0183-2026-05-24-idle-auto-logout-per-user-timezone">[0.18.3] — 2026-05-24 — Idle auto-logout + per-user timezone<a class="heading-anchor" href="#0183-2026-05-24-idle-auto-logout-per-user-timezone">#</a></h2>
 <p>Two user-facing controls that the test-deploy use surfaced:</p>
@@ -6572,7 +6634,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 02:27:06 UTC · commit e2b677e</span>
+  <span>Generated 2026-05-25 02:41:42 UTC · commit fdf227f</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

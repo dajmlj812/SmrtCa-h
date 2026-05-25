@@ -712,6 +712,21 @@ export interface CancellationEntry {
   notes: string | null;
 }
 
+// 0.18.4 — public-API key shown in the My profile modal. The full
+// token is returned only by POST /api/me/api-keys; everywhere else
+// we have just the prefix for display.
+export interface ApiKeySummary {
+  id: string;
+  tenant_id: string | null;
+  key_prefix: string;
+  label: string;
+  scopes: 'read';
+  last_used_at: string | null;
+  last_used_ip: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
 export interface RecurringIncome {
   id: string;
   name: string;
@@ -1484,6 +1499,20 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }),
+
+  // 0.18.4 — public-API key management.
+  listApiKeys: () =>
+    http<{ keys: ApiKeySummary[] }>('/api/me/api-keys').then((r) => r.keys),
+
+  createApiKey: (label: string) =>
+    http<{ key: ApiKeySummary; token: string }>('/api/me/api-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    }),
+
+  revokeApiKey: (id: string) =>
+    http<{ revoked: true }>(`/api/me/api-keys/${id}`, { method: 'DELETE' }),
 
   // ── Phase 8: tenants + memberships + invitations + providers ─
   listTenants: () =>

@@ -23,6 +23,7 @@ import { budgetRoutes } from './routes/budgets.js';
 import { goalRoutes } from './routes/goals.js';
 import { billRoutes } from './routes/bills.js';
 import { cancellationRoutes } from './routes/cancellation.js';
+import { apiKeyRoutes } from './routes/api-keys.js';
 import { recurringRoutes } from './routes/recurring.js';
 import { subscriptionRoutes } from './routes/subscriptions.js';
 import { normalizationRuleRoutes } from './routes/normalization-rules.js';
@@ -57,17 +58,23 @@ import { startBackupScheduler } from './domain/backup-scheduler.js';
 import { startAutoSyncScheduler } from './domain/auto-sync.js';
 import { metricsRecorder } from './domain/metrics-recorder.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
+import { lookupKey } from './auth/api-keys.js';
 
 // Augment FastifyRequest with the authenticated user. Set by the auth
 // preHandler below. `tenantId` is the session's active tenant — null
 // until the user picks one (or for fresh sessions where the user has
 // no memberships yet).
+// 0.18.4 — `via` records whether the request was authenticated via
+// the session cookie or a public-API Bearer token. A second hook
+// rejects non-GET methods for `apikey` requests (the public API is
+// read-only in this slice).
 declare module 'fastify' {
   interface FastifyRequest {
     user?: {
       id: string;
       tenantId: string | null;
       isSuperAdmin: boolean;
+      via: 'session' | 'apikey';
     };
   }
 }
@@ -173,6 +180,7 @@ export async function buildApp(
                 id: session.userId,
                 tenantId: session.activeTenantId,
                 isSuperAdmin: session.isSuperAdmin,
+                via: 'session',
               };
           }
         }
@@ -181,22 +189,61 @@ export async function buildApp(
     }
 
     const raw = req.cookies[SESSION_COOKIE];
-    if (!raw) {
-      return reply.code(401).send({ error: 'Authentication required' });
+    if (raw) {
+      const unsigned = req.unsignCookie(raw);
+      if (!unsigned.valid || !unsigned.value) {
+        return reply.code(401).send({ error: 'Invalid session' });
+      }
+      const session = await loadSession(unsigned.value);
+      if (!session) {
+        return reply.code(401).send({ error: 'Session expired' });
+      }
+      req.user = {
+        id: session.userId,
+        tenantId: session.activeTenantId,
+        isSuperAdmin: session.isSuperAdmin,
+        via: 'session',
+      };
+      return;
     }
-    const unsigned = req.unsignCookie(raw);
-    if (!unsigned.valid || !unsigned.value) {
-      return reply.code(401).send({ error: 'Invalid session' });
+
+    // 0.18.4 — fall back to a Bearer API token. The token is read-
+    // only; a second preHandler rejects non-GET methods so a leaked
+    // token can't be used to mutate data. Tenant binding comes from
+    // the api_keys row, NOT from the request, so a key minted under
+    // tenant A can never see tenant B's data even if the caller
+    // tries to set headers/query to mislead us.
+    const authHeader = req.headers.authorization;
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice('Bearer '.length).trim();
+      const key = await lookupKey(token, req.ip ?? null);
+      if (!key) {
+        return reply.code(401).send({ error: 'Invalid or revoked API key' });
+      }
+      req.user = {
+        id: key.userId,
+        tenantId: key.tenantId,
+        isSuperAdmin: false,
+        via: 'apikey',
+      };
+      return;
     }
-    const session = await loadSession(unsigned.value);
-    if (!session) {
-      return reply.code(401).send({ error: 'Session expired' });
+
+    return reply.code(401).send({ error: 'Authentication required' });
+  });
+
+  // 0.18.4 — public-API tokens are read-only. Block any non-GET
+  // method for apikey-authed requests. Runs AFTER the auth hook,
+  // so req.user is populated for legitimate requests by the time
+  // this fires; cookie-authed requests pass through unchanged.
+  app.addHook('preHandler', async (req, reply) => {
+    if (req.user?.via !== 'apikey') return;
+    const method = req.method.toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      return reply.code(403).send({
+        error: 'API keys are read-only. Mutating requests must use a session.',
+      });
     }
-    req.user = {
-      id: session.userId,
-      tenantId: session.activeTenantId,
-      isSuperAdmin: session.isSuperAdmin,
-    };
   });
 
   app.setErrorHandler(
@@ -231,6 +278,7 @@ export async function buildApp(
   await app.register(goalRoutes);
   await app.register(billRoutes);
   await app.register(cancellationRoutes);
+  await app.register(apiKeyRoutes);
   await app.register(recurringRoutes);
   await app.register(subscriptionRoutes);
   await app.register(normalizationRuleRoutes);

@@ -9,9 +9,74 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.3 adds two requested controls: an operator-configurable
-idle-timeout that auto-logs-out inactive browsers, and a per-user
-IANA timezone preference that drives every datetime display._
+_0.18.4 ships the public read-only API. Each signed-in user can
+mint up to 10 API keys; tokens authenticate `GET` requests to the
+existing routes, scoped to whichever tenant they were minted under.
+Mutating requests (POST/PATCH/DELETE) are blocked. Closes Lunch
+Money's developer-audience moat._
+
+---
+
+## [0.18.4] — 2026-05-24 — Public read-only API + per-user keys
+
+Personal-access-token model (GitHub / Stripe style) layered on top
+of the existing session-cookie auth. Same routes the web app uses
+become available over `Authorization: Bearer smrt_…` for read
+operations.
+
+**Schema** (migration 045):
+- `api_keys (id, user_id, tenant_id, key_hash, key_prefix,
+  label, scopes, last_used_at, last_used_ip, revoked_at,
+  created_at)`. Token stored as SHA-256 hash; prefix kept
+  separately for display.
+
+**Auth path** (`server/src/app.ts`):
+- preHandler falls back to Bearer when no session cookie is
+  present. `req.user.via` records `'session' | 'apikey'`.
+- New second hook rejects non-GET (and non-HEAD/OPTIONS) for
+  apikey-authed requests. A leaked token cannot mutate data.
+- Tenant binding comes from the `api_keys` row, never the
+  request — a token minted under tenant A can't see tenant
+  B's data even if the caller crafts headers/queries to try.
+
+**Routes** (`server/src/routes/api-keys.ts`):
+- `GET /api/me/api-keys` — list (prefix + metadata only,
+  never the raw token).
+- `POST /api/me/api-keys {label}` — mint. Returns the token
+  EXACTLY ONCE. Capped at 10 active keys per user. Audit log
+  records `api_key.create`.
+- `DELETE /api/me/api-keys/:id` — soft revoke (sets
+  `revoked_at`; row kept for audit + UI history). Logs
+  `api_key.revoke`.
+
+**Web** (`ProfileModal` → new `ApiKeysSection`):
+- Table of existing keys with prefix, label, last-used
+  relative time, revoke button.
+- One-line create row. On success the modal shows the full
+  token inside a yellow warning banner with a Copy button +
+  "I've saved it — dismiss" link.
+
+**Docs**: new `docs/PUBLIC_API.md` with curl examples for the
+most useful read endpoints (accounts, transactions, cash-flow,
+insights, calendar) and a callout that this is NOT a write
+scope or OAuth flow.
+
+**Tests**: 6 new integration tests in
+`tests/integration/api-keys.test.ts`:
+- mint → list (prefix only) → use → returns 200
+- POST/PATCH/DELETE with a Bearer token → 403
+- bogus or missing Bearer → 401
+- revoked key → 401
+- token minted in tenant A cannot see tenant B's accounts
+- 11th key creation → 400 (cap)
+
+All 92 tenant-isolation + auth tests still pass.
+
+Closes roadmap slice 0.18.4 (Public read-only API). Slice
+renumbering note: this was originally planned as 0.18.2 in
+the v0.17.0-era roadmap; it became 0.18.4 after 0.18.2 was
+re-used for the vendor-attribution fix and 0.18.3 for idle
+auto-logout + timezones.
 
 ---
 

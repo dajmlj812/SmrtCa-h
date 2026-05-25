@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0/0.18.1/0.18.2/0.18.3 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.4 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -500,7 +500,16 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
     `formatRelative` helpers that read from a module-level
     state set on auth, so future datetime renderings
     automatically respect the choice.
-- **0.18.4** 📋 — **Public read-only API + per-user keys**
+- **0.18.4** ✅ (released 2026-05-24) — **Public read-only API
+  + per-user keys**. Personal-access-token auth layered on the
+  existing session-cookie path. New `api_keys` table (token
+  hashed, prefix kept for display); `Authorization: Bearer
+  smrt_…` works on every read endpoint; non-GET requests are
+  blocked when via=apikey so a leaked token can't mutate.
+  10-key per-user cap, audit-logged create/revoke, full
+  cross-tenant isolation (Bearer minted under tenant A can't
+  see tenant B). New `docs/PUBLIC_API.md` with curl
+  examples. 6 new tests; 92 tenant + auth tests pass.
   (~2–3 days). Each tenant member gets an API key for their
   own data. Existing routes already RBAC-enforce ownership;
   this is a thin token-auth layer on top. Devs are an

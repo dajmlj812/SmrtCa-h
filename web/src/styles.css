@@ -960,6 +960,58 @@ select:focus {
   }
 }
 
+/* 0.18.4 — API keys section in ProfileModal */
+.apikeys-section h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.apikeys-section code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.apikey-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.apikey-token {
+  display: block;
+  padding: 8px 10px;
+  background: var(--surface-2, #f6f8fa);
+  border-radius: 6px;
+  word-break: break-all;
+  user-select: all;
+}
+.apikey-reveal-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.apikeys-table {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.apikeys-table th,
+.apikeys-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border, #d0d7de);
+}
+.apikeys-table th {
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+}
+.apikeys-create-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.apikeys-create-row input {
+  flex: 1;
+}
+
 /* 0.18.2 — brand + version + vendor footer */
 .brand-tagline {
   margin-top: 16px;

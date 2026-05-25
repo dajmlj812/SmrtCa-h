@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Public API# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-public-api">SmrtCash — Public API<a class="heading-anchor" href="#smrtcash-public-api">#</a></h1>
+<p>Introduced in <strong>v0.18.4</strong>.</p>
+<p>Every signed-in user can mint one or more API keys for read-only HTTP
+access to their own data. The same routes the web app reads from are
+available — every list/get endpoint under <code>/api/*</code> works with a
+Bearer token. Mutating requests (POST/PATCH/PUT/DELETE) are
+<strong>blocked</strong> for token-authed callers.</p>
+<p>The token is scoped to whichever tenant (&quot;household&quot;) was active when
+you minted it. A token minted under tenant A can never read tenant
+B&#39;s data, even if you also belong to B.</p>
+<h2 id="mint-a-token">Mint a token<a class="heading-anchor" href="#mint-a-token">#</a></h2>
+<p>In the SmrtCash web UI:</p>
+<ol>
+<li>Click your name in the sidebar footer → <strong>My profile</strong>.</li>
+<li>Scroll to <strong>API keys</strong>.</li>
+<li>Enter a label (e.g. <code>home dashboard script</code>) → <strong>Create API key</strong>.</li>
+<li><strong>Copy the token immediately</strong> — it is shown exactly once.
+We store only a SHA-256 hash; if you lose the token there is no
+recovery, only revocation and re-creation.</li>
+</ol>
+<p>The displayed prefix (<code>smrt_abc12345…</code>) is a stable identifier you
+can use in your scripts&#39; logs without leaking the secret.</p>
+<h2 id="use-the-token">Use the token<a class="heading-anchor" href="#use-the-token">#</a></h2>
+<p>Send it as <code>Authorization: Bearer &lt;token&gt;</code> on any GET request.</p>
+<pre><code class="language-bash"># List your accounts.
+curl https://your-smrtcash.example.com/api/accounts \
+  -H &quot;Authorization: Bearer smrt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;
+
+# Last 90 days of transactions.
+curl &#39;https://your-smrtcash.example.com/api/transactions?days=90&#39; \
+  -H &quot;Authorization: Bearer smrt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;
+
+# Cash-flow forecast (drives the dashboard hero).
+curl &#39;https://your-smrtcash.example.com/api/cash-flow?days=90&#39; \
+  -H &quot;Authorization: Bearer smrt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;
+
+# Net worth over time (12-month series).
+curl &#39;https://your-smrtcash.example.com/api/insights/net-worth-over-time?months=12&#39; \
+  -H &quot;Authorization: Bearer smrt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&quot;
+</code></pre>
+<p>A mutating request is rejected:</p>
+<pre><code class="language-bash">curl -X POST https://your-smrtcash.example.com/api/accounts \
+  -H &quot;Authorization: Bearer smrt_...&quot; \
+  -d &#39;{}&#39;
+# → 403 {&quot;error&quot;: &quot;API keys are read-only. Mutating requests must use a session.&quot;}
+</code></pre>
+<h2 id="available-read-endpoints">Available read endpoints<a class="heading-anchor" href="#available-read-endpoints">#</a></h2>
+<p>Anything the web app reads. The most useful for external integrations:</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>What it returns</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>GET /api/accounts</code></td>
+<td>Your accounts + balances</td>
+</tr>
+<tr>
+<td><code>GET /api/transactions?days=N</code></td>
+<td>Recent transactions</td>
+</tr>
+<tr>
+<td><code>GET /api/transactions/export?...</code></td>
+<td>CSV export (same filters as the web UI)</td>
+</tr>
+<tr>
+<td><code>GET /api/bills</code></td>
+<td>Bills + recurring expenses</td>
+</tr>
+<tr>
+<td><code>GET /api/recurring-income</code></td>
+<td>Income streams</td>
+</tr>
+<tr>
+<td><code>GET /api/cash-flow?days=N</code></td>
+<td>90-day forecast with confidence band</td>
+</tr>
+<tr>
+<td><code>GET /api/insights/spending-by-category</code></td>
+<td>Pie-chart data</td>
+</tr>
+<tr>
+<td><code>GET /api/insights/income-expense?months=N</code></td>
+<td>Bar-chart data</td>
+</tr>
+<tr>
+<td><code>GET /api/insights/net-worth-over-time?months=N</code></td>
+<td>Net-worth line chart</td>
+</tr>
+<tr>
+<td><code>GET /api/holdings</code></td>
+<td>Investment positions</td>
+</tr>
+<tr>
+<td><code>GET /api/budgets/actual?month=YYYY-MM</code></td>
+<td>Budget vs actual</td>
+</tr>
+<tr>
+<td><code>GET /api/calendar/:YYYY-MM</code></td>
+<td>Day-by-day spending + bill markers</td>
+</tr>
+</tbody></table>
+<h2 id="rate-limits-amp-lifecycle">Rate limits &amp; lifecycle<a class="heading-anchor" href="#rate-limits-amp-lifecycle">#</a></h2>
+<ul>
+<li>Max <strong>10 active keys per user</strong>. Revoke an old key to mint another.</li>
+<li>Keys never expire on their own. Revoke them when you&#39;re done.</li>
+<li><code>last_used_at</code> and <code>last_used_ip</code> are updated on every successful
+request and displayed in the My-profile UI so you can audit usage.</li>
+<li>Audit log records <code>api_key.create</code> and <code>api_key.revoke</code> against
+the bound tenant.</li>
+</ul>
+<h2 id="revoking">Revoking<a class="heading-anchor" href="#revoking">#</a></h2>
+<p>Profile modal → API keys → <strong>Revoke</strong> on the row.</p>
+<p>Or via the API, using a session cookie (revocation itself is a
+mutation and therefore not allowed via Bearer):</p>
+<pre><code class="language-bash">curl -X DELETE https://your-smrtcash.example.com/api/me/api-keys/&lt;key-id&gt; \
+  -H &quot;Cookie: smrtcash_session=...&quot;
+</code></pre>
+<h2 id="what-this-is-not">What this is NOT<a class="heading-anchor" href="#what-this-is-not">#</a></h2>
+<ul>
+<li><strong>No write scope.</strong> v0.18.4 is read-only. Adding a write scope is
+a separate slice — both because it needs a thoughtful permission
+shape (which RBAC role does the token act as?) and because the
+blast radius of a leaked write token is much larger.</li>
+<li><strong>No OAuth flow.</strong> This is a personal-access-token model
+(GitHub-style), not a third-party-app authorization model.</li>
+<li><strong>No rate-limiting middleware yet.</strong> A runaway script will work
+but is on the honor system; the per-user 10-key cap and the
+audit log are the only mitigations.</li>
+</ul>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-25 02:41:43 UTC · commit fdf227f</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>
