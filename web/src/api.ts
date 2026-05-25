@@ -1932,6 +1932,28 @@ export const api = {
   deleteGoal: (id: string) =>
     http<void>(`/api/goals/${id}`, { method: 'DELETE' }),
 
+  // 0.18.5 — contribute against a savings goal.
+  contributeGoal: (
+    id: string,
+    input: { amountCents: number; note?: string },
+  ) =>
+    http<{ goal: SavingsGoal }>(`/api/goals/${id}/contribute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.goal),
+
+  listGoalContributions: (id: string) =>
+    http<{
+      contributions: Array<{
+        id: string;
+        amount_cents: number;
+        note: string | null;
+        contributed_at: string;
+        transaction_id: string | null;
+      }>;
+    }>(`/api/goals/${id}/contributions`).then((r) => r.contributions),
+
   // ── Bills + recurring income + cash-flow ─────────────────
   listBills: (reviewStatus?: BillReviewStatus | 'queue') => {
     const q = reviewStatus ? `?reviewStatus=${encodeURIComponent(reviewStatus)}` : '';

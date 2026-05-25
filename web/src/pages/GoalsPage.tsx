@@ -17,6 +17,8 @@ export function GoalsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<SavingsGoal | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // 0.18.5 — inline contribute target.
+  const [contributing, setContributing] = useState<SavingsGoal | null>(null);
 
   async function load() {
     setLoading(true);
@@ -92,6 +94,7 @@ export function GoalsPage() {
               onEdit={() => setEditing(g)}
               onDelete={() => void onDelete(g.id)}
               onSetAccount={(aId) => void setGoalAccount(g.id, aId)}
+              onContribute={() => setContributing(g)}
             />
           ))}
         </div>
@@ -112,6 +115,16 @@ export function GoalsPage() {
           }}
         />
       )}
+      {contributing && (
+        <ContributeModal
+          goal={contributing}
+          onClose={() => setContributing(null)}
+          onSaved={() => {
+            setContributing(null);
+            void load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -122,16 +135,21 @@ function GoalCard({
   onEdit,
   onDelete,
   onSetAccount,
+  onContribute,
 }: {
   goal: SavingsGoal;
   accounts: Account[];
   onEdit: () => void;
   onDelete: () => void;
   onSetAccount: (accountId: string | null) => void;
+  onContribute: () => void;
 }) {
   const pct = Math.round(Number(goal.progress) * 100);
   const remaining = Math.max(0, goal.target_amount_cents - goal.current_amount_cents);
   let dateNote: string | null = null;
+  // 0.18.5 — when the user set both a date and an amount, project
+  // the pace they'd need to keep hitting the target.
+  let paceNote: string | null = null;
   if (goal.target_date) {
     const d = daysUntil(goal.target_date);
     dateNote =
@@ -140,6 +158,10 @@ function GoalCard({
         : d === 0
           ? 'Due today'
           : `${-d} day${d === -1 ? '' : 's'} past — ${formatDate(goal.target_date)}`;
+    if (d > 0 && remaining > 0) {
+      const perMonth = Math.round((remaining / d) * 30);
+      paceNote = `${formatCents(perMonth)} / month needed`;
+    }
   }
   return (
     <div className="card goal-card">
@@ -149,6 +171,9 @@ function GoalCard({
           {dateNote && <div className="muted goal-card-date">{dateNote}</div>}
         </div>
         <div className="goal-card-actions">
+          <button className="btn-link" type="button" onClick={onContribute}>
+            Contribute
+          </button>
           <button className="btn-link" type="button" onClick={onEdit}>
             Edit
           </button>
@@ -161,11 +186,12 @@ function GoalCard({
         <strong>{formatCents(goal.current_amount_cents)}</strong>
         <span className="muted"> / {formatCents(goal.target_amount_cents)}</span>
       </div>
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${pct}%` }} />
+      <div className={`progress-track ${pct >= 100 ? 'progress-track-done' : ''}`}>
+        <div className="progress-fill" style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
       <div className="muted goal-card-foot">
         {pct}% complete · {formatCents(remaining)} remaining
+        {paceNote && <> · <strong>{paceNote}</strong></>}
       </div>
       <div style={{ marginTop: 8 }}>
         <label className="muted small" style={{ display: 'block', marginBottom: 2 }}>
@@ -334,6 +360,102 @@ function GoalForm({
             </button>
             <button className="btn secondary" type="button" onClick={onClose}>
               Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 0.18.5 — quick "I just put $X into this goal" form. Writes a
+ * goal_contributions row and bumps the goal's current. Supports
+ * negative amounts (withdrawals / corrections); the server caps
+ * the new current at 0.
+ */
+function ContributeModal({
+  goal,
+  onClose,
+  onSaved,
+}: {
+  goal: SavingsGoal;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const cents = Math.round(Number(amount) * 100);
+      if (!Number.isFinite(cents) || cents === 0) {
+        throw new Error('Amount must be a non-zero number');
+      }
+      await api.contributeGoal(goal.id, {
+        amountCents: cents,
+        note: note.trim() || undefined,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Contribution failed');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-header">
+          <h2>Contribute to {goal.name}</h2>
+          <button className="modal-close" type="button" onClick={onClose}>
+            ✕
+          </button>
+        </header>
+        <form onSubmit={submit}>
+          {error && <div className="banner error">{error}</div>}
+          <div className="muted small" style={{ marginBottom: 12 }}>
+            Current balance: {formatCents(goal.current_amount_cents)} of{' '}
+            {formatCents(goal.target_amount_cents)}
+          </div>
+          <div className="field">
+            <label htmlFor="contrib-amount">Amount</label>
+            <input
+              id="contrib-amount"
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="50.00"
+              autoFocus
+              required
+            />
+            <div className="muted small">
+              Positive adds to the goal; negative records a withdrawal.
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="contrib-note">Note (optional)</label>
+            <input
+              id="contrib-note"
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. tax refund, monthly auto-transfer"
+              maxLength={500}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+            <button type="button" className="btn secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn" disabled={submitting || amount === ''}>
+              {submitting ? 'Saving…' : 'Record contribution'}
             </button>
           </div>
         </form>

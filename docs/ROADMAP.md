@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.4 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.5 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -514,11 +514,14 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   own data. Existing routes already RBAC-enforce ownership;
   this is a thin token-auth layer on top. Devs are an
   underserved beachhead market (Lunch Money's whole audience).
-- **0.18.5** 📋 — **Goal tracking polish** (~2–3 days). Target
-  dates with progress visualizations, contributions linked to
-  specific transactions, dashboard card showing top goals.
-  Existing `savings_goals` data; missing UX. Closes Monarch's
-  visible advantage.
+- **0.18.5** ✅ (released 2026-05-24) — **Goal tracking polish**.
+  Migration 046 adds `goal_contributions` audit table. New
+  Contribute button + modal on each goal card writes a signed
+  audit row and bumps the goal's current. Goal cards show
+  pace-needed ("$420/month needed") when both target date and
+  remaining are set; progress bar turns green at 100%. Dashboard
+  gains a "Top savings goals" tile (top 3, progress bar + target
+  date). Transaction-tagging deferred to a future slice.
 - **0.18.6** 📋 — **Debt payoff plans** (~2–3 days). For
   accounts of `type IN ('loan','credit_card')`, add a
   "Payoff plan" view with snowball + avalanche calculators

@@ -9,11 +9,35 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.4 ships the public read-only API. Each signed-in user can
-mint up to 10 API keys; tokens authenticate `GET` requests to the
-existing routes, scoped to whichever tenant they were minted under.
-Mutating requests (POST/PATCH/DELETE) are blocked. Closes Lunch
-Money's developer-audience moat._
+_0.18.5 puts goals on the dashboard as a "Top goals" tile and adds
+a Contribute button + audit-trail table for each savings goal._
+
+---
+
+## [0.18.5] — 2026-05-24 — Goal tracking polish
+
+Closes Monarch's visible goal-tracking advantage. Existing
+`savings_goals` data, missing UX.
+
+- **Migration 046**: new `goal_contributions` table (id, tenant_id,
+  goal_id, transaction_id, amount_cents, note, contributed_at).
+  Signed amount, so withdrawals/corrections live in the same audit
+  trail.
+- **`POST /api/goals/:id/contribute`**: writes an audit row and
+  bumps the goal's `current_amount_cents`. Server clamps the new
+  current at 0; over-target is allowed (some users save past the
+  number).
+- **`GET /api/goals/:id/contributions`**: last-50 history (UI not
+  surfaced yet; future slice can show the chart).
+- **Goal cards** now show pace-needed when both a target date and
+  remaining amount are set: "$420/month needed". Progress bar
+  flips green at 100%.
+- **Dashboard "Top savings goals" tile** with up to three goals,
+  progress bar + target date each.
+
+Transaction-tagging (linking a specific txn to a contribution) is
+intentionally deferred — needs a UI on the Transactions page that
+doesn't exist yet.
 
 ---
 

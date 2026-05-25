@@ -960,6 +960,28 @@ select:focus {
   }
 }
 
+/* 0.18.5 — goal polish */
+.progress-track-done .progress-fill {
+  background: #52c41a;
+}
+.dashboard-goals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dashboard-goal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.dashboard-goal-name {
+  font-weight: 600;
+}
+
 /* 0.18.4 — API keys section in ProfileModal */
 .apikeys-section h3 {
   margin: 0 0 6px;

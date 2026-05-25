@@ -17,11 +17,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Link } from 'react-router-dom';
 import {
   api,
   type Bill,
   type IncomeExpenseRow,
   type NetWorthRow,
+  type SavingsGoal,
   type SpendingByCategoryRow,
 } from '../api';
 import { formatCents, formatDate } from '../format';
@@ -57,6 +59,7 @@ interface DashboardData {
   cashFlowEnd: number;
   cashFlowVolatility: number;
   cashFlowMilestones: { day_30: number; day_60: number; day_90: number };
+  goals: SavingsGoal[];
 }
 
 export function DashboardPage() {
@@ -67,13 +70,14 @@ export function DashboardPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [spending, incomeExpense, netWorth, upcoming, flow] =
+        const [spending, incomeExpense, netWorth, upcoming, flow, goals] =
           await Promise.all([
             api.spendingByCategory({}),
             api.incomeExpense({ months: 12 }),
             api.netWorthOverTime({ months: 12 }),
             api.upcomingBills(30),
             api.cashFlow(90),
+            api.listGoals(),
           ]);
         setData({
           spending: spending.rows,
@@ -87,6 +91,7 @@ export function DashboardPage() {
           cashFlowEnd: flow.ending_cents,
           cashFlowVolatility: flow.daily_volatility_cents,
           cashFlowMilestones: flow.milestones,
+          goals,
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load dashboard');
@@ -287,6 +292,45 @@ export function DashboardPage() {
               />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+
+        <div className="card chart-card">
+          <div className="chart-title">
+            Top savings goals{' '}
+            <Link to="/goals" className="muted small">view all →</Link>
+          </div>
+          {data.goals.length === 0 ? (
+            <p className="empty">
+              No goals yet. <Link to="/goals">Create your first goal</Link>.
+            </p>
+          ) : (
+            <ul className="dashboard-goals">
+              {data.goals.slice(0, 3).map((g) => {
+                const pct = Math.round(Number(g.progress) * 100);
+                return (
+                  <li key={g.id}>
+                    <div className="dashboard-goal-row">
+                      <span className="dashboard-goal-name">{g.name}</span>
+                      <span className="muted">
+                        {formatCents(g.current_amount_cents)} /{' '}
+                        {formatCents(g.target_amount_cents)}
+                      </span>
+                    </div>
+                    <div className={`progress-track ${pct >= 100 ? 'progress-track-done' : ''}`}>
+                      <div
+                        className="progress-fill"
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+                    <div className="muted small">
+                      {pct}% complete
+                      {g.target_date && <> · target {formatDate(g.target_date)}</>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         <div className="card chart-card">

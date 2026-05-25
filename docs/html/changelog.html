@@ -161,11 +161,32 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.4 ships the public read-only API. Each signed-in user can
-mint up to 10 API keys; tokens authenticate <code>GET</code> requests to the
-existing routes, scoped to whichever tenant they were minted under.
-Mutating requests (POST/PATCH/DELETE) are blocked. Closes Lunch
-Money&#39;s developer-audience moat.</em></p>
+<p><em>0.18.5 puts goals on the dashboard as a &quot;Top goals&quot; tile and adds
+a Contribute button + audit-trail table for each savings goal.</em></p>
+<hr>
+<h2 id="0185-2026-05-24-goal-tracking-polish">[0.18.5] — 2026-05-24 — Goal tracking polish<a class="heading-anchor" href="#0185-2026-05-24-goal-tracking-polish">#</a></h2>
+<p>Closes Monarch&#39;s visible goal-tracking advantage. Existing
+<code>savings_goals</code> data, missing UX.</p>
+<ul>
+<li><strong>Migration 046</strong>: new <code>goal_contributions</code> table (id, tenant_id,
+goal_id, transaction_id, amount_cents, note, contributed_at).
+Signed amount, so withdrawals/corrections live in the same audit
+trail.</li>
+<li><strong><code>POST /api/goals/:id/contribute</code></strong>: writes an audit row and
+bumps the goal&#39;s <code>current_amount_cents</code>. Server clamps the new
+current at 0; over-target is allowed (some users save past the
+number).</li>
+<li><strong><code>GET /api/goals/:id/contributions</code></strong>: last-50 history (UI not
+surfaced yet; future slice can show the chart).</li>
+<li><strong>Goal cards</strong> now show pace-needed when both a target date and
+remaining amount are set: &quot;$420/month needed&quot;. Progress bar
+flips green at 100%.</li>
+<li><strong>Dashboard &quot;Top savings goals&quot; tile</strong> with up to three goals,
+progress bar + target date each.</li>
+</ul>
+<p>Transaction-tagging (linking a specific txn to a contribution) is
+intentionally deferred — needs a UI on the Transactions page that
+doesn&#39;t exist yet.</p>
 <hr>
 <h2 id="0184-2026-05-24-public-read-only-api-per-user-keys">[0.18.4] — 2026-05-24 — Public read-only API + per-user keys<a class="heading-anchor" href="#0184-2026-05-24-public-read-only-api-per-user-keys">#</a></h2>
 <p>Personal-access-token model (GitHub / Stripe style) layered on top
@@ -6634,7 +6655,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 02:41:42 UTC · commit fdf227f</span>
+  <span>Generated 2026-05-25 02:49:38 UTC · commit 2423a05</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

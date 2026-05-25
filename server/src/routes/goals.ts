@@ -217,4 +217,79 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(204).send();
     },
   );
+
+  // 0.18.5 — record a manual contribution. Atomically inserts a
+  // goal_contributions row and bumps savings_goals.current_amount_cents
+  // by the same amount. amountCents is signed (negative allowed for
+  // withdrawals / corrections). The goal's current is capped at 0
+  // server-side; over-target is allowed (some users save past the
+  // number).
+  app.post<{
+    Params: { id: string };
+    Body: { amountCents?: unknown; note?: unknown };
+  }>('/api/goals/:id/contribute', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    if (!isUuid(req.params.id)) {
+      return reply.code(400).send({ error: 'Invalid goal id' });
+    }
+    const amount =
+      typeof req.body?.amountCents === 'number'
+        ? req.body.amountCents
+        : Number(req.body?.amountCents);
+    if (!Number.isInteger(amount) || amount === 0) {
+      return reply
+        .code(400)
+        .send({ error: 'amountCents must be a non-zero integer' });
+    }
+    const note =
+      typeof req.body?.note === 'string' && req.body.note.trim() !== ''
+        ? req.body.note.trim().slice(0, 500)
+        : null;
+    const goal = await query<{ id: string; current_amount_cents: string }>(
+      `SELECT id, current_amount_cents FROM savings_goals
+        WHERE id = $1 AND tenant_id = $2`,
+      [req.params.id, tenantId],
+    );
+    if (goal.rowCount === 0) {
+      return reply.code(404).send({ error: 'Goal not found' });
+    }
+    const newCurrent = Math.max(
+      0,
+      Number(goal.rows[0]!.current_amount_cents) + amount,
+    );
+    await query(
+      `INSERT INTO goal_contributions
+         (tenant_id, goal_id, amount_cents, note)
+       VALUES ($1, $2, $3, $4)`,
+      [tenantId, req.params.id, amount, note],
+    );
+    const updated = await query(
+      `UPDATE savings_goals SET current_amount_cents = $1
+        WHERE id = $2 AND tenant_id = $3
+       RETURNING ${GOAL_COLUMNS}`,
+      [newCurrent, req.params.id, tenantId],
+    );
+    return { goal: updated.rows[0] };
+  });
+
+  app.get<{ Params: { id: string } }>(
+    '/api/goals/:id/contributions',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      if (!isUuid(req.params.id)) {
+        return reply.code(400).send({ error: 'Invalid goal id' });
+      }
+      const r = await query(
+        `SELECT id, amount_cents, note, contributed_at, transaction_id
+           FROM goal_contributions
+          WHERE goal_id = $1 AND tenant_id = $2
+          ORDER BY contributed_at DESC
+          LIMIT 50`,
+        [req.params.id, tenantId],
+      );
+      return { contributions: r.rows };
+    },
+  );
 }
