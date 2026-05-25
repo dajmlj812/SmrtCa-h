@@ -1060,6 +1060,9 @@ export interface MetricSample {
   db_query_rate: number;
   db_query_mean_ms: number;
   db_query_max_ms: number;
+  db_pool_waiting: number;
+  db_pool_total: number;
+  db_pool_idle: number;
 }
 
 export interface BackupRecord {

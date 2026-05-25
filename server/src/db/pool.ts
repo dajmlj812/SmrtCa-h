@@ -27,6 +27,16 @@ export const pool = new pg.Pool({
   ...(poolMax !== undefined ? { max: poolMax } : {}),
 });
 
+// 0.18.14 — feed pool snapshot stats into metrics-recorder on each
+// 5s tick so the performance analyzer can detect *sustained* pool
+// pressure (rather than firing on a single momentary waiter, which
+// is just normal sub-millisecond contention).
+metricsRecorder.setPoolStatsProvider(() => ({
+  waiting: pool.waitingCount,
+  total: pool.totalCount,
+  idle: pool.idleCount,
+}));
+
 /**
  * Instrumented query helper — every call here is timed and reported to
  * the metrics recorder, so /api/health/timeseries shows accurate DB

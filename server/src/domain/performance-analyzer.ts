@@ -103,31 +103,56 @@ const CHECKS: Check[] = [
   checkRecentLogErrors,
 ];
 
-/** Pool waiting for an available client = either pool too small or queries too slow. */
+/**
+ * Pool waiting for an available client = either pool too small or
+ * queries too slow. We only flag *sustained* pressure — a single
+ * waiter on one sample is normal sub-millisecond contention (the
+ * entire reason a connection pool has a queue), not a problem.
+ *
+ * Definitions:
+ *   • Sustained pressure: ≥ 3 of the last 12 samples (≈ 1 minute at
+ *     5s sampling) had db_pool_waiting > 0.
+ *   • Severe spike: any sample had db_pool_waiting ≥ db_pool_total
+ *     (queue longer than the pool itself).
+ */
 async function checkDbPoolPressure(): Promise<Recommendation[]> {
+  // Look back over the last 5 minutes, but only weight the most recent
+  // minute for the sustained-pressure threshold.
   const samples = metricsRecorder.getTimeseries(300);
-  // Pool waiting count isn't currently in MetricSample, so peek the
-  // live pool directly. metricsRecorder may surface this later.
-  const p = pool as unknown as { waitingCount: number; totalCount: number };
-  if (p.waitingCount > 0) {
-    return [
-      {
-        id: 'db.pool_pressure',
-        severity: 'warning',
-        title: 'Database connection pool has waiters',
-        summary: 'Requests are blocking on a free DB connection.',
-        evidence: `${p.waitingCount} queued, ${p.totalCount} total connections`,
-        recommendation:
-          'Increase the pg pool max (config.databaseUrl + the new `max` param) OR investigate why queries are slow enough to starve the pool. Slow-query log is a good first stop.',
-        effort: 'low',
-      },
-    ];
-  }
-  // No instantaneous pressure — also check if any sample in the last
-  // 5 min had a waiting count. (metricsRecorder doesn't track this
-  // today; this is a no-op placeholder until it does.)
-  void samples;
-  return [];
+  if (samples.length === 0) return [];
+
+  const recent = samples.slice(-12);
+  const samplesWithWaiters = recent.filter((s) => s.db_pool_waiting > 0);
+  const peakSpike = samples.reduce(
+    (acc, s) =>
+      s.db_pool_total > 0 && s.db_pool_waiting >= s.db_pool_total ? s : acc,
+    null as (typeof samples)[number] | null,
+  );
+
+  const latest = samples[samples.length - 1]!;
+  const sustained = samplesWithWaiters.length >= 3;
+  if (!sustained && !peakSpike) return [];
+
+  const peak = samplesWithWaiters.reduce(
+    (acc, s) => (s.db_pool_waiting > acc ? s.db_pool_waiting : acc),
+    0,
+  );
+  const evidenceLine = peakSpike
+    ? `severe spike: ${peakSpike.db_pool_waiting} queued ≥ ${peakSpike.db_pool_total}-conn pool`
+    : `${samplesWithWaiters.length} of last ${recent.length} samples had waiters (peak ${peak} queued, pool size ${latest.db_pool_total})`;
+
+  return [
+    {
+      id: 'db.pool_pressure',
+      severity: peakSpike ? 'critical' : 'warning',
+      title: 'Database connection pool under sustained pressure',
+      summary: 'Requests are blocking on a free DB connection.',
+      evidence: evidenceLine,
+      recommendation:
+        'Increase the PG_POOL_MAX setting OR investigate why queries are slow enough to starve the pool. Slow-query log is a good first stop.',
+      effort: 'low',
+    },
+  ];
 }
 
 async function checkSlowQueriesPresent(): Promise<Recommendation[]> {

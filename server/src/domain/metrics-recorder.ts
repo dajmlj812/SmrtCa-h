@@ -55,6 +55,23 @@ export interface MetricSample {
   db_query_mean_ms: number;
   /** Max query latency in the window, ms. 0 when no queries. */
   db_query_max_ms: number;
+  /** pg pool waiters at sample time. Sustained > 0 indicates real pool pressure. */
+  db_pool_waiting: number;
+  /** pg pool total connections at sample time. */
+  db_pool_total: number;
+  /** pg pool idle connections at sample time. */
+  db_pool_idle: number;
+}
+
+/**
+ * Shape of the pool-stats snapshot the recorder asks for on every
+ * sample. The pool module registers a provider so we can avoid a
+ * circular import (metrics-recorder ← pool ← metrics-recorder).
+ */
+export interface PoolStatsSnapshot {
+  waiting: number;
+  total: number;
+  idle: number;
 }
 
 class MetricsRecorder {
@@ -79,6 +96,11 @@ class MetricsRecorder {
   // V8's hard heap ceiling. Computed once at boot — it's set from
   // --max-old-space-size and doesn't change at runtime.
   private heapSizeLimit = getHeapStatistics().heap_size_limit;
+
+  // Pool stats provider. pool.ts calls setPoolStatsProvider() at
+  // module load to wire this up — keeps the pool out of the
+  // recorder's import graph (and avoids a circular dep).
+  private poolStatsProvider: (() => PoolStatsSnapshot) | null = null;
 
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -107,6 +129,10 @@ class MetricsRecorder {
     this.dbQueryCount++;
     this.dbQueryTotalMs += latencyMs;
     if (latencyMs > this.dbQueryMaxMs) this.dbQueryMaxMs = latencyMs;
+  }
+
+  setPoolStatsProvider(fn: () => PoolStatsSnapshot): void {
+    this.poolStatsProvider = fn;
   }
 
   // ── Snapshot ───────────────────────────────────────────────
@@ -157,6 +183,12 @@ class MetricsRecorder {
     this.dbQueryTotalMs = 0;
     this.dbQueryMaxMs = 0;
 
+    const poolStats = this.poolStatsProvider?.() ?? {
+      waiting: 0,
+      total: 0,
+      idle: 0,
+    };
+
     const windowSec = windowMs / 1000;
     const sample: MetricSample = {
       ts: new Date(now).toISOString(),
@@ -176,6 +208,9 @@ class MetricsRecorder {
       db_query_rate: round(dbCount / windowSec, 2),
       db_query_mean_ms: dbCount === 0 ? 0 : round(dbTotal / dbCount, 2),
       db_query_max_ms: round(dbMax, 2),
+      db_pool_waiting: poolStats.waiting,
+      db_pool_total: poolStats.total,
+      db_pool_idle: poolStats.idle,
     };
 
     this.buffer.push(sample);
