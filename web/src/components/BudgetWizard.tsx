@@ -51,12 +51,16 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
   }>({ groceries: {}, fuel: {}, tolls: {}, misc: {}, miscNote: {}, savings: {} });
 
   /**
-   * Per-run % overrides for the savings suggestion chips. Empty string
-   * means "use the platform default" — the server reads
-   * SAVINGS_INCOME_PCT / SAVINGS_LEFTOVER_PCT from app settings.
+   * 0.17.22 — per-run % overrides for the three savings chips
+   * (defaults 25/50/75). Empty string = use platform default.
+   * `savingsAccountId` is the destination account picked from
+   * the user's savings-type accounts; null/undefined = no
+   * destination, savings still gets budgeted but unlinked.
    */
-  const [incomePctOverride, setIncomePctOverride] = useState<string>('');
-  const [leftoverPctOverride, setLeftoverPctOverride] = useState<string>('');
+  const [lowPctOverride, setLowPctOverride] = useState<string>('');
+  const [midPctOverride, setMidPctOverride] = useState<string>('');
+  const [highPctOverride, setHighPctOverride] = useState<string>('');
+  const [savingsAccountId, setSavingsAccountId] = useState<string>('');
 
   /**
    * 0.17.8 — accounts the wizard should consider. Loaded from
@@ -132,8 +136,9 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         miscOverrideCents: overrides.misc,
         miscNoteOverride: overrides.miscNote,
         savingsOverrideCents: overrides.savings,
-        savingsIncomePctOverride: parsePct(incomePctOverride),
-        savingsLeftoverPctOverride: parsePct(leftoverPctOverride),
+        savingsLowPctOverride: parsePct(lowPctOverride),
+        savingsMidPctOverride: parsePct(midPctOverride),
+        savingsHighPctOverride: parsePct(highPctOverride),
       });
       setPreview(p);
     } catch (e) {
@@ -146,8 +151,9 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     anchor,
     count,
     overrides,
-    incomePctOverride,
-    leftoverPctOverride,
+    lowPctOverride,
+    midPctOverride,
+    highPctOverride,
     accounts.length,
     allSelected,
     selectedAccountIds,
@@ -207,14 +213,16 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         anchor,
         count,
         ...(accountIds ? { accountIds } : {}),
+        savingsAccountId: savingsAccountId === '' ? null : savingsAccountId,
         groceriesOverrideCents: overrides.groceries,
         fuelOverrideCents: overrides.fuel,
         tollsOverrideCents: overrides.tolls,
         miscOverrideCents: overrides.misc,
         miscNoteOverride: overrides.miscNote,
         savingsOverrideCents: overrides.savings,
-        savingsIncomePctOverride: parsePct(incomePctOverride),
-        savingsLeftoverPctOverride: parsePct(leftoverPctOverride),
+        savingsLowPctOverride: parsePct(lowPctOverride),
+        savingsMidPctOverride: parsePct(midPctOverride),
+        savingsHighPctOverride: parsePct(highPctOverride),
       });
       onCommitted({ planId: r.planId, created: r.created, skipped: r.skipped });
     } catch (e) {
@@ -303,43 +311,101 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
               onChange={(e) => setCount(Math.max(1, Math.min(24, Number(e.target.value) || 5)))}
             />
           </div>
+          {/*
+            * 0.17.22 — three configurable percentages of post-
+            * deduction leftover. Defaults 25/50/75. The Max chip
+            * (100%) on each period row is always derived from
+            * leftover.
+            */}
           <div className="field">
-            <label htmlFor="wiz-inc-pct">
-              Savings % of income
+            <label htmlFor="wiz-low-pct">
+              Low % of leftover
               <span className="muted">
                 {' '}
-                {preview ? `(default ${preview.savingsIncomePct}%)` : ''}
+                {preview ? `(default ${preview.savingsLowPct}%)` : ''}
               </span>
             </label>
             <input
-              id="wiz-inc-pct"
+              id="wiz-low-pct"
               type="number"
               min="0"
               max="100"
               step="0.5"
-              placeholder={preview ? String(preview.savingsIncomePct) : ''}
-              value={incomePctOverride}
-              onChange={(e) => setIncomePctOverride(e.target.value)}
+              placeholder={preview ? String(preview.savingsLowPct) : '25'}
+              value={lowPctOverride}
+              onChange={(e) => setLowPctOverride(e.target.value)}
             />
           </div>
           <div className="field">
-            <label htmlFor="wiz-left-pct">
-              Savings % of leftover
+            <label htmlFor="wiz-mid-pct">
+              Mid % of leftover
               <span className="muted">
                 {' '}
-                {preview ? `(default ${preview.savingsLeftoverPct}%)` : ''}
+                {preview ? `(default ${preview.savingsMidPct}%)` : ''}
               </span>
             </label>
             <input
-              id="wiz-left-pct"
+              id="wiz-mid-pct"
               type="number"
               min="0"
               max="100"
               step="0.5"
-              placeholder={preview ? String(preview.savingsLeftoverPct) : ''}
-              value={leftoverPctOverride}
-              onChange={(e) => setLeftoverPctOverride(e.target.value)}
+              placeholder={preview ? String(preview.savingsMidPct) : '50'}
+              value={midPctOverride}
+              onChange={(e) => setMidPctOverride(e.target.value)}
             />
+          </div>
+          <div className="field">
+            <label htmlFor="wiz-high-pct">
+              High % of leftover
+              <span className="muted">
+                {' '}
+                {preview ? `(default ${preview.savingsHighPct}%)` : ''}
+              </span>
+            </label>
+            <input
+              id="wiz-high-pct"
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              placeholder={preview ? String(preview.savingsHighPct) : '75'}
+              value={highPctOverride}
+              onChange={(e) => setHighPctOverride(e.target.value)}
+            />
+          </div>
+          {/*
+            * 0.17.22 — savings destination. Filtered to
+            * `accounts.type = 'savings'`. If the user has none,
+            * the dropdown is empty with a hint to add one.
+            */}
+          <div className="field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="wiz-savings-acct">
+              Savings goes to{' '}
+              <span className="muted small">
+                · destination for chosen savings amounts
+              </span>
+            </label>
+            <select
+              id="wiz-savings-acct"
+              value={savingsAccountId}
+              onChange={(e) => setSavingsAccountId(e.target.value)}
+            >
+              <option value="">— No destination —</option>
+              {accounts
+                .filter((a) => a.type === 'savings')
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+            </select>
+            {accounts.filter((a) => a.type === 'savings').length === 0 && (
+              <div className="muted small" style={{ marginTop: 4 }}>
+                No savings-type accounts configured. Add one on the Accounts
+                page if you want to link savings here.
+              </div>
+            )}
           </div>
           {/*
             * 0.17.8 — accounts to include. Defaults to every account
@@ -465,8 +531,9 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
                       <SavingsRow
                         cents={p.savingsCents}
                         suggestions={p.savingsSuggestions}
-                        savingsIncomePct={preview.savingsIncomePct}
-                        savingsLeftoverPct={preview.savingsLeftoverPct}
+                        savingsLowPct={preview.savingsLowPct}
+                        savingsMidPct={preview.savingsMidPct}
+                        savingsHighPct={preview.savingsHighPct}
                         onChange={(v) => override('savings', p.index, v)}
                         onPick={(c) => pickSavings(p.index, c)}
                       />
@@ -582,20 +649,23 @@ function MiscRow({
 function SavingsRow({
   cents,
   suggestions,
-  savingsIncomePct,
-  savingsLeftoverPct,
+  savingsLowPct,
+  savingsMidPct,
+  savingsHighPct,
   onChange,
   onPick,
 }: {
   cents: number;
   suggestions: {
     goalRequiredCents: number;
-    pctIncomeCents: number;
-    pctLeftoverCents: number;
+    pctLowCents: number;
+    pctMidCents: number;
+    pctHighCents: number;
     maxCents: number;
   };
-  savingsIncomePct: number;
-  savingsLeftoverPct: number;
+  savingsLowPct: number;
+  savingsMidPct: number;
+  savingsHighPct: number;
   onChange: (v: string) => void;
   onPick: (cents: number) => void;
 }) {
@@ -613,19 +683,29 @@ function SavingsRow({
         />
       </td>
       <td className="wizard-savings-pickers">
+        {/*
+          * 0.17.22 — five chips. Goal-required first (from goals
+          * data), then three configurable leftover percentages
+          * (defaults 25/50/75), then Max (100% of leftover).
+          */}
         <SuggestionChip
           label="Goal-required"
           cents={suggestions.goalRequiredCents}
           onPick={onPick}
         />
         <SuggestionChip
-          label={`${savingsIncomePct}% income`}
-          cents={suggestions.pctIncomeCents}
+          label={`${savingsLowPct}%`}
+          cents={suggestions.pctLowCents}
           onPick={onPick}
         />
         <SuggestionChip
-          label={`${savingsLeftoverPct}% leftover`}
-          cents={suggestions.pctLeftoverCents}
+          label={`${savingsMidPct}%`}
+          cents={suggestions.pctMidCents}
+          onPick={onPick}
+        />
+        <SuggestionChip
+          label={`${savingsHighPct}%`}
+          cents={suggestions.pctHighCents}
           onPick={onPick}
         />
         <SuggestionChip label="Max" cents={suggestions.maxCents} onPick={onPick} />

@@ -86,20 +86,33 @@ function parseInput(body: unknown): Omit<WizardInput, 'tenantId'> | { error: str
       accountIds.push(id);
     }
   }
+  // 0.17.22 — optional savings destination account. null = clear;
+  // undefined = leave alone.
+  let savingsAccountId: string | null | undefined;
+  if (b.savingsAccountId === null) {
+    savingsAccountId = null;
+  } else if (typeof b.savingsAccountId === 'string') {
+    if (!UUID.test(b.savingsAccountId)) {
+      return { error: 'savingsAccountId must be a UUID or null' };
+    }
+    savingsAccountId = b.savingsAccountId;
+  }
   return {
     periodType,
     anchor: b.anchor,
     count,
     name,
     accountIds,
+    savingsAccountId,
     groceriesOverrideCents: readOverrides('groceriesOverrideCents'),
     fuelOverrideCents: readOverrides('fuelOverrideCents'),
     tollsOverrideCents: readOverrides('tollsOverrideCents'),
     miscOverrideCents: readOverrides('miscOverrideCents'),
     miscNoteOverride: readStringOverrides('miscNoteOverride'),
     savingsOverrideCents: readOverrides('savingsOverrideCents'),
-    savingsIncomePctOverride: readPctOverride('savingsIncomePctOverride'),
-    savingsLeftoverPctOverride: readPctOverride('savingsLeftoverPctOverride'),
+    savingsLowPctOverride: readPctOverride('savingsLowPctOverride'),
+    savingsMidPctOverride: readPctOverride('savingsMidPctOverride'),
+    savingsHighPctOverride: readPctOverride('savingsHighPctOverride'),
   };
 }
 

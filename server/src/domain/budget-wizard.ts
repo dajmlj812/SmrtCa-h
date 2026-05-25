@@ -1,6 +1,6 @@
 import { pool, query } from '../db/pool.js';
 import { advanceByFrequency } from '../routes/bills.js';
-import { getEffectiveValue } from './settings.js';
+import { getEffectiveValue, type SettingKey } from './settings.js';
 
 /**
  * AutoMagic budget wizard projection (Phase 7.3 rev).
@@ -114,11 +114,27 @@ export interface IncomeRow {
   account_id: string | null;
 }
 
+/**
+ * 0.17.22 — savings suggestion chips.
+ *
+ * Pre-rev: two chips (% of income, % of leftover) plus
+ * goal-required + a max-of-the-three "Max" chip. The user
+ * asked for a simpler, all-leftover model: three percentage
+ * bands of post-deduction leftover (25/50/75% by default,
+ * editable) plus a "Max" chip that's the full leftover. Goal-
+ * required stays as-is (driven by `savings_goals`).
+ *
+ * "Post-deduction leftover" = income − bills − groceries − fuel −
+ * tolls − misc. Savings itself is NOT subtracted (that's the
+ * whole point of these chips — figuring out how much savings to
+ * carve out).
+ */
 export interface SavingsSuggestions {
   goalRequiredCents: number;
-  pctIncomeCents: number;
-  pctLeftoverCents: number;
-  /** max of the above three; what we recommend by default. */
+  pctLowCents: number;
+  pctMidCents: number;
+  pctHighCents: number;
+  /** 100% of leftover — the upper bound chip. */
   maxCents: number;
 }
 
@@ -139,7 +155,7 @@ export interface PeriodPreview {
   flexCents: number;
 }
 
-export interface WizardPreview {
+export interface WizardPreview extends WizardInputSavings {
   /** 0.17.6 — carries from buildWizardPreview() into commitWizard() so the latter doesn't re-derive scope. */
   tenantId: string;
   /** 0.17.16 — plan name; commitWizard creates the plan row before per-period budgets. */
@@ -152,6 +168,12 @@ export interface WizardPreview {
    * counts; legacy behavior).
    */
   accountIds?: string[];
+  /**
+   * 0.17.22 — destination savings account for this plan. Stored on
+   * the budget_plans row; the wizard UI offers the user's savings-
+   * type accounts to choose from.
+   */
+  savingsAccountId?: string | null;
   periodType: WizardPeriodType;
   anchor: string;
   count: number;
@@ -161,9 +183,14 @@ export interface WizardPreview {
   fuelWeeklyCents: number;
   /** Source for tolls: total route-driven weekly toll cost. */
   tollsWeeklyCents: number;
-  /** Percentage knobs from app_settings (whole numbers, e.g. 20 = 20%). */
-  savingsIncomePct: number;
-  savingsLeftoverPct: number;
+  /**
+   * 0.17.22 — three configurable percentages of post-deduction
+   * leftover used for the chips. Defaults 25/50/75. Whole-number
+   * percentages; clamped to [0, 100].
+   */
+  savingsLowPct: number;
+  savingsMidPct: number;
+  savingsHighPct: number;
   periods: PeriodPreview[];
 }
 
@@ -403,7 +430,13 @@ export function instancesIn(
   return out;
 }
 
-export interface WizardInput {
+/** 0.17.22 — pass-through field on the input. */
+interface WizardInputSavings {
+  /** Savings destination account id; stored on the plan row. */
+  savingsAccountId?: string | null;
+}
+
+export interface WizardInput extends WizardInputSavings {
   /**
    * 0.17.6 — tenant scope, REQUIRED. Pre-fix the wizard read
    * bills/income/vehicles/routes/transactions across every
@@ -443,14 +476,15 @@ export interface WizardInput {
   miscNoteOverride?: Record<number, string>;
   savingsOverrideCents?: Record<number, number>;
   /**
-   * Per-wizard-run overrides for the suggestion percentages. When set,
-   * these win over the global SAVINGS_INCOME_PCT / SAVINGS_LEFTOVER_PCT
-   * settings. Useful so a tenant admin can tune the chips without the
-   * super-admin having to update the global. Whole-number percentages
-   * (e.g. 25 means 25%).
+   * 0.17.22 — three per-run overrides for the chip percentages.
+   * Defaults 25/50/75; the user can tune each independently from
+   * the wizard UI without touching global settings. Whole-number
+   * percentages (e.g. 25 = 25%); out-of-range values fall back
+   * to the default.
    */
-  savingsIncomePctOverride?: number;
-  savingsLeftoverPctOverride?: number;
+  savingsLowPctOverride?: number;
+  savingsMidPctOverride?: number;
+  savingsHighPctOverride?: number;
 }
 
 export async function buildWizardPreview(input: WizardInput): Promise<WizardPreview> {
@@ -464,24 +498,46 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
     accountIds,
   );
 
-  // Per-wizard-run overrides win over the global setting. Whole-number
-  // percentages; outside-range values fall back to the global / default.
-  const savingsIncomePctStr = await getEffectiveValue('SAVINGS_INCOME_PCT');
-  const savingsLeftoverPctStr = await getEffectiveValue('SAVINGS_LEFTOVER_PCT');
-  const savingsIncomePctGlobal = Number(savingsIncomePctStr) || 20;
-  const savingsLeftoverPctGlobal = Number(savingsLeftoverPctStr) || 50;
-  const savingsIncomePct =
-    typeof input.savingsIncomePctOverride === 'number' &&
-    input.savingsIncomePctOverride >= 0 &&
-    input.savingsIncomePctOverride <= 100
-      ? input.savingsIncomePctOverride
-      : savingsIncomePctGlobal;
-  const savingsLeftoverPct =
-    typeof input.savingsLeftoverPctOverride === 'number' &&
-    input.savingsLeftoverPctOverride >= 0 &&
-    input.savingsLeftoverPctOverride <= 100
-      ? input.savingsLeftoverPctOverride
-      : savingsLeftoverPctGlobal;
+  // 0.17.22 — three leftover-pct chips, defaults 25/50/75. Each
+  // can be overridden per wizard run; out-of-range values fall
+  // back to the default. Global setting keys still consulted for
+  // backward compat; missing/invalid keys = use the literal defaults.
+  function pickPct(
+    override: number | undefined,
+    settingKey: SettingKey,
+    defaultPct: number,
+  ): Promise<number> {
+    return getEffectiveValue(settingKey).then((raw) => {
+      const globalPct = Number(raw);
+      const base = Number.isFinite(globalPct) && globalPct >= 0 && globalPct <= 100
+        ? globalPct
+        : defaultPct;
+      if (
+        typeof override === 'number' &&
+        Number.isFinite(override) &&
+        override >= 0 &&
+        override <= 100
+      ) {
+        return override;
+      }
+      return base;
+    });
+  }
+  const savingsLowPct = await pickPct(
+    input.savingsLowPctOverride,
+    'SAVINGS_PCT_LOW',
+    25,
+  );
+  const savingsMidPct = await pickPct(
+    input.savingsMidPctOverride,
+    'SAVINGS_PCT_MID',
+    50,
+  );
+  const savingsHighPct = await pickPct(
+    input.savingsHighPctOverride,
+    'SAVINGS_PCT_HIGH',
+    75,
+  );
 
   // 0.17.17 — strict scope. Pre-0.17.16 we included NULL
   // account_id rows as "household-wide" so a tenant with only
@@ -526,20 +582,22 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
     const incomeTotal = incomeHere.reduce((acc, x) => acc + x.amount_cents, 0);
     const billsTotal = billsHere.reduce((acc, x) => acc + x.amount_cents, 0);
 
-    // Savings suggestions — computed BEFORE the user's chosen value so
-    // the four numbers are always visible.
+    // 0.17.22 — savings suggestions: goal-required (from
+    // savings_goals) plus three percentages of post-deduction
+    // leftover plus Max (= 100% of leftover).
     const goalRequiredCents = await goalRequiredForPeriod(
       input.tenantId,
       end,
       days,
       accountIds,
     );
-    const pctIncomeCents = Math.round(incomeTotal * (savingsIncomePct / 100));
     const preFlexCents =
       incomeTotal - billsTotal - groceriesCents - fuelCents - tollsCents - miscCents;
-    const pctLeftoverCents =
-      preFlexCents > 0 ? Math.round(preFlexCents * (savingsLeftoverPct / 100)) : 0;
-    const maxCents = Math.max(goalRequiredCents, pctIncomeCents, pctLeftoverCents);
+    const positiveLeftover = preFlexCents > 0 ? preFlexCents : 0;
+    const pctLowCents = Math.round(positiveLeftover * (savingsLowPct / 100));
+    const pctMidCents = Math.round(positiveLeftover * (savingsMidPct / 100));
+    const pctHighCents = Math.round(positiveLeftover * (savingsHighPct / 100));
+    const maxCents = positiveLeftover;
 
     const savingsCents = input.savingsOverrideCents?.[i] ?? 0;
 
@@ -567,8 +625,9 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
       savingsCents,
       savingsSuggestions: {
         goalRequiredCents,
-        pctIncomeCents,
-        pctLeftoverCents,
+        pctLowCents,
+        pctMidCents,
+        pctHighCents,
         maxCents,
       },
       flexCents,
@@ -582,14 +641,17 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
     ...(input.accountIds && input.accountIds.length > 0
       ? { accountIds: input.accountIds }
       : {}),
+    // 0.17.22 — pass through savings destination so commit can stamp the plan.
+    savingsAccountId: input.savingsAccountId ?? null,
     periodType: input.periodType,
     anchor: input.anchor,
     count: input.count,
     groceriesWeeklyMedianCents: groceriesWeekly,
     fuelWeeklyCents: fuelWeekly,
     tollsWeeklyCents: tollsWeekly,
-    savingsIncomePct,
-    savingsLeftoverPct,
+    savingsLowPct,
+    savingsMidPct,
+    savingsHighPct,
     periods,
   };
 }
@@ -658,15 +720,24 @@ export async function commitWizard(
   // layer can render one Paycheck-to-Paycheck card per plan.
   // Validate account uniqueness up front so we don't insert a
   // plan only to fail on a downstream constraint.
+  // 0.17.22 — also stamps savings_account_id on the plan.
   const scope = preview.accountIds && preview.accountIds.length > 0
     ? preview.accountIds
     : [];
   await ensureAccountsUnclaimed(preview.tenantId, scope);
   const planInsert = await query<{ id: string }>(
-    `INSERT INTO budget_plans (tenant_id, name, period_type, anchor_date, account_ids)
-     VALUES ($1, $2, $3, $4::date, $5::uuid[])
+    `INSERT INTO budget_plans
+       (tenant_id, name, period_type, anchor_date, account_ids, savings_account_id)
+     VALUES ($1, $2, $3, $4::date, $5::uuid[], $6)
      RETURNING id`,
-    [preview.tenantId, preview.name, preview.periodType, preview.anchor, scope],
+    [
+      preview.tenantId,
+      preview.name,
+      preview.periodType,
+      preview.anchor,
+      scope,
+      (preview as { savingsAccountId?: string | null }).savingsAccountId ?? null,
+    ],
   );
   const planId = planInsert.rows[0]!.id;
 

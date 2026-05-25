@@ -9,10 +9,62 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.21 shipped. 0.17.21 closes the last per-plan
-leak: savings_goals now carry account_id, so the wizard's
-"goal-required" suggestion only includes goals funded from
-the plan's accounts._
+_0.17.0–0.17.22 shipped. 0.17.22 redesigns the savings
+suggestion chips: goal-required + three configurable
+percentages of post-deduction leftover (defaults 25/50/75) +
+Max (100%) — and adds a destination savings-account dropdown
+on the wizard._
+
+---
+
+## [0.17.22] — 2026-05-24 — Savings chip redesign + destination account
+
+### Chips
+
+Pre-rev the wizard had two chips driven by two settings:
+"% of income" and "% of leftover" with a Max chip that just
+picked the largest of the three. That mixed income-based and
+leftover-based bases and only let the user nudge two numbers.
+
+New shape:
+
+1. **Goal-required** — unchanged, from active savings_goals
+2. **Low %** — default 25% of post-deduction leftover
+3. **Mid %** — default 50%
+4. **High %** — default 75%
+5. **Max** — 100% of leftover (full available funds)
+
+"Post-deduction leftover" = income − bills − groceries −
+fuel − tolls − misc. Savings itself isn't subtracted (that's
+what these chips help you decide).
+
+The three percentages are editable per wizard run and the
+defaults can be set globally via three new settings:
+`SAVINGS_PCT_LOW`, `SAVINGS_PCT_MID`, `SAVINGS_PCT_HIGH`.
+The legacy `SAVINGS_INCOME_PCT` + `SAVINGS_LEFTOVER_PCT`
+keys stay in the settings registry (marked legacy) but are
+no longer read by the wizard.
+
+### Destination account
+
+Migration 042 adds `budget_plans.savings_account_id` (FK to
+`accounts(id)`, `ON DELETE SET NULL`). The wizard offers a
+"Savings goes to" dropdown filtered to `accounts.type =
+'savings'`. Selecting one stamps it on the plan; the chosen
+amount on each period card is then known to feed that
+account.
+
+### Wizard input/preview shape changes
+
+- `WizardPreview.savingsLowPct/MidPct/HighPct` replace the
+  legacy `savingsIncomePct/savingsLeftoverPct`
+- `WizardSavingsSuggestions` now exposes `pctLowCents/
+  pctMidCents/pctHighCents` (and `maxCents` = full leftover)
+- Wizard request body accepts `savingsLowPctOverride`,
+  `savingsMidPctOverride`, `savingsHighPctOverride`, and
+  `savingsAccountId`
+
+20 budget + wizard + commute-routes tests pass.
 
 ---
 

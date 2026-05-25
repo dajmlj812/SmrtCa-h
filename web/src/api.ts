@@ -344,8 +344,11 @@ export interface FuelPrice {
 
 export interface WizardSavingsSuggestions {
   goalRequiredCents: number;
-  pctIncomeCents: number;
-  pctLeftoverCents: number;
+  /** 0.17.22 — three percentages of post-deduction leftover (low/mid/high). */
+  pctLowCents: number;
+  pctMidCents: number;
+  pctHighCents: number;
+  /** 0.17.22 — 100% of leftover. */
   maxCents: number;
 }
 
@@ -384,8 +387,10 @@ export interface WizardPreview {
   groceriesWeeklyMedianCents: number;
   fuelWeeklyCents: number;
   tollsWeeklyCents: number;
-  savingsIncomePct: number;
-  savingsLeftoverPct: number;
+  /** 0.17.22 — three configurable percentages of post-deduction leftover. */
+  savingsLowPct: number;
+  savingsMidPct: number;
+  savingsHighPct: number;
   periods: WizardPeriodPreview[];
 }
 
@@ -2301,14 +2306,18 @@ export const api = {
      * every account.
      */
     accountIds?: string[];
+    /** 0.17.22 — savings destination; null clears. */
+    savingsAccountId?: string | null;
     groceriesOverrideCents?: Record<number, number>;
     fuelOverrideCents?: Record<number, number>;
     tollsOverrideCents?: Record<number, number>;
     miscOverrideCents?: Record<number, number>;
     miscNoteOverride?: Record<number, string>;
     savingsOverrideCents?: Record<number, number>;
-    savingsIncomePctOverride?: number;
-    savingsLeftoverPctOverride?: number;
+    /** 0.17.22 — per-run % overrides for the three savings chips. */
+    savingsLowPctOverride?: number;
+    savingsMidPctOverride?: number;
+    savingsHighPctOverride?: number;
   }) =>
     http<{ preview: WizardPreview }>('/api/budgets/wizard/preview', {
       method: 'POST',
@@ -2324,14 +2333,17 @@ export const api = {
     count: number;
     /** 0.17.8 — see budgetWizardPreview.accountIds. */
     accountIds?: string[];
+    /** 0.17.22 — savings destination; null clears. */
+    savingsAccountId?: string | null;
     groceriesOverrideCents?: Record<number, number>;
     fuelOverrideCents?: Record<number, number>;
     tollsOverrideCents?: Record<number, number>;
     miscOverrideCents?: Record<number, number>;
     miscNoteOverride?: Record<number, string>;
     savingsOverrideCents?: Record<number, number>;
-    savingsIncomePctOverride?: number;
-    savingsLeftoverPctOverride?: number;
+    savingsLowPctOverride?: number;
+    savingsMidPctOverride?: number;
+    savingsHighPctOverride?: number;
   }) =>
     http<{
       result: {

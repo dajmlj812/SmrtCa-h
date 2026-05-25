@@ -211,8 +211,9 @@ describe('Budget wizard with route-driven fuel + misc + savings', () => {
     expect(p.savingsCents).toBe(0);
     expect(p.savingsSuggestions).toMatchObject({
       goalRequiredCents: 0,
-      pctIncomeCents: 0,
-      pctLeftoverCents: 0,
+      pctLowCents: 0,
+      pctMidCents: 0,
+      pctHighCents: 0,
       maxCents: 0,
     });
   });

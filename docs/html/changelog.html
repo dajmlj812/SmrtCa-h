@@ -161,10 +161,51 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.21 shipped. 0.17.21 closes the last per-plan
-leak: savings_goals now carry account_id, so the wizard&#39;s
-&quot;goal-required&quot; suggestion only includes goals funded from
-the plan&#39;s accounts.</em></p>
+<p><em>0.17.0–0.17.22 shipped. 0.17.22 redesigns the savings
+suggestion chips: goal-required + three configurable
+percentages of post-deduction leftover (defaults 25/50/75) +
+Max (100%) — and adds a destination savings-account dropdown
+on the wizard.</em></p>
+<hr>
+<h2 id="01722-2026-05-24-savings-chip-redesign-destination-account">[0.17.22] — 2026-05-24 — Savings chip redesign + destination account<a class="heading-anchor" href="#01722-2026-05-24-savings-chip-redesign-destination-account">#</a></h2>
+<h3 id="chips">Chips<a class="heading-anchor" href="#chips">#</a></h3>
+<p>Pre-rev the wizard had two chips driven by two settings:
+&quot;% of income&quot; and &quot;% of leftover&quot; with a Max chip that just
+picked the largest of the three. That mixed income-based and
+leftover-based bases and only let the user nudge two numbers.</p>
+<p>New shape:</p>
+<ol>
+<li><strong>Goal-required</strong> — unchanged, from active savings_goals</li>
+<li><strong>Low %</strong> — default 25% of post-deduction leftover</li>
+<li><strong>Mid %</strong> — default 50%</li>
+<li><strong>High %</strong> — default 75%</li>
+<li><strong>Max</strong> — 100% of leftover (full available funds)</li>
+</ol>
+<p>&quot;Post-deduction leftover&quot; = income − bills − groceries −
+fuel − tolls − misc. Savings itself isn&#39;t subtracted (that&#39;s
+what these chips help you decide).</p>
+<p>The three percentages are editable per wizard run and the
+defaults can be set globally via three new settings:
+<code>SAVINGS_PCT_LOW</code>, <code>SAVINGS_PCT_MID</code>, <code>SAVINGS_PCT_HIGH</code>.
+The legacy <code>SAVINGS_INCOME_PCT</code> + <code>SAVINGS_LEFTOVER_PCT</code>
+keys stay in the settings registry (marked legacy) but are
+no longer read by the wizard.</p>
+<h3 id="destination-account">Destination account<a class="heading-anchor" href="#destination-account">#</a></h3>
+<p>Migration 042 adds <code>budget_plans.savings_account_id</code> (FK to
+<code>accounts(id)</code>, <code>ON DELETE SET NULL</code>). The wizard offers a
+&quot;Savings goes to&quot; dropdown filtered to <code>accounts.type = &#39;savings&#39;</code>. Selecting one stamps it on the plan; the chosen
+amount on each period card is then known to feed that
+account.</p>
+<h3 id="wizard-inputpreview-shape-changes">Wizard input/preview shape changes<a class="heading-anchor" href="#wizard-inputpreview-shape-changes">#</a></h3>
+<ul>
+<li><code>WizardPreview.savingsLowPct/MidPct/HighPct</code> replace the
+legacy <code>savingsIncomePct/savingsLeftoverPct</code></li>
+<li><code>WizardSavingsSuggestions</code> now exposes <code>pctLowCents/ pctMidCents/pctHighCents</code> (and <code>maxCents</code> = full leftover)</li>
+<li>Wizard request body accepts <code>savingsLowPctOverride</code>,
+<code>savingsMidPctOverride</code>, <code>savingsHighPctOverride</code>, and
+<code>savingsAccountId</code></li>
+</ul>
+<p>20 budget + wizard + commute-routes tests pass.</p>
 <hr>
 <h2 id="01721-2026-05-24-account-scope-for-savings_goals">[0.17.21] — 2026-05-24 — Account scope for savings_goals<a class="heading-anchor" href="#01721-2026-05-24-account-scope-for-savings_goals">#</a></h2>
 <p>Final piece of the per-account plan audit. Walking back through
@@ -6349,7 +6390,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 00:38:23 UTC · commit 4182bd7</span>
+  <span>Generated 2026-05-25 00:49:41 UTC · commit 815c29a</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
