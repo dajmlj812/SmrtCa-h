@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0+0.18.1 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0/0.18.1/0.18.2 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -478,22 +478,30 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   the bill is documented. We don't try to be the concierge
   (legal + ops moat); just remove the friction Rocket Money
   charges $9/month for.
-- **0.18.2** 📋 — **Public read-only API + per-user keys**
+- **0.18.2** ✅ (released 2026-05-24) — **Vendor attribution
+  + auto-versioned footer**. Out-of-band fix surfaced during
+  test-deploy review: sidebar version was a hand-typed
+  `v0.17.25` string and never updated as releases shipped.
+  Replaced with `__APP_VERSION__` injected by Vite from
+  `web/package.json` at build time, plus a new
+  `BrandTagline` component on the sidebar + auth pages that
+  carries "Developed by BuildITSmrt, LLC." attribution.
+- **0.18.3** 📋 — **Public read-only API + per-user keys**
   (~2–3 days). Each tenant member gets an API key for their
   own data. Existing routes already RBAC-enforce ownership;
   this is a thin token-auth layer on top. Devs are an
   underserved beachhead market (Lunch Money's whole audience).
-- **0.18.3** 📋 — **Goal tracking polish** (~2–3 days). Target
+- **0.18.4** 📋 — **Goal tracking polish** (~2–3 days). Target
   dates with progress visualizations, contributions linked to
   specific transactions, dashboard card showing top goals.
   Existing `savings_goals` data; missing UX. Closes Monarch's
   visible advantage.
-- **0.18.4** 📋 — **Debt payoff plans** (~2–3 days). For
+- **0.18.5** 📋 — **Debt payoff plans** (~2–3 days). For
   accounts of `type IN ('loan','credit_card')`, add a
   "Payoff plan" view with snowball + avalanche calculators
   and projected payoff date based on current min payment +
   optional extra. Closes the YNAB gap.
-- **0.18.5** 📋 — **Branded HTML email shell + audit** (~1
+- **0.18.6** 📋 — **Branded HTML email shell + audit** (~1
   day). Every outward email already returns both `text` and
   `html` from its renderer (verification, password reset,
   dunning, tenant + super-admin invitations), but the HTML
@@ -506,7 +514,7 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   contributor can't ship a text-only email by accident.
   Driven by the test-deploy finding that operators want
   visually polished invitations, not raw monospace text.
-- **0.18.6** 📋 — **Unify base URL settings** (~1 day).
+- **0.18.7** 📋 — **Unify base URL settings** (~1 day).
   Currently there are two settings that answer the same
   question — "what URL should outgoing email links use?":
   `APP_BASE_URL` (read by tenant invitations and the
@@ -524,7 +532,7 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   `resolveBaseUrl()` helpers with one. Prevents this exact
   category of "two settings, one source of truth, drift in
   between" bug.
-- **0.18.7** 📋 — **SaaS deploy guide + runbook gaps** (~3
+- **0.18.8** 📋 — **SaaS deploy guide + runbook gaps** (~3
   hours, docs-only). Two artifacts left over from the
   smrtcash-test deploy:
   - **New `docs/SAAS_DEPLOY.md`** — step-by-step for putting
@@ -546,7 +554,7 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
     operators upgrading from an older deploy will have a
     list of stuck users to unblock; this is the
     one-command fix.
-- **0.18.8** 📋 — **Settings input validation guardrails**
+- **0.18.9** 📋 — **Settings input validation guardrails**
   (~half day). The `@`-instead-of-`.` typo that consumed
   hours of diagnosis would have been caught instantly by
   client-side or server-side URL-shape validation on the

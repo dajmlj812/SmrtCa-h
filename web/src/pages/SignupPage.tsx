@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { BrandTagline } from '../components/BrandTagline';
 
 /**
  * 0.16.0 — public signup page.
@@ -79,6 +80,7 @@ export function SignupPage({ supportUrl }: Props = {}) {
             <Link to="/login">← Back to sign in</Link>
           </p>
         </div>
+        <BrandTagline />
       </div>
     );
   }
@@ -167,6 +169,7 @@ export function SignupPage({ supportUrl }: Props = {}) {
           </p>
         )}
       </form>
+      <BrandTagline />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type AuthProviderDescriptor } from '../api';
+import { BrandTagline } from '../components/BrandTagline';
 
 interface Props {
   /** Called after a successful login so the App re-checks status. */
@@ -116,6 +117,7 @@ export function LoginPage({ onAuthenticated, signupEnabled, supportUrl }: Props)
           </p>
         )}
       </form>
+      <BrandTagline />
     </div>
   );
 }

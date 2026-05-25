@@ -40,6 +40,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { MobileBar, SidebarBackdrop, useMobileDrawer } from './components/MobileBar';
 import { InstallPrompt, OfflineIndicator } from './components/InstallPrompt';
 import { TrialBanner } from './components/TrialBanner';
+import { BrandTagline } from './components/BrandTagline';
 
 type AuthState =
   | 'loading'
@@ -189,7 +190,10 @@ function SuperAdminApp({
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          Platform operator
+          <div>
+            Platform operator
+            <div className="muted small">v{__APP_VERSION__}</div>
+          </div>
           <SupportLink supportUrl={supportUrl} />
           <button
             className="btn secondary logout-btn"
@@ -292,7 +296,7 @@ function AuthenticatedApp({
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
-          SmrtCash · v0.17.25
+          <BrandTagline />
           <SupportLink supportUrl={supportUrl} />
           <button
             className="btn secondary logout-btn"

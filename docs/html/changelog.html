@@ -161,13 +161,34 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.1 ships subscription cancellation help: per-bill
-fields for URL + email template + step-by-step instructions,
-backed by a built-in library of ~28 common merchants
-(Netflix, NYT, gym memberships, etc.). Closes Rocket Money&#39;s
-&quot;we&#39;ll cancel for you&quot; friction without SmrtCash trying to
-be the concierge — we just remove the friction of finding
-the cancel page.</em></p>
+<p><em>0.18.2 fixes the hard-coded version string (was stuck at
+&quot;SmrtCash · v0.17.25&quot; even on 0.18.1) and surfaces
+&quot;Developed by BuildITSmrt, LLC.&quot; in the sidebar footer
+plus on the Login + Signup pages.</em></p>
+<hr>
+<h2 id="0182-2026-05-24-vendor-attribution-auto-versioned-footer">[0.18.2] — 2026-05-24 — Vendor attribution + auto-versioned footer<a class="heading-anchor" href="#0182-2026-05-24-vendor-attribution-auto-versioned-footer">#</a></h2>
+<p>Two small but visible fixes that came out of looking at
+the test deploy:</p>
+<ul>
+<li><strong>Sidebar footer was stuck at &quot;SmrtCash · v0.17.25&quot;</strong>
+even after 0.18.0 + 0.18.1 shipped, because the version
+was a hand-typed string in <code>App.tsx</code>. Replaced with
+<code>__APP_VERSION__</code>, injected by Vite from
+<code>web/package.json</code> at build time. Pattern documented in
+<code>vite.config.ts</code> so future contributors can&#39;t recreate
+the drift bug.</li>
+<li><strong>&quot;Developed by BuildITSmrt, LLC.&quot; attribution</strong> is
+now visible to every user. New <code>BrandTagline</code> component
+rendered in:<ul>
+<li>the regular sidebar footer (logged-in users)</li>
+<li>the super-admin sidebar footer (operators — version
+surfaced here too, which it wasn&#39;t before)</li>
+<li>the Login page (anonymous visitors)</li>
+<li>the Signup page (anonymous visitors)</li>
+</ul>
+</li>
+</ul>
+<p>Vendor name links to <a href="https://builditsmrt.com">https://builditsmrt.com</a>.</p>
 <hr>
 <h2 id="0181-2026-05-24-subscription-cancellation-help">[0.18.1] — 2026-05-24 — Subscription cancellation help<a class="heading-anchor" href="#0181-2026-05-24-subscription-cancellation-help">#</a></h2>
 <p>Each bill now has four nullable fields — <code>cancel_url</code>,
@@ -6502,7 +6523,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 02:05:25 UTC · commit abb2836</span>
+  <span>Generated 2026-05-25 02:13:51 UTC · commit b3fe681</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

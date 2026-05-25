@@ -960,6 +960,25 @@ select:focus {
   }
 }
 
+/* 0.18.2 — brand + version + vendor footer */
+.brand-tagline {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+.brand-tagline .small {
+  font-size: 11px;
+}
+.brand-tagline a {
+  color: inherit;
+  text-decoration: underline;
+}
+.sidebar-footer .brand-tagline {
+  margin-top: 0;
+  text-align: left;
+}
+
 /* 0.18.1 — cancel-info modal */
 .cancel-modal-toolbar {
   display: flex;

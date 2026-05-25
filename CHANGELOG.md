@@ -9,13 +9,35 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.1 ships subscription cancellation help: per-bill
-fields for URL + email template + step-by-step instructions,
-backed by a built-in library of ~28 common merchants
-(Netflix, NYT, gym memberships, etc.). Closes Rocket Money's
-"we'll cancel for you" friction without SmrtCash trying to
-be the concierge — we just remove the friction of finding
-the cancel page._
+_0.18.2 fixes the hard-coded version string (was stuck at
+"SmrtCash · v0.17.25" even on 0.18.1) and surfaces
+"Developed by BuildITSmrt, LLC." in the sidebar footer
+plus on the Login + Signup pages._
+
+---
+
+## [0.18.2] — 2026-05-24 — Vendor attribution + auto-versioned footer
+
+Two small but visible fixes that came out of looking at
+the test deploy:
+
+- **Sidebar footer was stuck at "SmrtCash · v0.17.25"**
+  even after 0.18.0 + 0.18.1 shipped, because the version
+  was a hand-typed string in `App.tsx`. Replaced with
+  `__APP_VERSION__`, injected by Vite from
+  `web/package.json` at build time. Pattern documented in
+  `vite.config.ts` so future contributors can't recreate
+  the drift bug.
+- **"Developed by BuildITSmrt, LLC." attribution** is
+  now visible to every user. New `BrandTagline` component
+  rendered in:
+  - the regular sidebar footer (logged-in users)
+  - the super-admin sidebar footer (operators — version
+    surfaced here too, which it wasn't before)
+  - the Login page (anonymous visitors)
+  - the Signup page (anonymous visitors)
+
+Vendor name links to https://builditsmrt.com.
 
 ---
 
