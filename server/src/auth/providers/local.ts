@@ -1,5 +1,5 @@
 import { query } from '../../db/pool.js';
-import { verifyPassword } from '../passwords.js';
+import { verifyPassword, dummyVerifyForTiming } from '../passwords.js';
 import type {
   AuthProvider,
   BeginResult,
@@ -52,6 +52,12 @@ export class LocalAuthProvider implements AuthProvider {
       [email],
     );
     if (r.rowCount === 0) {
+      // F-06 (security audit 2026-05-25) — burn the same CPU cycles
+      // we WOULD have burned on argon2.verify if the user existed.
+      // Without this, login response time differs by ~30ms between
+      // "existing user, wrong password" and "no such user", which
+      // is enough signal to enumerate the user table.
+      await dummyVerifyForTiming();
       throw new Error('Invalid email or password');
     }
     const user = r.rows[0]!;

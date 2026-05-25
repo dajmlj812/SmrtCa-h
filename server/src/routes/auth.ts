@@ -6,6 +6,8 @@ import {
   PasswordPolicyError,
   hashPassword,
   validatePassword,
+  checkPasswordBreached,
+  dummyVerifyForTiming,
 } from '../auth/passwords.js';
 import {
   SESSION_COOKIE,
@@ -20,6 +22,11 @@ import {
   listProviders,
 } from '../auth/providers/registry.js';
 import { resolveIdentity } from '../auth/identities.js';
+import {
+  checkRateLimit,
+  recordAttempt,
+  clearOnSuccess,
+} from '../auth/login-attempts.js';
 import { recordAudit } from '../domain/audit.js';
 import {
   renderPasswordResetEmail,
@@ -207,6 +214,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+    // F-07 — block known-breached passwords at first-user setup too.
+    const setupBreach = await checkPasswordBreached(body.password as string);
+    if (setupBreach.breached) {
+      return reply.code(400).send({
+        error: `This password has appeared in a public data breach${setupBreach.count ? ` (${setupBreach.count.toLocaleString()} times)` : ''}. Please pick a different one.`,
+      });
+    }
     const hash = await hashPassword(body.password as string);
 
     // Phase 9: first user on a fresh install is a super_admin. They
@@ -286,6 +300,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: err.message });
       }
       throw err;
+    }
+    // F-07 — refuse passwords known to have been in a public breach.
+    // Failure (HIBP unreachable) falls open so signup still works.
+    const breach = await checkPasswordBreached(body.password as string);
+    if (breach.breached) {
+      return reply.code(400).send({
+        error: `This password has appeared in a public data breach${breach.count ? ` (${breach.count.toLocaleString()} times)` : ''}. Please pick a different one — using one that hasn't been leaked elsewhere is much safer.`,
+      });
     }
 
     // Idempotency by email: if the address is already in use (verified
@@ -484,46 +506,76 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(202).send({ status: 'reset_sent' });
     }
 
-    const u = await pool.query<{ id: string }>(
-      `SELECT id FROM users WHERE lower(email) = lower($1)`,
-      [email],
-    );
-    if (u.rowCount && u.rowCount > 0) {
-      const userId = u.rows[0]!.id;
-      const token = newVerificationToken(); // same generator; opaque url-safe random
-      const expiresAt = new Date(
-        Date.now() + PASSWORD_RESET_TTL_MINUTES * 60_000,
-      );
-      await pool.query(
-        `INSERT INTO password_resets (user_id, token, expires_at)
-         VALUES ($1, $2, $3)`,
-        [userId, token, expiresAt],
-      );
-      // Best-effort email; failures don't change the response.
-      const resetUrl = `${await publicBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
-      const rendered = renderPasswordResetEmail({
-        resetUrl,
-        expiresAt: expiresAt.toISOString(),
-      });
+    // F-02 + F-08 (security audit 2026-05-25) — fire-and-forget the
+    // existing-user work so the response time of "real email" and
+    // "no such email" is symmetric. Previously this endpoint took
+    // ~1.18s when the email matched a user (DB write + SMTP) and
+    // ~0.12s when it didn't, giving an attacker a 10x signal to
+    // enumerate the user table from a list of candidate addresses.
+    void (async () => {
       try {
-        const r = await tryMail({ to: email, ...rendered });
-        if (!r.sent) {
-          req.log.warn(
-            { reason: r.reason, resetUrl },
-            'Password reset email NOT sent (SMTP unconfigured); operator must hand the link to the user manually',
+        const u = await pool.query<{ id: string }>(
+          `SELECT id FROM users WHERE lower(email) = lower($1)`,
+          [email],
+        );
+        if (!u.rowCount || u.rowCount === 0) return;
+        const userId = u.rows[0]!.id;
+
+        // F-08 — debounce: if we already minted an unconsumed token
+        // for this user in the last 60 seconds, don't mint a new
+        // one. Prevents an attacker (or even a confused legitimate
+        // user) from flooding the inbox with reset emails.
+        const recent = await pool.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n
+             FROM password_resets
+            WHERE user_id = $1
+              AND consumed_at IS NULL
+              AND expires_at > now()
+              AND created_at > now() - interval '60 seconds'`,
+          [userId],
+        );
+        if (Number(recent.rows[0]?.n ?? '0') > 0) {
+          req.log.info(
+            { userId },
+            'password_reset_requested debounced — recent unconsumed token exists',
           );
+          return;
         }
+
+        const token = newVerificationToken();
+        const expiresAt = new Date(
+          Date.now() + PASSWORD_RESET_TTL_MINUTES * 60_000,
+        );
+        await pool.query(
+          `INSERT INTO password_resets (user_id, token, expires_at)
+           VALUES ($1, $2, $3)`,
+          [userId, token, expiresAt],
+        );
+        const resetUrl = `${await publicBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+        const rendered = renderPasswordResetEmail({
+          resetUrl,
+          expiresAt: expiresAt.toISOString(),
+        });
+        try {
+          const r = await tryMail({ to: email, ...rendered });
+          if (!r.sent) {
+            req.log.warn(
+              { reason: r.reason, resetUrl },
+              'Password reset email NOT sent (SMTP unconfigured); operator must hand the link to the user manually',
+            );
+          }
+        } catch (err) {
+          req.log.warn({ err, resetUrl }, 'Password reset email send failed');
+        }
+        await recordAudit({
+          actorUserId: userId,
+          actorKind: 'tenant_user',
+          action: 'user.password_reset_requested',
+        });
       } catch (err) {
-        req.log.warn({ err, resetUrl }, 'Password reset email send failed');
+        req.log.error({ err }, 'Background password-reset work failed');
       }
-      // Audit the request itself (not the consumption) so an
-      // operator can spot brute-force enumeration attempts.
-      await recordAudit({
-        actorUserId: userId,
-        actorKind: 'tenant_user',
-        action: 'user.password_reset_requested',
-      });
-    }
+    })();
     return reply.code(202).send({ status: 'reset_sent' });
   });
 
@@ -551,6 +603,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: err.message });
       }
       throw err;
+    }
+    // F-07 — also check breach status on reset, not just signup.
+    const breach = await checkPasswordBreached(body.password as string);
+    if (breach.breached) {
+      return reply.code(400).send({
+        error: `This password has appeared in a public data breach${breach.count ? ` (${breach.count.toLocaleString()} times)` : ''}. Please pick a different one.`,
+      });
     }
 
     const tokenRow = await pool.query<{
@@ -584,6 +643,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       await client.query(
         `UPDATE password_resets SET consumed_at = now() WHERE id = $1`,
         [row.id],
+      );
+      // F-03 (security audit 2026-05-25) — invalidate every OTHER
+      // outstanding reset token for this user. Previously, a flood
+      // of reset-request hits would mint multiple tokens; an attacker
+      // who intercepted ANY of those emails could keep resetting the
+      // password until each token expired on its own. Now: one
+      // successful reset burns every sibling.
+      await client.query(
+        `UPDATE password_resets
+            SET consumed_at = now()
+          WHERE user_id = $1
+            AND consumed_at IS NULL`,
+        [row.user_id],
       );
     });
     // Kill every other browser session for this user. Defense
@@ -628,14 +700,36 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Email is required' });
     }
 
+    // F-01 (security audit 2026-05-25) — brute-force gate.
+    // Cloudflare's WAF would be the ideal first layer; this is the
+    // application-layer floor. We block at MAX_ATTEMPTS=5 failures
+    // per (email, ip) per WINDOW_MINUTES=15.
+    const sourceIp =
+      (req.headers['cf-connecting-ip'] as string | undefined) ??
+      req.ip ??
+      'unknown';
+    const rl = await checkRateLimit(email, sourceIp);
+    if (rl.blocked) {
+      reply.header('Retry-After', String(rl.retryAfterSeconds));
+      return reply.code(429).send({
+        error: `Too many login attempts. Try again in ${Math.ceil(rl.retryAfterSeconds / 60)} minute(s).`,
+      });
+    }
+
     let identity;
     try {
       identity = await local.verify({ email, password: body.password });
     } catch (err) {
+      // Record the failed attempt so the next one counts toward the limit.
+      void recordAttempt(email, sourceIp, false).catch(() => undefined);
       return reply
         .code(401)
         .send({ error: err instanceof Error ? err.message : 'Login failed' });
     }
+    // Successful login — wipe the rolling failure counter for this
+    // (email, ip) so a real user who fat-fingered a few times isn't
+    // penalized on their NEXT login.
+    void clearOnSuccess(email, sourceIp).catch(() => undefined);
     const resolved = await resolveIdentity(identity);
     // Super admins have no memberships by design — that's fine; they
     // land on /system. Tenant users need at least one membership.
@@ -672,6 +766,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     void pruneExpiredSessions().catch((err) =>
       req.log.warn({ err }, 'Session cleanup failed'),
     );
+    // F-05 (security audit 2026-05-25) — invalidate the inbound
+    // session, if any, before minting a fresh one. Defends against
+    // session fixation: an attacker who plants a known session-id
+    // cookie before the victim logs in shouldn't have that cookie
+    // keep working after login. SameSite=Strict already blocks
+    // cross-site cookie planting, so the residual risk is shared-
+    // device / hostile-extension scenarios — small but real.
+    const incomingSession =
+      req.cookies?.[SESSION_COOKIE] !== undefined
+        ? req.unsignCookie(req.cookies[SESSION_COOKIE]!)
+        : null;
+    if (incomingSession?.valid && incomingSession.value) {
+      await deleteSession(incomingSession.value).catch(() => {
+        /* already-deleted is fine */
+      });
+    }
     const session = await createSession(resolved.userId, tenantId);
     setSessionCookie(reply, session.id, session.expiresAt);
     void recordAudit({

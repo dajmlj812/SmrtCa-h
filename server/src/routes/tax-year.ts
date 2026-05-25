@@ -142,7 +142,9 @@ async function buildTaxYear(
 }
 
 function csvCell(v: unknown): string {
-  const s = String(v ?? '');
+  let s = String(v ?? '');
+  // F-22 — neutralize spreadsheet formula triggers.
+  if (s.length > 0 && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }

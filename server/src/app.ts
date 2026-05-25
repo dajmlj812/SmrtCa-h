@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import staticPlugin from '@fastify/static';
+import helmet from '@fastify/helmet';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,6 +151,64 @@ export async function buildApp(
     },
   );
 
+  // F-04 (security audit 2026-05-25) — security response headers.
+  // CSP allows the bundle's own scripts + Cloudflare's rocket-loader
+  // (which Cloudflare injects unconditionally on this site); 'self'
+  // for other sources; explicit deny of frame ancestors so the
+  // financial dashboard can't be iframed for clickjacking. Connect-
+  // src includes the same origin (Fastify serves both the API and
+  // the SPA from one host) plus Stripe's checkout/dashboard URLs
+  // the embedded portal redirects to.
+  await app.register(helmet, {
+    // We set CSP explicitly below because helmet's default is too
+    // strict for the Cloudflare rocket-loader script tag we get for
+    // free with the CF proxy. If you remove CF (or its rocket-loader)
+    // you can drop the 'cdn-cgi' source.
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          // Cloudflare rocket-loader injects an inline-bootstrap +
+          // a script from /cdn-cgi/scripts. The bootstrap is hashed
+          // each page load, so we use 'unsafe-inline' here. If we
+          // turn off rocket-loader in CF, this can drop to just
+          // 'self'.
+          "'unsafe-inline'",
+          'https://static.cloudflareinsights.com',
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'", 'https://api.stripe.com'],
+        frameSrc: ["'self'", 'https://js.stripe.com'],
+        // PWA manifest + workers may load
+        workerSrc: ["'self'", 'blob:'],
+        manifestSrc: ["'self'"],
+        // Don't allow ANY ancestor — defense against clickjacking.
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        // upgradeInsecureRequests is browser-only protection; we're
+        // already HTTPS-only behind Cloudflare with HSTS but cheap.
+        upgradeInsecureRequests: [],
+      },
+    },
+    // The rest are the safe defaults from helmet — we keep them all.
+    crossOriginEmbedderPolicy: false, // would block 3rd-party images
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xFrameOptions: { action: 'deny' },
+    xContentTypeOptions: true,
+    strictTransportSecurity: {
+      maxAge: 63072000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    // permissions-policy: deny everything sensitive by default.
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+  });
+
   await app.register(cors, { origin: true, credentials: true });
   await app.register(cookie, { secret: config.auth.sessionSecret });
   await app.register(multipart, {
@@ -248,12 +307,37 @@ export async function buildApp(
   });
 
   app.setErrorHandler(
-    (err: Error & { statusCode?: number }, _req, reply) => {
+    (err: Error & { statusCode?: number; code?: string }, req, reply) => {
       if (err instanceof ImportError) {
         return reply.code(400).send({ error: err.message });
       }
+      // F-09 (security audit 2026-05-25) — don't leak the JSON parser's
+      // internal state to the caller. Malformed JSON gets a generic
+      // 400 with the details only in the server log; same for Fastify
+      // schema-validation errors and Fastify's content-type parser
+      // errors. Without this, "Expected ',' or '}' after property
+      // value in JSON at position 21 (line 1 column 22)" was being
+      // sent back to the client.
+      const code = err.code ?? '';
+      const isParserError =
+        err instanceof SyntaxError ||
+        code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE' ||
+        code === 'FST_ERR_CTP_BODY_TOO_LARGE' ||
+        code === 'FST_ERR_VALIDATION' ||
+        code.startsWith('FST_ERR_CTP_');
+      if (isParserError) {
+        req.log.warn({ err, code }, 'Request body could not be parsed');
+        return reply.code(400).send({ error: 'Malformed request body' });
+      }
       app.log.error(err);
       const status = err.statusCode ?? 500;
+      // For 5xx, hide the message — internal errors shouldn't leak
+      // stack-trace adjacent context. For 4xx that the route itself
+      // threw with a statusCode, the message is intentional (auth
+      // failures, "not found", etc.) so let it through.
+      if (status >= 500) {
+        return reply.code(status).send({ error: 'Internal Server Error' });
+      }
       return reply
         .code(status)
         .send({ error: err.message || 'Internal Server Error' });
