@@ -9,9 +9,44 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.25 shipped. 0.17.25 surfaces the Plaid + Anomaly
-toggles on /settings so they can be flipped on without
-editing `.env` or hand-poking the API._
+_0.18.0 ships the cash-flow forecast as the dashboard hero —
+the data was already there, now it leads the page with a ±1σ
+confidence band and 30/60/90 day projected-balance tiles.
+Steals Simplifi's headline feature using data we already had._
+
+---
+
+## [0.18.0] — 2026-05-24 — Cash-flow forecast as dashboard hero
+
+The 90-day cash-flow projection has been on the dashboard
+since Phase 6 but was the fourth card down. v0.18.0 promotes
+it to the headline: it now sits above the chart grid,
+full-width with a taller plot, and includes the information
+the older card never had.
+
+- **Confidence band.** `/api/cash-flow` now derives a daily
+  volatility from the last 90 days of non-transfer
+  transactions (stddev of daily NET cents). The projected
+  line is the same deterministic walk through bills + income;
+  the new band widens as `stddev × √(day_offset)`, so day
+  90 carries roughly ten times the uncertainty of day 1.
+  Rendered as a green-tinted area behind the projection line.
+- **Milestone tiles.** Response now includes
+  `milestones.day_30 / day_60 / day_90` — the projected
+  balance at each horizon. Shown as three pill-style tiles
+  in the hero header, color-coded green if at-or-above the
+  starting balance, orange if below.
+- **Zero reference line.** Dashed orange line at $0 so an
+  upcoming overdraft is visually obvious.
+- **Daily volatility surfaced** in the subtitle so the user
+  understands what's driving the band width.
+
+The old fourth-card placement is gone; everything else on
+the dashboard (spending pie, income-vs-expense bars,
+net-worth line, upcoming bills) is unchanged.
+
+Closes roadmap slice 0.18.0 — first slice of the
+"Competitive parity & depth" series.
 
 ---
 

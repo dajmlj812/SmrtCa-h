@@ -246,7 +246,7 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <tr>
 <td><strong>0.18.x</strong></td>
 <td><strong>Competitive parity &amp; depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower</strong></td>
-<td>📋 Planned</td>
+<td>🔜 In progress — 0.18.0 shipped 2026-05-24</td>
 </tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
@@ -630,11 +630,16 @@ with visible audit trail, not just a chatbot.</li>
 </ul>
 <h3 id="planned-slices-ordered-by-impact-per-day">Planned slices (ordered by impact-per-day)<a class="heading-anchor" href="#planned-slices-ordered-by-impact-per-day">#</a></h3>
 <ul>
-<li><strong>0.18.0</strong> 📋 — <strong>Cash-flow forecast as dashboard hero</strong>
-(~1 day). UI polish on the existing 90-day projection.
-Headline chart on the dashboard with confidence bands and
-projected balance in 30 / 60 / 90 days. Steals Simplifi&#39;s
-hero feature using data we already have.</li>
+<li><strong>0.18.0</strong> ✅ (released 2026-05-24) — <strong>Cash-flow forecast
+as dashboard hero</strong>. <code>/api/cash-flow</code> now returns a ±1σ
+confidence band derived from the last 90 days of non-transfer
+transaction volatility (band widens as <code>stddev × √days</code>),
+plus <code>milestones.day_30/60/90</code> projected-balance points.
+Dashboard promotes the chart to full-width hero placement
+with three milestone tiles, a zero-reference line for
+overdraft visibility, and the daily-volatility figure
+surfaced in the subtitle. Steals Simplifi&#39;s hero feature
+using data we already had.</li>
 <li><strong>0.18.1</strong> 📋 — <strong>Subscription cancellation links</strong> (~1–2
 days). For each detected subscription, store the
 cancellation URL + a canned email template + step-by-step
@@ -790,7 +795,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 01:07:03 UTC · commit c3e73ae</span>
+  <span>Generated 2026-05-25 01:43:39 UTC · commit 803e858</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

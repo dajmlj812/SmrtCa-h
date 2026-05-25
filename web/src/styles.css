@@ -960,6 +960,54 @@ select:focus {
   }
 }
 
+/* 0.18.0 — cash-flow hero */
+.cashflow-hero {
+  margin-bottom: 16px;
+  padding: 18px 22px;
+}
+.cashflow-hero-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.cashflow-hero-sub {
+  font-size: 13px;
+  margin-top: 2px;
+}
+.cashflow-milestones {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.milestone {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #d0d7de);
+  background: var(--surface-2, #f6f8fa);
+  min-width: 96px;
+  text-align: right;
+}
+.milestone-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #6b7280);
+}
+.milestone-value {
+  font-weight: 600;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.milestone-up {
+  border-left: 3px solid #52c41a;
+}
+.milestone-down {
+  border-left: 3px solid #ff7b54;
+}
+
 /* ── Phase 5: auth pages + logout ──────────────────────────── */
 
 .auth-shell {

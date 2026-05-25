@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -44,9 +47,16 @@ interface DashboardData {
   incomeExpense: IncomeExpenseRow[];
   netWorth: NetWorthRow[];
   upcomingBills: Bill[];
-  cashFlow: Array<{ date: string; projected_cents: number }>;
+  cashFlow: Array<{
+    date: string;
+    projected_cents: number;
+    low_cents: number;
+    high_cents: number;
+  }>;
   cashFlowStart: number;
   cashFlowEnd: number;
+  cashFlowVolatility: number;
+  cashFlowMilestones: { day_30: number; day_60: number; day_90: number };
 }
 
 export function DashboardPage() {
@@ -75,6 +85,8 @@ export function DashboardPage() {
           cashFlow: flow.series,
           cashFlowStart: flow.starting_cents,
           cashFlowEnd: flow.ending_cents,
+          cashFlowVolatility: flow.daily_volatility_cents,
+          cashFlowMilestones: flow.milestones,
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load dashboard');
@@ -110,6 +122,19 @@ export function DashboardPage() {
     NetWorth: r.net_worth_cents / 100,
   }));
 
+  // 0.18.0 — cash-flow forecast is the dashboard hero. We render the
+  // existing 90-day projection with a stddev-based confidence band
+  // (Recharts requires a single key for the area, so we pre-compute
+  // `Band: [low, high]` as a tuple).
+  const cashFlowChart = data.cashFlow.map((p) => ({
+    date: p.date,
+    Projected: p.projected_cents / 100,
+    Band: [p.low_cents / 100, p.high_cents / 100] as [number, number],
+  }));
+  const ms = data.cashFlowMilestones;
+  const milestoneClass = (cents: number, baseline: number) =>
+    cents >= baseline ? 'milestone-up' : 'milestone-down';
+
   return (
     <div>
       <div className="page-header">
@@ -120,6 +145,76 @@ export function DashboardPage() {
             your own accounts are excluded from spending and income.
           </div>
         </div>
+      </div>
+
+      <div className="card chart-card cashflow-hero">
+        <div className="cashflow-hero-header">
+          <div>
+            <div className="chart-title">Cash-flow forecast · next 90 days</div>
+            <div className="muted cashflow-hero-sub">
+              Starting balance {formatCents(data.cashFlowStart)} · shaded
+              band reflects ±1σ of recent daily volatility
+              {data.cashFlowVolatility > 0
+                ? ` (${formatCents(data.cashFlowVolatility)}/day)`
+                : ''}
+            </div>
+          </div>
+          <div className="cashflow-milestones">
+            <div className={`milestone ${milestoneClass(ms.day_30, data.cashFlowStart)}`}>
+              <div className="milestone-label">30 days</div>
+              <div className="milestone-value">{formatCents(ms.day_30)}</div>
+            </div>
+            <div className={`milestone ${milestoneClass(ms.day_60, data.cashFlowStart)}`}>
+              <div className="milestone-label">60 days</div>
+              <div className="milestone-value">{formatCents(ms.day_60)}</div>
+            </div>
+            <div className={`milestone ${milestoneClass(ms.day_90, data.cashFlowStart)}`}>
+              <div className="milestone-label">90 days</div>
+              <div className="milestone-value">{formatCents(ms.day_90)}</div>
+            </div>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={320}>
+          <ComposedChart data={cashFlowChart}>
+            <defs>
+              <linearGradient id="cashflow-band" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#52c41a" stopOpacity={0.25} />
+                <stop offset="100%" stopColor="#52c41a" stopOpacity={0.05} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+            <XAxis dataKey="date" minTickGap={40} />
+            <YAxis tickFormatter={(v) => `$${Math.round(v)}`} />
+            <Tooltip
+              formatter={(value: unknown, name: unknown) => {
+                if (name === 'Band' && Array.isArray(value)) {
+                  const [lo, hi] = value as [number, number];
+                  return [
+                    `${formatCents(lo * 100)} – ${formatCents(hi * 100)}`,
+                    'Range',
+                  ];
+                }
+                return [tooltipDollarsToCents(value), String(name ?? '')];
+              }}
+            />
+            <ReferenceLine y={0} stroke="#ff7b54" strokeDasharray="4 4" />
+            <Area
+              type="monotone"
+              dataKey="Band"
+              stroke="none"
+              fill="url(#cashflow-band)"
+              isAnimationActive={false}
+              activeDot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="Projected"
+              stroke="#52c41a"
+              strokeWidth={2.5}
+              dot={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="chart-grid">
@@ -189,35 +284,6 @@ export function DashboardPage() {
                 stroke="#4f8cff"
                 strokeWidth={2}
                 dot
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="card chart-card chart-card-wide">
-          <div className="chart-title">
-            Cash-flow forecast (next 90 days){' '}
-            <span className="muted">
-              · {formatCents(data.cashFlowStart)} → {formatCents(data.cashFlowEnd)}
-            </span>
-          </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart
-              data={data.cashFlow.map((p) => ({
-                date: p.date,
-                Projected: p.projected_cents / 100,
-              }))}
-            >
-              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-              <XAxis dataKey="date" minTickGap={40} />
-              <YAxis tickFormatter={(v) => `$${Math.round(v)}`} />
-              <Tooltip formatter={tooltipDollarsToCents} />
-              <Line
-                type="monotone"
-                dataKey="Projected"
-                stroke="#52c41a"
-                strokeWidth={2}
-                dot={false}
               />
             </LineChart>
           </ResponsiveContainer>

@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 📋 Planned |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -455,11 +455,16 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
 
 ### Planned slices (ordered by impact-per-day)
 
-- **0.18.0** 📋 — **Cash-flow forecast as dashboard hero**
-  (~1 day). UI polish on the existing 90-day projection.
-  Headline chart on the dashboard with confidence bands and
-  projected balance in 30 / 60 / 90 days. Steals Simplifi's
-  hero feature using data we already have.
+- **0.18.0** ✅ (released 2026-05-24) — **Cash-flow forecast
+  as dashboard hero**. `/api/cash-flow` now returns a ±1σ
+  confidence band derived from the last 90 days of non-transfer
+  transaction volatility (band widens as `stddev × √days`),
+  plus `milestones.day_30/60/90` projected-balance points.
+  Dashboard promotes the chart to full-width hero placement
+  with three milestone tiles, a zero-reference line for
+  overdraft visibility, and the daily-volatility figure
+  surfaced in the subtitle. Steals Simplifi's hero feature
+  using data we already had.
 - **0.18.1** 📋 — **Subscription cancellation links** (~1–2
   days). For each detected subscription, store the
   cancellation URL + a canned email template + step-by-step

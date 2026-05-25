@@ -611,23 +611,90 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
 
       events.sort((a, b) => a.date.localeCompare(b.date));
 
-      const series: Array<{ date: string; projected_cents: number }> = [];
+      // 0.18.0 — confidence band derived from historical daily NET cash flow
+      // (transactions excluding internal transfers). We model uncertainty as
+      // a random walk: each day adds independent variance, so the band grows
+      // as stddev * sqrt(t). Window is the last 90 days, which is enough to
+      // smooth weekday/payday cycles without over-weighting old behavior.
+      const HISTORY_DAYS = 90;
+      const hist = await query<{ d: string; net: string }>(
+        `SELECT to_char(t.txn_date, 'YYYY-MM-DD') AS d,
+                SUM(t.amount_cents)::bigint AS net
+           FROM transactions t
+           JOIN accounts a ON a.id = t.account_id
+          WHERE a.tenant_id = $1
+            AND t.transfer_group_id IS NULL
+            AND t.txn_date >= (CURRENT_DATE - $2::int * INTERVAL '1 day')
+            AND t.txn_date <  CURRENT_DATE
+          GROUP BY t.txn_date
+          ORDER BY t.txn_date`,
+        [tenantId, HISTORY_DAYS],
+      );
+      const dayNets = new Map<string, number>();
+      for (const r of hist.rows) dayNets.set(r.d, Number(r.net));
+      // Fill in zero-spend days so stddev reflects true daily variability.
+      const sampleStart = new Date(today);
+      sampleStart.setUTCDate(sampleStart.getUTCDate() - HISTORY_DAYS);
+      const samples: number[] = [];
+      const sCursor = new Date(sampleStart);
+      while (sCursor < today) {
+        const ds = sCursor.toISOString().slice(0, 10);
+        samples.push(dayNets.get(ds) ?? 0);
+        sCursor.setUTCDate(sCursor.getUTCDate() + 1);
+      }
+      let dailyStdDev = 0;
+      if (samples.length > 1) {
+        const mean =
+          samples.reduce((a, b) => a + b, 0) / samples.length;
+        const variance =
+          samples.reduce((a, b) => a + (b - mean) ** 2, 0) /
+          (samples.length - 1);
+        dailyStdDev = Math.sqrt(variance);
+      }
+
+      const series: Array<{
+        date: string;
+        projected_cents: number;
+        low_cents: number;
+        high_cents: number;
+      }> = [];
       let eventIdx = 0;
       const cursor = new Date(today);
+      let dayOffset = 0;
       while (cursor <= horizon) {
         const ds = cursor.toISOString().slice(0, 10);
         while (eventIdx < events.length && events[eventIdx]!.date === ds) {
           balance += events[eventIdx]!.amount;
           eventIdx++;
         }
-        series.push({ date: ds, projected_cents: balance });
+        // Day 0 (today) has no band — we know the starting balance.
+        const bandHalf = Math.round(dailyStdDev * Math.sqrt(dayOffset));
+        series.push({
+          date: ds,
+          projected_cents: balance,
+          low_cents: balance - bandHalf,
+          high_cents: balance + bandHalf,
+        });
         cursor.setUTCDate(cursor.getUTCDate() + 1);
+        dayOffset++;
       }
+
+      const milestoneAt = (n: number) => {
+        // series[0] is today, so day N is series[N] when present.
+        const idx = Math.min(n, series.length - 1);
+        return idx >= 0 ? series[idx]!.projected_cents : balance;
+      };
 
       return {
         days,
         starting_cents: Number(nw.rows[0]!.total),
         ending_cents: balance,
+        daily_volatility_cents: Math.round(dailyStdDev),
+        milestones: {
+          day_30: milestoneAt(30),
+          day_60: milestoneAt(60),
+          day_90: milestoneAt(90),
+        },
         series,
       };
     },

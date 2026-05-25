@@ -2000,7 +2000,14 @@ export const api = {
       days: number;
       starting_cents: number;
       ending_cents: number;
-      series: Array<{ date: string; projected_cents: number }>;
+      daily_volatility_cents: number;
+      milestones: { day_30: number; day_60: number; day_90: number };
+      series: Array<{
+        date: string;
+        projected_cents: number;
+        low_cents: number;
+        high_cents: number;
+      }>;
     }>(`/api/cash-flow?days=${days}`),
 
   // ── Recurring (Phase 6.1) ────────────────────────────────
