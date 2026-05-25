@@ -137,16 +137,18 @@ const SECTIONS: Array<{ title: string; subtitle: string; keys: string[] }> = [
   // 0.18.13 — boot-time performance knobs. Restart required because
   // the values are read by Node / pg.Pool / module constants at
   // process boot. The /system page has the "Restart application"
-  // button that picks up the new values.
+  // button that picks up the new values. HEAP_MAX_MB goes first
+  // because it's the one most operators actually want to tune.
   {
     title: 'Performance — restart required',
     subtitle:
       'These take effect on the next process restart. After editing any of them, go to /system → Restart application.',
     keys: [
-      'NODE_OPTIONS',
+      'HEAP_MAX_MB',
       'PG_POOL_MAX',
       'OCR_TIMEOUT_MS',
       'SLOW_QUERY_THRESHOLD_MS',
+      'NODE_OPTIONS',
     ],
   },
 ];
@@ -164,15 +166,15 @@ export function SettingsPage() {
   const [restartNeeded, setRestartNeeded] = useState(false);
   const [restarting, setRestarting] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  async function load(opts: { silent?: boolean } = {}) {
+    if (!opts.silent) setLoading(true);
     setError(null);
     try {
       setSettings(await api.listSettings());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load settings');
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }
 
@@ -181,13 +183,25 @@ export function SettingsPage() {
   }, []);
 
   async function save(setting: AppSetting, newValue: string) {
+    // 0.18.13 — fix scroll jumping. The previous flow set loading=true
+    // on reload, which unmounted the whole settings list and lost the
+    // browser's scroll anchor. The silent reload keeps the list
+    // mounted; React re-renders in place + the viewport stays put.
+    // Belt-and-suspenders: also capture+restore window.scrollY in
+    // case any other layout shift (e.g. success banner appearing
+    // above the list) does push things around.
+    const scrollY = window.scrollY;
     setError(null);
     setSuccess(null);
     try {
       const r = await api.putSetting(setting.key, newValue);
       setSuccess(`${setting.label} saved.`);
       if (r.restart_required) setRestartNeeded(true);
-      await load();
+      await load({ silent: true });
+      // Restore scroll on the NEXT frame so React's re-render has
+      // happened first. Without the rAF, scroll-restore fires before
+      // the new DOM is laid out and there's nothing to scroll to.
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     }

@@ -28,9 +28,16 @@ const MAX_SLOW_QUERIES = 200;
  * Configurable via env so an operator who wants every query in the
  * buffer for an afternoon of debugging can set it to 0.
  */
-const SLOW_QUERY_THRESHOLD_MS = Number(
-  process.env.SLOW_QUERY_THRESHOLD_MS ?? '100',
-);
+// Handle BOTH undefined AND empty string (docker-compose
+// ${VAR:-} expands to "" when unset on the host, which would
+// otherwise sneak past `?? '100'` and Number('') → 0 captures every
+// query). Also rejects negative / NaN inputs.
+const SLOW_QUERY_THRESHOLD_MS = (() => {
+  const raw = process.env.SLOW_QUERY_THRESHOLD_MS;
+  if (!raw) return 100;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 100;
+})();
 
 export interface LogEntry {
   ts: string;

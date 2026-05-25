@@ -141,11 +141,19 @@ export const KNOWN_SETTINGS = [
   // GUI edit just stages the new value; the operator must trigger
   // /api/system/restart for the new value to take effect.
   //
-  // NODE_OPTIONS goes into the container env at startup; the Docker
-  // entrypoint reads it from app_settings on boot and exec's node
-  // with the appropriate --max-old-space-size flag. Typical values:
-  // "--max-old-space-size=512" or "--max-old-space-size=1024".
-  { key: 'NODE_OPTIONS', isSecret: false, restartRequired: true, superOnly: true, label: 'Node process options (e.g. --max-old-space-size=1024)' },
+  // 0.18.13 — operator-friendly heap cap. The docker entrypoint
+  // translates this into --max-old-space-size=$N appended to
+  // NODE_OPTIONS at boot. 128-32768 MB; default depends on Node's
+  // own heuristic (~512 MB on small containers). Set this UNLESS
+  // you need an exotic --max-old-space-size value, in which case
+  // put the full flag in NODE_OPTIONS below.
+  { key: 'HEAP_MAX_MB', isSecret: false, restartRequired: true, superOnly: true, label: 'Maximum Node heap (MB; 128-32768)' },
+  // NODE_OPTIONS is the escape hatch for power users who need flags
+  // OTHER than --max-old-space-size (e.g. --enable-source-maps,
+  // --experimental-vm-modules). If you set --max-old-space-size
+  // here it wins over HEAP_MAX_MB. Typical values:
+  // "--enable-source-maps" or "--max-old-space-size=2048".
+  { key: 'NODE_OPTIONS', isSecret: false, restartRequired: true, superOnly: true, label: 'Node process options (advanced; use HEAP_MAX_MB for just the heap cap)' },
   // Postgres pool size: how many DB connections the app holds open.
   // Default 10 (pg.Pool default). Increase before adding more
   // simultaneous incoming requests; if pool-pressure warnings appear
@@ -371,6 +379,7 @@ export function applyToConfig(key: SettingKey, value: string): void {
     // restart-required flag in KNOWN_SETTINGS warns operators that a
     // GUI edit is staged but won't take effect until they hit the
     // Restart button.
+    case 'HEAP_MAX_MB':
     case 'NODE_OPTIONS':
     case 'PG_POOL_MAX':
     case 'OCR_TIMEOUT_MS':
