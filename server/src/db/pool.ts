@@ -11,7 +11,21 @@ pg.types.setTypeParser(20, (value) => parseInt(value, 10));
 // that occur when node-postgres builds a JS Date in the local zone.
 pg.types.setTypeParser(1082, (value) => value);
 
-export const pool = new pg.Pool({ connectionString: config.databaseUrl });
+// 0.18.13 — PG_POOL_MAX is settable via the Settings UI. Read at
+// module load (= process boot). Default of 10 matches pg.Pool's
+// built-in default. The setting is restart-required because the pool
+// is built once and not reconfigured at runtime.
+const poolMax = (() => {
+  const raw = process.env.PG_POOL_MAX;
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 && n <= 100 ? n : undefined;
+})();
+
+export const pool = new pg.Pool({
+  connectionString: config.databaseUrl,
+  ...(poolMax !== undefined ? { max: poolMax } : {}),
+});
 
 /**
  * Instrumented query helper — every call here is timed and reported to

@@ -687,6 +687,38 @@ export type BillReviewStatus =
   | 'alter'
   | 'keep';
 
+export interface ScheduleChange {
+  id: string;
+  tenant_id: string;
+  bill_id: string | null;
+  income_id: string | null;
+  effective_date: string;
+  new_amount_cents: number | null;
+  new_frequency:
+    | 'monthly'
+    | 'weekly'
+    | 'biweekly'
+    | 'yearly'
+    | 'one-time'
+    | null;
+  note: string | null;
+  applied_at: string | null;
+  created_at: string;
+}
+
+export interface ScheduleChangeInput {
+  effective_date: string;
+  new_amount_cents?: number | null;
+  new_frequency?:
+    | 'monthly'
+    | 'weekly'
+    | 'biweekly'
+    | 'yearly'
+    | 'one-time'
+    | null;
+  note?: string | null;
+}
+
 export interface Bill {
   id: string;
   name: string;
@@ -2252,6 +2284,57 @@ export const api = {
     http<{ days: number; bills: Bill[] }>(
       `/api/bills/upcoming?days=${days}`,
     ),
+
+  // 0.18.13 — scheduled future changes for bills + recurring income.
+  listBillScheduleChanges: (billId: string) =>
+    http<{ changes: ScheduleChange[] }>(
+      `/api/bills/${billId}/schedule-changes`,
+    ).then((r) => r.changes),
+
+  addBillScheduleChange: (
+    billId: string,
+    input: ScheduleChangeInput,
+  ) =>
+    http<{ change: ScheduleChange }>(
+      `/api/bills/${billId}/schedule-changes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ).then((r) => r.change),
+
+  listIncomeScheduleChanges: (incomeId: string) =>
+    http<{ changes: ScheduleChange[] }>(
+      `/api/recurring-income/${incomeId}/schedule-changes`,
+    ).then((r) => r.changes),
+
+  addIncomeScheduleChange: (
+    incomeId: string,
+    input: ScheduleChangeInput,
+  ) =>
+    http<{ change: ScheduleChange }>(
+      `/api/recurring-income/${incomeId}/schedule-changes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ).then((r) => r.change),
+
+  deleteScheduleChange: (changeId: string) =>
+    http<void>(`/api/schedule-changes/${changeId}`, { method: 'DELETE' }),
+
+  // 0.18.13 — operator-initiated restart. Body must include
+  // { confirm: "RESTART" }. Docker's restart policy brings the
+  // container back; UI shows a "back in a moment" indicator while
+  // the new process starts.
+  systemRestart: () =>
+    http<{ restarting: boolean }>('/api/system/restart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'RESTART' }),
+    }),
 
   listRecurringIncome: () =>
     http<{ income: RecurringIncome[] }>('/api/recurring-income').then(

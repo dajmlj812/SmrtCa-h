@@ -3228,6 +3228,29 @@ code {
   padding-top: 12px;
 }
 
+/* 0.18.13 — Schedule-change modal. */
+.schedule-change-section-title {
+  font-size: 14px;
+  margin: 16px 0 8px;
+  font-weight: 600;
+}
+.schedule-change-form {
+  grid-template-columns: 1fr 1fr 1fr auto;
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+.schedule-change-history {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.schedule-change-history summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* 0.18.13 — performance recommendations widget. */
 .performance-widget {
   margin-bottom: 16px;

@@ -593,6 +593,48 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // 0.18.13 — restart the application from the GUI.
+  //
+  // Some settings (NODE_OPTIONS, PG_POOL_MAX, OCR_TIMEOUT_MS,
+  // SLOW_QUERY_THRESHOLD_MS, SESSION_SECRET, ATTACHMENT_ENCRYPTION_KEY)
+  // are consumed at process boot — the running process never re-reads
+  // them. The Settings UI marks those rows `restartRequired:true`;
+  // this endpoint is what the "Restart application" button hits.
+  //
+  // Implementation: record an audit row, send 202, schedule a
+  // process.exit(0) on the next tick. Docker's `restart:
+  // unless-stopped` policy (set in docker-compose.yml) then brings
+  // the container back. The running request finishes; subsequent
+  // ones see a brief window of 502 until the new container is
+  // healthy (~5-10s on a small instance).
+  //
+  // Confirmation: body { confirm: "RESTART" } is required so an
+  // idle-tab CSRF doesn't bring down the production process.
+  app.post<{ Body: { confirm?: unknown } }>(
+    '/api/system/restart',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      const confirm =
+        typeof req.body?.confirm === 'string' ? req.body.confirm : '';
+      if (confirm !== 'RESTART') {
+        return reply.code(400).send({
+          error: 'To restart, send body { "confirm": "RESTART" }',
+        });
+      }
+      await recordAudit({
+        actorUserId: req.user?.id ?? null,
+        actorKind: 'super_admin',
+        action: 'system.restart',
+        details: { source: '/api/system/restart' },
+      });
+      reply.code(202).send({ restarting: true });
+      setImmediate(() => {
+        req.log.warn('Operator-initiated restart — exiting so docker restart policy recycles the container');
+        process.exit(0);
+      });
+    },
+  );
 }
 
 // 0.18.8 — base URL resolution moved to domain/base-url.ts;

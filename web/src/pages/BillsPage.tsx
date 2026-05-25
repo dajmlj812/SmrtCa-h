@@ -12,6 +12,7 @@ import {
 import { formatCents, formatDate } from '../format';
 import { FilterableTable } from '../components/FilterableTable';
 import { CancelInfoModal } from '../components/CancelInfoModal';
+import { ScheduleChangeModal } from '../components/ScheduleChangeModal';
 
 const BILL_TABLE_COLUMNS: ReportColumn[] = [
   { key: 'name', label: 'Name', type: 'string' },
@@ -75,6 +76,13 @@ export function BillsPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   // 0.18.1 — cancel-info modal target.
   const [cancelingBill, setCancelingBill] = useState<Bill | null>(null);
+  // 0.18.13 — schedule-changes modal target. Can be a Bill or a
+  // RecurringIncome; we discriminate with the `kind` field.
+  const [scheduleTarget, setScheduleTarget] = useState<
+    | { kind: 'bill'; row: Bill }
+    | { kind: 'income'; row: RecurringIncome }
+    | null
+  >(null);
 
   async function load() {
     setLoading(true);
@@ -425,6 +433,14 @@ export function BillsPage() {
                     Duplicate
                   </button>
                   <button
+                    className="btn-link"
+                    type="button"
+                    onClick={() => setScheduleTarget({ kind: 'bill', row: r })}
+                    title='Schedule a future amount or frequency change'
+                  >
+                    Schedule change
+                  </button>
+                  <button
                     className="btn-link danger"
                     type="button"
                     onClick={() => void deleteBill(r.id)}
@@ -470,6 +486,14 @@ export function BillsPage() {
                     options={INCOME_FREQUENCIES}
                     onChange={(v) => void setIncomeFrequency(r.id, v as IncomeFrequency)}
                   />
+                  <button
+                    className="btn-link"
+                    type="button"
+                    onClick={() => setScheduleTarget({ kind: 'income', row: r })}
+                    title='Schedule a future amount or frequency change'
+                  >
+                    Schedule change
+                  </button>
                   <button
                     className="btn-link danger"
                     type="button"
@@ -522,6 +546,19 @@ export function BillsPage() {
               prev.map((b) => (b.id === updated.id ? updated : b)),
             );
           }}
+        />
+      )}
+      {scheduleTarget && (
+        <ScheduleChangeModal
+          target={{
+            kind: scheduleTarget.kind,
+            id: scheduleTarget.row.id,
+            name: scheduleTarget.row.name,
+          }}
+          currentAmountCents={scheduleTarget.row.amount_cents}
+          currentFrequency={scheduleTarget.row.frequency}
+          onClose={() => setScheduleTarget(null)}
+          onChanged={() => void load()}
         />
       )}
     </div>

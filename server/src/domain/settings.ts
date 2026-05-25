@@ -135,6 +135,31 @@ export const KNOWN_SETTINGS = [
   // Default 24 hours. Range 1-168 (one week). Operators can run
   // ad-hoc via the "Run now" button regardless of this setting.
   { key: 'PERFORMANCE_ANALYSIS_INTERVAL_HOURS', isSecret: false, restartRequired: false, superOnly: true, label: 'Performance analysis — refresh interval (hours; 1-168)' },
+  // 0.18.13 — runtime-tunable performance knobs. All restart-required:
+  // the values are read at process boot (NODE_OPTIONS is consumed by
+  // Node itself, PG_POOL_MAX by the pg.Pool constructor, etc.) so a
+  // GUI edit just stages the new value; the operator must trigger
+  // /api/system/restart for the new value to take effect.
+  //
+  // NODE_OPTIONS goes into the container env at startup; the Docker
+  // entrypoint reads it from app_settings on boot and exec's node
+  // with the appropriate --max-old-space-size flag. Typical values:
+  // "--max-old-space-size=512" or "--max-old-space-size=1024".
+  { key: 'NODE_OPTIONS', isSecret: false, restartRequired: true, superOnly: true, label: 'Node process options (e.g. --max-old-space-size=1024)' },
+  // Postgres pool size: how many DB connections the app holds open.
+  // Default 10 (pg.Pool default). Increase before adding more
+  // simultaneous incoming requests; if pool-pressure warnings appear
+  // on /health, this is the first knob to turn.
+  { key: 'PG_POOL_MAX', isSecret: false, restartRequired: true, superOnly: true, label: 'Postgres pool max connections (default 10)' },
+  // OCR provider request timeout. F-15 added a hard cap; this exposes
+  // it to the operator. Default 180000 (3 minutes). Lower it to fail
+  // faster on a hung Claude vision call, or raise it for batch-OCR
+  // workflows that need to wait.
+  { key: 'OCR_TIMEOUT_MS', isSecret: false, restartRequired: true, superOnly: true, label: 'OCR provider timeout (ms; default 180000)' },
+  // Slow-query threshold: anything over this gets captured into the
+  // /health Slow queries panel. Default 100. Lower for an afternoon
+  // of perf profiling, then revert.
+  { key: 'SLOW_QUERY_THRESHOLD_MS', isSecret: false, restartRequired: true, superOnly: true, label: 'Slow query threshold (ms; default 100)' },
 ] as const;
 
 /**
@@ -338,6 +363,18 @@ export function applyToConfig(key: SettingKey, value: string): void {
       // caching, so a DB write takes effect immediately. We still
       // mirror to process.env for any third-party code that might
       // be looking there.
+      process.env[key] = value;
+      break;
+    // 0.18.13 — performance knobs read at process boot. Mirror to
+    // process.env so the constructors that consume them (pg.Pool,
+    // diagnostics-recorder module init) see the value. The
+    // restart-required flag in KNOWN_SETTINGS warns operators that a
+    // GUI edit is staged but won't take effect until they hit the
+    // Restart button.
+    case 'NODE_OPTIONS':
+    case 'PG_POOL_MAX':
+    case 'OCR_TIMEOUT_MS':
+    case 'SLOW_QUERY_THRESHOLD_MS':
       process.env[key] = value;
       break;
   }

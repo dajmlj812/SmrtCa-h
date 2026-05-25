@@ -12,8 +12,18 @@ import type { OcrProvider } from './types.js';
  * this cap, the row sits at ocr_status='pending' until the next server
  * restart triggers the sweepPendingOcr retry — and the user sees a
  * spinner that genuinely doesn't move.
+ *
+ * 0.18.13 — operator-tunable via the OCR_TIMEOUT_MS setting (Settings
+ * UI → restart-required, then click Restart in /system). Read at
+ * module load; clamp to a sensible range so a stray "0" doesn't
+ * cause every OCR call to immediately throw.
  */
-const OCR_TIMEOUT_MS = 180_000;
+const OCR_TIMEOUT_MS = (() => {
+  const raw = process.env.OCR_TIMEOUT_MS;
+  const n = raw ? Number(raw) : NaN;
+  if (Number.isFinite(n) && n >= 5_000 && n <= 600_000) return n;
+  return 180_000;
+})();
 
 /**
  * Run OCR on one attachment and persist the result. Designed to be called

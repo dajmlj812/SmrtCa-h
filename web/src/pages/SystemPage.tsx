@@ -175,6 +175,8 @@ function OverviewTab() {
       {error && <div className="banner error">{error}</div>}
       {success && <div className="banner success">{success}</div>}
 
+      <RestartCard />
+
       <div className="page-section">
         <div className="page-section-head">
           <h2>Tenants</h2>
@@ -918,6 +920,104 @@ function GrantModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 0.18.13 — operator-initiated restart button.
+ *
+ * Some settings (NODE_OPTIONS, PG_POOL_MAX, OCR_TIMEOUT_MS,
+ * SLOW_QUERY_THRESHOLD_MS, SESSION_SECRET, ATTACHMENT_ENCRYPTION_KEY)
+ * are read at process boot and aren't re-read during a request. The
+ * /settings page marks those rows with a "restart required" indicator;
+ * this card is where the operator triggers the restart that picks up
+ * the new values.
+ *
+ * Two-step confirm: type "RESTART" to enable the button. Reflects the
+ * server's confirm-token check (which exists so a CSRF can't bring
+ * down production from an idle tab).
+ */
+function RestartCard() {
+  const [confirmText, setConfirmText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
+
+  async function restart() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.systemRestart();
+      setRestarting(true);
+      // Poll /health until it comes back; that's when the new process
+      // is accepting requests. The page itself stays up because it's
+      // already loaded.
+      const start = Date.now();
+      const tick = async () => {
+        try {
+          await fetch('/api/health', { cache: 'no-store' });
+          setRestarting(false);
+        } catch {
+          if (Date.now() - start > 60_000) {
+            setError('Timed out waiting for restart — check the container manually.');
+            setRestarting(false);
+            return;
+          }
+          setTimeout(() => void tick(), 1000);
+        }
+      };
+      // First few requests will succeed (the old process is still
+      // serving) — we need to wait long enough for the exit + restart.
+      setTimeout(() => void tick(), 5000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Restart request failed');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="page-section">
+      <div className="page-section-head">
+        <h2>Restart application</h2>
+      </div>
+      {error && <div className="banner error">{error}</div>}
+      {restarting && (
+        <div className="banner" style={{ background: 'rgba(234, 179, 8, 0.12)' }}>
+          Restart requested. The container is recycling — back in a moment…
+        </div>
+      )}
+      <div className="card">
+        <p className="muted">
+          Restart the application process so settings marked{' '}
+          <code>restart required</code> (NODE_OPTIONS, PG_POOL_MAX,
+          OCR_TIMEOUT_MS, SLOW_QUERY_THRESHOLD_MS, SESSION_SECRET,
+          ATTACHMENT_ENCRYPTION_KEY) take effect with their new values.
+          Brief downtime — a few seconds while the new container is starting.
+        </p>
+        <div className="form-grid" style={{ gridTemplateColumns: '1fr auto' }}>
+          <div className="field">
+            <label>Type <strong>RESTART</strong> to confirm</label>
+            <input
+              type="text"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="RESTART"
+              disabled={busy || restarting}
+            />
+          </div>
+          <div className="field" style={{ alignSelf: 'end' }}>
+            <button
+              className="btn danger"
+              type="button"
+              disabled={confirmText !== 'RESTART' || busy || restarting}
+              onClick={() => void restart()}
+            >
+              {restarting ? 'Restarting…' : busy ? 'Sending…' : 'Restart application'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

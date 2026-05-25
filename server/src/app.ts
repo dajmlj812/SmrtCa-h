@@ -25,6 +25,7 @@ import { authRoutes } from './routes/auth.js';
 import { budgetRoutes } from './routes/budgets.js';
 import { goalRoutes } from './routes/goals.js';
 import { billRoutes } from './routes/bills.js';
+import { scheduleChangeRoutes } from './routes/schedule-changes.js';
 import { cancellationRoutes } from './routes/cancellation.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { debtPayoffRoutes } from './routes/debt-payoff.js';
@@ -392,6 +393,7 @@ export async function buildApp(
   await app.register(budgetRoutes);
   await app.register(goalRoutes);
   await app.register(billRoutes);
+  await app.register(scheduleChangeRoutes);
   await app.register(cancellationRoutes);
   await app.register(apiKeyRoutes);
   await app.register(debtPayoffRoutes);

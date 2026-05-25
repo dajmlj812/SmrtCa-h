@@ -45,6 +45,11 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=server-builder /app/server/dist ./dist
 # Web bundle lives where Fastify expects it (server/dist/public).
 COPY --from=web-builder /app/web/dist ./dist/public
+# 0.18.13 — entrypoint script that reads NODE_OPTIONS from
+# app_settings before starting Node, so GUI-configured heap sizes
+# take effect on the next container restart.
+COPY scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 # Attachment storage lives in /data; mount a volume here in compose.
 RUN mkdir -p /data/attachments && chown -R node:node /app /data
@@ -58,5 +63,6 @@ EXPOSE 4000
 # `tini` reaps zombie children and forwards signals cleanly so docker stop
 # isn't a 10-second SIGKILL.
 ENTRYPOINT ["/sbin/tini", "--"]
-# `migrate` runs idempotently; existing schemas are left alone.
-CMD ["sh", "-c", "node dist/db/migrate.js && node dist/index.js"]
+# Wrapper reads NODE_OPTIONS from app_settings then exec's node.
+# Migrations run inside the script (idempotent).
+CMD ["./docker-entrypoint.sh"]

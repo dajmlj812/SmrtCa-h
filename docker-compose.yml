@@ -72,6 +72,14 @@ services:
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PUBLIC_BASE_URL: ${STRIPE_PUBLIC_BASE_URL:-http://localhost:4000}
+      # 0.18.13 — perf knobs. If set in the host .env we honor that
+      # (the entrypoint script bypasses the DB lookup). Otherwise
+      # NODE_OPTIONS is read from app_settings at start. The other
+      # three are read directly by Node at module load.
+      NODE_OPTIONS: ${NODE_OPTIONS:-}
+      PG_POOL_MAX: ${PG_POOL_MAX:-}
+      OCR_TIMEOUT_MS: ${OCR_TIMEOUT_MS:-}
+      SLOW_QUERY_THRESHOLD_MS: ${SLOW_QUERY_THRESHOLD_MS:-}
     ports:
       - "${APP_PORT:-4000}:4000"
     volumes:
