@@ -161,10 +161,59 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.2 fixes the hard-coded version string (was stuck at
-&quot;SmrtCash · v0.17.25&quot; even on 0.18.1) and surfaces
-&quot;Developed by BuildITSmrt, LLC.&quot; in the sidebar footer
-plus on the Login + Signup pages.</em></p>
+<p><em>0.18.3 adds two requested controls: an operator-configurable
+idle-timeout that auto-logs-out inactive browsers, and a per-user
+IANA timezone preference that drives every datetime display.</em></p>
+<hr>
+<h2 id="0183-2026-05-24-idle-auto-logout-per-user-timezone">[0.18.3] — 2026-05-24 — Idle auto-logout + per-user timezone<a class="heading-anchor" href="#0183-2026-05-24-idle-auto-logout-per-user-timezone">#</a></h2>
+<p>Two user-facing controls that the test-deploy use surfaced:</p>
+<p><strong>Idle auto-logout</strong> (operator-set):</p>
+<ul>
+<li>New super-admin setting <code>WEB_INACTIVITY_TIMEOUT_MINUTES</code>,
+surfaced under a new &quot;Web session&quot; section on <code>/settings</code>.</li>
+<li><code>0</code> (default) disables the timer — sessions only end when
+the user signs out or the cookie expires (prior behavior).</li>
+<li>A non-zero value (e.g. <code>15</code>) starts a per-tab timer that
+resets on any mouse/key/scroll/touch event. When it
+fires, the same <code>logout()</code> call as the manual Sign-out
+button runs.</li>
+<li>New <code>useIdleTimeout(minutes, onTimeout)</code> hook owns the
+event subscriptions; disabled mode adds no listeners.</li>
+<li>Value is delivered to the client inside <code>/api/auth/me</code>
+under <code>web_settings.inactivity_timeout_minutes</code> so the
+enforcement starts on the next auth round-trip without a
+second fetch.</li>
+</ul>
+<p><strong>Per-user timezone</strong>:</p>
+<ul>
+<li>New <code>users.timezone</code> column (nullable IANA string,
+migration 044). NULL = follow the browser, which is the
+prior behavior for every existing user.</li>
+<li><code>PATCH /api/auth/me</code> accepts <code>{ name, timezone }</code>.
+Timezone validated against
+<code>Intl.supportedValuesOf(&#39;timeZone&#39;)</code> so <code>&quot;Mars/Olympus&quot;</code>
+can&#39;t be saved.</li>
+<li>New <code>ProfileModal</code> opened from the sidebar footer (&quot;My
+profile&quot; link). Lets the user edit display name + pick a
+zone from a curated &quot;Common&quot; optgroup (13 NA/EU/APAC
+zones) and a fallback &quot;All zones&quot; optgroup with the full
+IANA list. Empty selection = &quot;Follow my browser
+(<detected zone>)&quot;.</li>
+<li>New <code>web/src/format.ts</code> helpers <code>formatDateTime(iso)</code>
+and <code>formatRelative(iso)</code> read the preferred zone from a
+module-level state set by <code>App.tsx</code> on auth via
+<code>setUserTimezone()</code>. Existing date-only formatter
+(<code>formatDate</code>) is untouched — YYYY-MM-DD fields like
+transaction dates and bill due dates remain
+zone-agnostic, which is the right call for ledger data.</li>
+<li>Rollout: the infrastructure is in place. Existing
+callers using <code>new Date(iso).toLocaleString()</code> will be
+migrated to <code>formatDateTime(iso)</code> opportunistically as
+pages are touched.</li>
+</ul>
+<p>Roadmap slice number renumbered: this takes 0.18.3; the
+originally-planned 0.18.3 (Public read-only API) becomes
+0.18.4, and so on through 0.18.10.</p>
 <hr>
 <h2 id="0182-2026-05-24-vendor-attribution-auto-versioned-footer">[0.18.2] — 2026-05-24 — Vendor attribution + auto-versioned footer<a class="heading-anchor" href="#0182-2026-05-24-vendor-attribution-auto-versioned-footer">#</a></h2>
 <p>Two small but visible fixes that came out of looking at
@@ -6523,7 +6572,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 02:13:51 UTC · commit b3fe681</span>
+  <span>Generated 2026-05-25 02:27:06 UTC · commit e2b677e</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { api } from './api';
+import { api, type MeResponse } from './api';
+import { setUserTimezone } from './format';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
+import { ProfileModal } from './components/ProfileModal';
 import { AccountsPage } from './pages/AccountsPage';
 import { AccountDetailPage } from './pages/AccountDetailPage';
 import { TransactionsPage } from './pages/TransactionsPage';
@@ -53,6 +56,9 @@ export function App() {
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [signupEnabled, setSignupEnabled] = useState(false);
   const [supportUrl, setSupportUrl] = useState<string | null>(null);
+  // 0.18.3 — hold the /auth/me response so the children can read
+  // timezone + the idle-timeout policy without a second round-trip.
+  const [me, setMe] = useState<MeResponse | null>(null);
   const location = useLocation();
   // /invite/:token is a public landing — skip the auth gate entirely.
   const isInviteRoute = location.pathname.startsWith('/invite/');
@@ -79,8 +85,12 @@ export function App() {
       // Authenticated — but which kind? Super-admin sessions never see
       // the financial dashboard; tenant sessions never see the system
       // console.
-      const me = await api.authMe();
-      setAuthState(me.user.is_super_admin ? 'authenticated-super' : 'authenticated-tenant');
+      const meResp = await api.authMe();
+      setMe(meResp);
+      // 0.18.3 — install the user's preferred timezone for every
+      // datetime formatter the moment we know who they are.
+      setUserTimezone(meResp.user.timezone);
+      setAuthState(meResp.user.is_super_admin ? 'authenticated-super' : 'authenticated-tenant');
     } catch {
       // Network-down or server-down — show the login screen so the user
       // can retry. Avoids a permanent blank app if /status briefly fails.
@@ -147,19 +157,38 @@ export function App() {
     );
   }
   if (authState === 'authenticated-super') {
-    return <SuperAdminApp onSignedOut={refreshAuth} supportUrl={supportUrl} />;
+    return (
+      <SuperAdminApp
+        onSignedOut={refreshAuth}
+        supportUrl={supportUrl}
+        me={me}
+        onMeChanged={setMe}
+      />
+    );
   }
-  return <AuthenticatedApp onSignedOut={refreshAuth} supportUrl={supportUrl} />;
+  return (
+    <AuthenticatedApp
+      onSignedOut={refreshAuth}
+      supportUrl={supportUrl}
+      me={me}
+      onMeChanged={setMe}
+    />
+  );
 }
 
 function SuperAdminApp({
   onSignedOut,
   supportUrl,
+  me,
+  onMeChanged,
 }: {
   onSignedOut: () => void;
   supportUrl: string | null;
+  me: MeResponse | null;
+  onMeChanged: (m: MeResponse) => void;
 }) {
   const { open, setOpen } = useMobileDrawer();
+  const [showProfile, setShowProfile] = useState(false);
   async function logout() {
     try {
       await api.authLogout();
@@ -168,6 +197,9 @@ function SuperAdminApp({
     }
     onSignedOut();
   }
+  useIdleTimeout(me?.web_settings.inactivity_timeout_minutes ?? 0, () => {
+    void logout();
+  });
   return (
     <div className="app">
       <MobileBar open={open} onToggle={() => setOpen(!open)} label="SmrtCash · super" />
@@ -195,6 +227,15 @@ function SuperAdminApp({
             <div className="muted small">v{__APP_VERSION__}</div>
           </div>
           <SupportLink supportUrl={supportUrl} />
+          {me && (
+            <button
+              className="btn-link"
+              type="button"
+              onClick={() => setShowProfile(true)}
+            >
+              My profile
+            </button>
+          )}
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -221,6 +262,24 @@ function SuperAdminApp({
       <SidebarBackdrop open={open} onClose={() => setOpen(false)} />
       <InstallPrompt />
       <OfflineIndicator />
+      {showProfile && me && (
+        <ProfileModal
+          me={me}
+          onClose={() => setShowProfile(false)}
+          onSaved={(updated) => {
+            setShowProfile(false);
+            setUserTimezone(updated.timezone);
+            onMeChanged({
+              ...me,
+              user: {
+                ...me.user,
+                name: updated.name,
+                timezone: updated.timezone,
+              },
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -228,11 +287,16 @@ function SuperAdminApp({
 function AuthenticatedApp({
   onSignedOut,
   supportUrl,
+  me,
+  onMeChanged,
 }: {
   onSignedOut: () => void;
   supportUrl: string | null;
+  me: MeResponse | null;
+  onMeChanged: (m: MeResponse) => void;
 }) {
   const { open, setOpen } = useMobileDrawer();
+  const [showProfile, setShowProfile] = useState(false);
   async function logout() {
     try {
       await api.authLogout();
@@ -241,6 +305,9 @@ function AuthenticatedApp({
     }
     onSignedOut();
   }
+  useIdleTimeout(me?.web_settings.inactivity_timeout_minutes ?? 0, () => {
+    void logout();
+  });
 
   return (
     <div className="app">
@@ -298,6 +365,15 @@ function AuthenticatedApp({
           <ThemeToggle />
           <BrandTagline />
           <SupportLink supportUrl={supportUrl} />
+          {me && (
+            <button
+              className="btn-link"
+              type="button"
+              onClick={() => setShowProfile(true)}
+            >
+              My profile
+            </button>
+          )}
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -339,6 +415,24 @@ function AuthenticatedApp({
       <SidebarBackdrop open={open} onClose={() => setOpen(false)} />
       <InstallPrompt />
       <OfflineIndicator />
+      {showProfile && me && (
+        <ProfileModal
+          me={me}
+          onClose={() => setShowProfile(false)}
+          onSaved={(updated) => {
+            setShowProfile(false);
+            setUserTimezone(updated.timezone);
+            onMeChanged({
+              ...me,
+              user: {
+                ...me.user,
+                name: updated.name,
+                timezone: updated.timezone,
+              },
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

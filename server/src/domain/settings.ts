@@ -122,6 +122,12 @@ export const KNOWN_SETTINGS = [
   // hosted support page; operators self-hosting on their own
   // domain can repoint at their own help system.
   { key: 'SUPPORT_URL', isSecret: false, restartRequired: false, superOnly: true, label: 'Support / feature-request URL' },
+  // 0.18.3 — web idle-timeout. Read by the React app on auth and
+  // turned into an "inactivity → auto-logout" timer. Value is
+  // minutes; 0 disables the timer entirely (the prior behavior).
+  // Super-admin owns this because it's a security-policy decision
+  // applied across every user on the instance.
+  { key: 'WEB_INACTIVITY_TIMEOUT_MINUTES', isSecret: false, restartRequired: false, superOnly: true, label: 'Web — idle auto-logout (minutes; 0 = disabled)' },
 ] as const;
 
 /**

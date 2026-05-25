@@ -998,9 +998,13 @@ export interface MeResponse {
     created_at: string;
     last_login_at: string | null;
     is_super_admin: boolean;
+    timezone: string | null;
   };
   memberships: TenantMembership[];
   active_tenant_id: string | null;
+  web_settings: {
+    inactivity_timeout_minutes: number;
+  };
 }
 
 export interface TenantSummary {
@@ -1465,6 +1469,21 @@ export const api = {
     http<void>('/api/auth/logout', { method: 'POST' }),
 
   authMe: () => http<MeResponse>('/api/auth/me'),
+
+  // 0.18.3 — self-service profile update (name + timezone).
+  updateMyProfile: (input: { name?: string | null; timezone?: string | null }) =>
+    http<{
+      user: {
+        id: string;
+        email: string | null;
+        name: string | null;
+        timezone: string | null;
+      };
+    }>('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
 
   // ── Phase 8: tenants + memberships + invitations + providers ─
   listTenants: () =>

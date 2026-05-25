@@ -805,9 +805,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       created_at: string;
       last_login_at: string | null;
       is_super_admin: boolean;
+      timezone: string | null;
     }>(
       `SELECT id, email, name, created_at::text, last_login_at::text,
-              is_super_admin
+              is_super_admin, timezone
          FROM users WHERE id = $1`,
       [req.user.id],
     );
@@ -827,12 +828,92 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         ORDER BY m.created_at`,
       [req.user.id],
     );
+    // 0.18.3 — surface operator-set web policies so the client can
+    // enforce them without a separate fetch. Right now only one
+    // such policy: the idle-logout timer. 0 / unset = disabled.
+    const idleRaw = await getEffectiveValue('WEB_INACTIVITY_TIMEOUT_MINUTES');
+    const idleMinutes = Math.max(0, Math.min(1440, Number(idleRaw ?? 0) || 0));
     return {
       user: u.rows[0],
       memberships: memberships.rows,
       active_tenant_id: req.user.tenantId ?? null,
+      web_settings: {
+        inactivity_timeout_minutes: idleMinutes,
+      },
     };
   });
+
+  // 0.18.3 — let the signed-in user update their own profile.
+  // Currently scoped to name + timezone; password reset has its
+  // own dedicated flow. Timezone is validated against the runtime
+  // IANA list so a fat-fingered "Mars/Olympus" can't be saved.
+  app.patch<{ Body: { name?: string | null; timezone?: string | null } }>(
+    '/api/auth/me',
+    async (req, reply) => {
+      if (!req.user) {
+        return reply.code(401).send({ error: 'Not authenticated' });
+      }
+      const body = req.body ?? {};
+      const updates: string[] = [];
+      const params: unknown[] = [];
+
+      if (body.name !== undefined) {
+        if (body.name === null) {
+          params.push(null);
+          updates.push(`name = $${params.length}`);
+        } else if (typeof body.name === 'string') {
+          const trimmed = body.name.trim();
+          params.push(trimmed === '' ? null : trimmed.slice(0, 200));
+          updates.push(`name = $${params.length}`);
+        } else {
+          return reply
+            .code(400)
+            .send({ error: 'name must be a string or null' });
+        }
+      }
+      if (body.timezone !== undefined) {
+        if (body.timezone === null || body.timezone === '') {
+          params.push(null);
+          updates.push(`timezone = $${params.length}`);
+        } else if (typeof body.timezone === 'string') {
+          // `Intl.supportedValuesOf` is the canonical runtime list of
+          // IANA zone names this Node build knows about; reject
+          // anything not on it so we never persist garbage.
+          const known = new Set(Intl.supportedValuesOf('timeZone'));
+          if (!known.has(body.timezone)) {
+            return reply
+              .code(400)
+              .send({ error: `Unknown IANA timezone: ${body.timezone}` });
+          }
+          params.push(body.timezone);
+          updates.push(`timezone = $${params.length}`);
+        } else {
+          return reply
+            .code(400)
+            .send({ error: 'timezone must be a string or null' });
+        }
+      }
+      if (updates.length === 0) {
+        return reply.code(400).send({ error: 'No updates' });
+      }
+      params.push(req.user.id);
+      await query(
+        `UPDATE users SET ${updates.join(', ')}
+          WHERE id = $${params.length}`,
+        params,
+      );
+      const r = await query<{
+        id: string;
+        email: string | null;
+        name: string | null;
+        timezone: string | null;
+      }>(
+        `SELECT id, email, name, timezone FROM users WHERE id = $1`,
+        [req.user.id],
+      );
+      return { user: r.rows[0] };
+    },
+  );
 }
 
 // Helper used by membership / invite routes to mint a fresh random token.

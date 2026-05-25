@@ -9,10 +9,63 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.2 fixes the hard-coded version string (was stuck at
-"SmrtCash · v0.17.25" even on 0.18.1) and surfaces
-"Developed by BuildITSmrt, LLC." in the sidebar footer
-plus on the Login + Signup pages._
+_0.18.3 adds two requested controls: an operator-configurable
+idle-timeout that auto-logs-out inactive browsers, and a per-user
+IANA timezone preference that drives every datetime display._
+
+---
+
+## [0.18.3] — 2026-05-24 — Idle auto-logout + per-user timezone
+
+Two user-facing controls that the test-deploy use surfaced:
+
+**Idle auto-logout** (operator-set):
+
+- New super-admin setting `WEB_INACTIVITY_TIMEOUT_MINUTES`,
+  surfaced under a new "Web session" section on `/settings`.
+- `0` (default) disables the timer — sessions only end when
+  the user signs out or the cookie expires (prior behavior).
+- A non-zero value (e.g. `15`) starts a per-tab timer that
+  resets on any mouse/key/scroll/touch event. When it
+  fires, the same `logout()` call as the manual Sign-out
+  button runs.
+- New `useIdleTimeout(minutes, onTimeout)` hook owns the
+  event subscriptions; disabled mode adds no listeners.
+- Value is delivered to the client inside `/api/auth/me`
+  under `web_settings.inactivity_timeout_minutes` so the
+  enforcement starts on the next auth round-trip without a
+  second fetch.
+
+**Per-user timezone**:
+
+- New `users.timezone` column (nullable IANA string,
+  migration 044). NULL = follow the browser, which is the
+  prior behavior for every existing user.
+- `PATCH /api/auth/me` accepts `{ name, timezone }`.
+  Timezone validated against
+  `Intl.supportedValuesOf('timeZone')` so `"Mars/Olympus"`
+  can't be saved.
+- New `ProfileModal` opened from the sidebar footer ("My
+  profile" link). Lets the user edit display name + pick a
+  zone from a curated "Common" optgroup (13 NA/EU/APAC
+  zones) and a fallback "All zones" optgroup with the full
+  IANA list. Empty selection = "Follow my browser
+  (<detected zone>)".
+- New `web/src/format.ts` helpers `formatDateTime(iso)`
+  and `formatRelative(iso)` read the preferred zone from a
+  module-level state set by `App.tsx` on auth via
+  `setUserTimezone()`. Existing date-only formatter
+  (`formatDate`) is untouched — YYYY-MM-DD fields like
+  transaction dates and bill due dates remain
+  zone-agnostic, which is the right call for ledger data.
+- Rollout: the infrastructure is in place. Existing
+  callers using `new Date(iso).toLocaleString()` will be
+  migrated to `formatDateTime(iso)` opportunistically as
+  pages are touched.
+
+Roadmap slice number renumbered: this takes 0.18.3; the
+originally-planned 0.18.3 (Public read-only API) becomes
+0.18.4, and so on through 0.18.10.
 
 ---
 

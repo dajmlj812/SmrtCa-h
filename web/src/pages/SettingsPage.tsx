@@ -83,6 +83,12 @@ const SECTIONS: Array<{ title: string; subtitle: string; keys: string[] }> = [
     ],
   },
   {
+    title: 'Web session',
+    subtitle:
+      'Automatically sign out users whose browser has been idle for the configured number of minutes. 0 disables the timer (sessions only end when the user signs out or the cookie expires). Applies to every signed-in user on this instance.',
+    keys: ['WEB_INACTIVITY_TIMEOUT_MINUTES'],
+  },
+  {
     title: 'Security — restart required',
     subtitle:
       'Rotating these breaks things if done wrong. The server must restart for new values to apply.',
