@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — SaaS deploy walkthrough# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-saas-deploy-walkthrough">SmrtCash — SaaS deploy walkthrough<a class="heading-anchor" href="#smrtcash-saas-deploy-walkthrough">#</a></h1>
+<p>Step-by-step for putting SmrtCash on a fresh Linux box behind
+<a href="https://nginxproxymanager.com/">Nginx Proxy Manager (NPM)</a> with
+public HTTPS, billing webhooks, and outbound email. Distilled from
+the smrtcash-test deploy.</p>
+<p>The self-host single-container doc (<code>docs/INSTALLATION.md</code>) covers
+a developer&#39;s laptop. <strong>This covers a real internet-facing deploy.</strong>
+If you only need it on <code>localhost</code>, read that one instead.</p>
+<h2 id="prerequisites">Prerequisites<a class="heading-anchor" href="#prerequisites">#</a></h2>
+<ul>
+<li>Linux box (Ubuntu/Debian works; any modern distro is fine).</li>
+<li>Docker + Docker Compose v2 installed (<code>docker compose version</code>
+should print v2.x).</li>
+<li>A domain you control with DNS pointing at the box (an A record
+for the subdomain you&#39;ll serve from, e.g.
+<code>smrtcash.example.com</code>).</li>
+<li>An <a href="https://nginxproxymanager.com/">NPM</a> instance already running
+on the same box, with its <code>proxy</code> Docker network created and
+listening on <code>:80</code> + <code>:443</code>. (Standard NPM compose stack; not
+covered here.)</li>
+<li>An SMTP relay account (Maileroo, SendGrid, AWS SES, your
+hosting provider&#39;s mail relay — any will work). You&#39;ll need
+host, port, username, password, and a verified <code>From</code> address.</li>
+</ul>
+<h2 id="1-ssh-preflight">1. SSH preflight<a class="heading-anchor" href="#1-ssh-preflight">#</a></h2>
+<pre><code class="language-bash">ssh root@&lt;box-ip&gt;
+# Confirm Docker:
+docker compose version
+# Confirm NPM is running + the proxy network exists:
+docker network ls | grep proxy
+</code></pre>
+<p>If <code>proxy</code> doesn&#39;t exist:</p>
+<pre><code class="language-bash">docker network create proxy
+</code></pre>
+<h2 id="2-clone-the-repo-with-a-deploy-key">2. Clone the repo with a deploy key<a class="heading-anchor" href="#2-clone-the-repo-with-a-deploy-key">#</a></h2>
+<p>Generate a deploy key so the box can pull updates without
+broad GitHub credentials:</p>
+<pre><code class="language-bash">ssh-keygen -t ed25519 -C &quot;smrtcash-deploy-$(hostname)&quot; \
+  -f /root/deploy_key -N &quot;&quot;
+cat /root/deploy_key.pub
+</code></pre>
+<p>Add the printed pubkey to the repo&#39;s GitHub <strong>Deploy keys</strong>
+(Settings → Deploy keys → Add deploy key). Read-only access is
+enough — no need to grant write.</p>
+<p>Configure SSH to use the key for github.com:</p>
+<pre><code class="language-bash">cat &gt;&gt; /root/.ssh/config &lt;&lt;&#39;EOF&#39;
+Host github.com-smrtcash
+  HostName github.com
+  User git
+  IdentityFile /root/deploy_key
+  IdentitiesOnly yes
+EOF
+chmod 600 /root/.ssh/config
+</code></pre>
+<p>Clone:</p>
+<pre><code class="language-bash">mkdir -p /opt
+cd /opt
+git clone git@github.com-smrtcash:&lt;your-fork&gt;/SmrtCash.git smrtcash
+cd /opt/smrtcash
+</code></pre>
+<h2 id="3-compose-override-for-the-npm-proxy-network">3. Compose override for the NPM <code>proxy</code> network<a class="heading-anchor" href="#3-compose-override-for-the-npm-proxy-network">#</a></h2>
+<p>NPM routes traffic via its Docker network, NOT by publishing a
+host port. We don&#39;t want to publish 4000 to the host either —
+that bypasses NPM and exposes the app directly.</p>
+<p>Create <code>/opt/smrtcash/docker-compose.override.yml</code>:</p>
+<pre><code class="language-yaml">services:
+  app:
+    networks:
+      - default
+      - proxy
+    # Drop the host port publish — NPM reaches us over the
+    # `proxy` network.
+    ports: []
+
+networks:
+  proxy:
+    external: true
+</code></pre>
+<h2 id="4-env-with-strong-secrets">4. <code>.env</code> with strong secrets<a class="heading-anchor" href="#4-env-with-strong-secrets">#</a></h2>
+<pre><code class="language-bash">cd /opt/smrtcash
+cp .env.example .env
+# Generate strong secrets:
+echo &quot;SESSION_SECRET=$(openssl rand -base64 48 | tr -d &#39;\n&#39;)&quot;  &gt;&gt; .env
+echo &quot;ATTACHMENT_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d &#39;\n&#39;)&quot; &gt;&gt; .env
+echo &quot;POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d &#39;\n&#39;)&quot; &gt;&gt; .env
+# Required runtime config:
+cat &gt;&gt; .env &lt;&lt;EOF
+NODE_ENV=production
+PUBLIC_BASE_URL=https://smrtcash.example.com
+COOKIE_SECURE=true
+PUBLIC_SIGNUP_ENABLED=true
+EOF
+</code></pre>
+<p>Edit <code>.env</code> to remove the placeholders that came from
+<code>.env.example</code> and to set anything else specific to your
+deploy (Stripe keys, Plaid, etc.).</p>
+<p><strong>Critical:</strong> <code>PUBLIC_BASE_URL</code> must match the public URL
+visitors will use, including the scheme. Outgoing email links
+(signup verification, password reset, invitations) and Stripe
+Checkout success/cancel URLs are all built from it. A typo
+here breaks every outbound flow.</p>
+<h2 id="5-first-boot">5. First boot<a class="heading-anchor" href="#5-first-boot">#</a></h2>
+<pre><code class="language-bash">cd /opt/smrtcash
+docker compose up -d
+# Migrations + category seed run automatically on boot:
+docker compose logs -f app | head -20
+</code></pre>
+<p>Wait for <code>SmrtCash API listening on http://localhost:4000</code> —
+that&#39;s the readiness signal.</p>
+<h2 id="6-npm-proxy-host">6. NPM proxy host<a class="heading-anchor" href="#6-npm-proxy-host">#</a></h2>
+<p>In the NPM UI:</p>
+<ol>
+<li><strong>Hosts → Proxy Hosts → Add Proxy Host</strong></li>
+<li>Domain name: <code>smrtcash.example.com</code></li>
+<li>Scheme: <code>http</code> (NPM terminates TLS; the upstream is plain HTTP)</li>
+<li>Forward Hostname / IP: <code>smrtcash-app</code> (the container name)</li>
+<li>Forward Port: <code>4000</code></li>
+<li>☑ <strong>Block Common Exploits</strong></li>
+<li>☑ <strong>Websockets Support</strong> (the app uses SSE-style streaming
+in a few places)</li>
+<li><strong>Advanced</strong> tab — paste:</li>
+</ol>
+<pre><code class="language-nginx"># Pass the real client IP + scheme to SmrtCash so audit logs +
+# rate-limit-by-IP work, and so the app builds correct cookies.
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Host $host;
+
+# Allow large attachment uploads (server enforces 25 MB
+# per-file / 100 MB per-request).
+client_max_body_size 110m;
+</code></pre>
+<ol start="9">
+<li><strong>SSL</strong> tab — request a Let&#39;s Encrypt cert. Tick
+☑ Force SSL, ☑ HTTP/2 Support.</li>
+</ol>
+<h2 id="7-smtp-pick-a-relay-and-configure">7. SMTP — pick a relay and configure<a class="heading-anchor" href="#7-smtp-pick-a-relay-and-configure">#</a></h2>
+<p>In the SmrtCash super-admin <strong>Settings</strong> page, fill in:</p>
+<ul>
+<li><code>SMTP_HOST</code> — e.g. <code>smtp.maileroo.com</code></li>
+<li><code>SMTP_PORT</code> — <code>587</code> (STARTTLS) or <code>465</code> (TLS-on-connect)</li>
+<li><code>SMTP_USER</code> — relay username</li>
+<li><code>SMTP_PASS</code> — relay password</li>
+<li><code>SMTP_FROM</code> — verified sending address</li>
+<li><code>SMTP_SECURE</code> — <code>true</code> for port 465, leave blank for 587</li>
+</ul>
+<p>Then click <strong>Test SMTP</strong> on the same panel.</p>
+<h3 id="maileroo-known-gotcha">Maileroo — <em>known gotcha</em><a class="heading-anchor" href="#maileroo-known-gotcha">#</a></h3>
+<p>Maileroo&#39;s <strong>click tracking</strong> is on by default and rewrites every
+URL through their redirect domain. For SmrtCash invitation links
+(<code>https://smrtcash.example.com/invite/&lt;token&gt;</code>), the rewriter has
+been observed mangling the host into <code>smrtcash@example.com</code> —
+likely because the <code>&lt;subdomain&gt;.&lt;domain&gt;.&lt;tld&gt;</code> pattern matches
+the FROM address and the rewriter substitutes <code>.</code> for <code>@</code>.</p>
+<p>Recipients click the button and land on a 404 / connection error.</p>
+<p><strong>Fix:</strong> as of v0.17.2, every SmrtCash send adds
+<code>X-Maileroo-Track: no</code> to disable click tracking. If you&#39;re on
+v0.17.2+ you don&#39;t need to do anything; if you&#39;re on an older
+deploy, either upgrade or turn off click tracking in your
+Maileroo account settings.</p>
+<p>This bug took <em>hours</em> to diagnose because the symptoms looked
+like a misconfigured <code>PUBLIC_BASE_URL</code> (which is why 0.18.8
+unified that into one setting — see CHANGELOG).</p>
+<h2 id="8-dns-verification">8. DNS verification<a class="heading-anchor" href="#8-dns-verification">#</a></h2>
+<p>From the box:</p>
+<pre><code class="language-bash">dig +short smrtcash.example.com
+# Should print the box&#39;s public IP
+</code></pre>
+<p>From your workstation:</p>
+<pre><code class="language-bash">curl -sSL https://smrtcash.example.com/api/health
+# {&quot;status&quot;:&quot;ok&quot;,&quot;time&quot;:&quot;...&quot;}
+</code></pre>
+<h2 id="9-create-the-first-super-admin">9. Create the first super-admin<a class="heading-anchor" href="#9-create-the-first-super-admin">#</a></h2>
+<pre><code class="language-bash">docker compose exec app node scripts/create-super-admin.mjs \
+  --email you@example.com --password &#39;&lt;long-strong-password&gt;&#39;
+</code></pre>
+<p>That account can log in at <code>/login</code>, then visit <code>/system</code> to
+manage tenants, <code>/settings</code> for runtime config, <code>/billing</code> to
+hook Stripe.</p>
+<h2 id="10-sandbox-cleanup">10. Sandbox cleanup<a class="heading-anchor" href="#10-sandbox-cleanup">#</a></h2>
+<p>When testing wraps and you&#39;re ready for real traffic:</p>
+<pre><code class="language-bash"># Clear test tenants + their data:
+docker compose exec db psql -U smrtcash -d smrtcash -c \
+  &quot;DELETE FROM tenants WHERE slug LIKE &#39;test-%&#39;;&quot;
+
+# Rotate the session secret + attachment key now that the box
+# has been touched by anyone with shell access during testing:
+# (regenerate via openssl + redeploy as in step 4)
+</code></pre>
+<h2 id="11-day-2-ops">11. Day-2 ops<a class="heading-anchor" href="#11-day-2-ops">#</a></h2>
+<ul>
+<li><strong>Updates:</strong><pre><code class="language-bash">cd /opt/smrtcash
+git fetch --tags
+git checkout v&lt;latest&gt;
+docker compose build app
+docker compose up -d app
+</code></pre>
+</li>
+<li><strong>Backups:</strong> see <code>docs/ADMIN_GUIDE.md</code> § Backups + restore.</li>
+<li><strong>On-call symptoms ↔ recovery:</strong> <code>docs/OPERATOR_RUNBOOK.md</code>.</li>
+<li><strong>Stripe-specific gotchas:</strong> <code>docs/STRIPE_SETUP.md</code>.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting<a class="heading-anchor" href="#troubleshooting">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>First check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Public URL returns 502</td>
+<td><code>docker compose logs app</code> — container alive? <code>docker network inspect proxy</code> — is smrtcash-app on the proxy net?</td>
+</tr>
+<tr>
+<td>Invitation links broken</td>
+<td>Send yourself a test invite; check the URL in the email. If it has <code>@</code> where <code>.</code> should be, see § 7 Maileroo gotcha.</td>
+</tr>
+<tr>
+<td>User says they verified email but still can&#39;t log in</td>
+<td>See <code>docs/OPERATOR_RUNBOOK.md</code> § &quot;User stuck on verification gate&quot;.</td>
+</tr>
+<tr>
+<td>Stripe Checkout redirects to localhost</td>
+<td><code>PUBLIC_BASE_URL</code> not set (or stale because pre-0.18.8 used <code>STRIPE_PUBLIC_BASE_URL</code>). Set in <code>/settings</code> UI or <code>.env</code>.</td>
+</tr>
+<tr>
+<td>Migration on boot fails</td>
+<td>`docker compose logs app</td>
+</tr>
+</tbody></table>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-25 03:43:37 UTC · commit 18b1b2d</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

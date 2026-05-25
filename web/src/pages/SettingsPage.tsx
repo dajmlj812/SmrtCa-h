@@ -3,6 +3,39 @@ import { api, type AiModelOption, type AppSetting } from '../api';
 
 const AI_PROVIDERS = ['none', 'rules', 'claude', 'ollama'];
 
+// 0.18.12 — mirror of the server's URL_TYPED_KEYS so the UI can
+// validate inline before the server rejects the save. Keep this
+// list in sync with server/src/routes/settings.ts.
+const URL_TYPED_KEYS = new Set<string>([
+  'PUBLIC_BASE_URL',
+  'SUPPORT_URL',
+  'OLLAMA_BASE_URL',
+]);
+
+/**
+ * 0.18.12 — client-side mirror of validateUrlSetting. Returns a
+ * hint string when the value looks wrong; null when it's fine.
+ * The server runs the same checks at write time — this is just
+ * a feedback loop so the user isn't surprised by a 400.
+ */
+function checkUrlHint(value: string): string | null {
+  const v = value.trim();
+  if (v === '') return null; // empty handled separately (Save disabled)
+  let parsed: URL;
+  try {
+    parsed = new URL(v);
+  } catch {
+    return 'This doesn’t look like a valid URL (e.g. https://example.com).';
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return `URL must start with http:// or https:// (got "${parsed.protocol}").`;
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    return 'There’s an "@" before the host — that’s almost always a typo of "." in a hostname.';
+  }
+  return null;
+}
+
 const SECTIONS: Array<{ title: string; subtitle: string; keys: string[] }> = [
   {
     title: 'AI Provider',
@@ -330,9 +363,15 @@ function SettingRow({
   const confirmRequired = !!destructiveConfirm && setting.configured_in_gui;
   const confirmMatch = !confirmRequired || confirmText === destructiveConfirm;
 
+  // 0.18.12 — inline URL hint for URL-typed keys. Save is
+  // blocked when the hint is non-null.
+  const isUrlKey = URL_TYPED_KEYS.has(setting.key);
+  const urlHint = isUrlKey ? checkUrlHint(value) : null;
+
   function commit() {
     if (value.trim() === '') return;
     if (!confirmMatch) return;
+    if (urlHint !== null) return;
     onSave(value.trim());
     setEditing(false);
     setValue('');
@@ -370,14 +409,27 @@ function SettingRow({
               <AiModelPicker provider="ollama" value={value} onChange={setValue} />
             ) : (
               <input
-                type={setting.is_secret ? 'password' : 'text'}
+                type={
+                  setting.is_secret
+                    ? 'password'
+                    : isUrlKey
+                      ? 'url'
+                      : 'text'
+                }
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder={
-                  setting.is_secret ? 'paste new value' : 'new value'
+                  setting.is_secret
+                    ? 'paste new value'
+                    : isUrlKey
+                      ? 'https://example.com'
+                      : 'new value'
                 }
                 autoFocus
               />
+            )}
+            {urlHint !== null && (
+              <div className="hint warn">{urlHint}</div>
             )}
             {setting.key === 'EIA_API_KEY' && (
               <div className="muted" style={{ fontSize: 12 }}>
@@ -409,7 +461,9 @@ function SettingRow({
                 className="btn small"
                 type="button"
                 onClick={commit}
-                disabled={!confirmMatch || value.trim() === ''}
+                disabled={
+                  !confirmMatch || value.trim() === '' || urlHint !== null
+                }
               >
                 Save
               </button>

@@ -29,6 +29,49 @@ interface PublicSettingRow {
 
 const AI_PROVIDERS = ['none', 'rules', 'claude', 'ollama'];
 
+/**
+ * 0.18.12 — keys whose values must parse as URLs. Validated at
+ * write time with the WHATWG URL parser. A failure here returns
+ * 400 with an actionable message; a *successful* parse still
+ * surfaces a warning when the host contains an `@` (RFC-legal
+ * in the userinfo position but in practice always a typo of
+ * `.` — exactly the bug that drove this slice).
+ */
+const URL_TYPED_KEYS = new Set<SettingKey>([
+  'PUBLIC_BASE_URL',
+  'SUPPORT_URL',
+  'OLLAMA_BASE_URL',
+]);
+
+export function validateUrlSetting(
+  key: string,
+  value: string,
+): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return `${key} must be a valid URL (e.g. "https://example.com"). Got: "${value}"`;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return `${key} must use http: or https: (got "${parsed.protocol}")`;
+  }
+  // An `@` in the host portion is RFC-legal as userinfo
+  // (`user@host`) but in our settings context is almost always
+  // a typo of `.`. The smrtcash-test deploy bug that motivated
+  // this entire slice was exactly this: the operator typed
+  // `smrtcash-test@builditsmrt.com` instead of
+  // `smrtcash-test.builditsmrt.com`. The parser accepts it, but
+  // every outbound flow that built a URL from it broke.
+  if (parsed.username !== '' || parsed.password !== '') {
+    return `${key} contains an "@" before the host — this is almost always a typo of "."; if you really need HTTP basic-auth in the URL, base64-encode the credential into a header instead`;
+  }
+  if (parsed.hostname === '') {
+    return `${key} has no host. Got: "${value}"`;
+  }
+  return null;
+}
+
 async function buildRow(meta: (typeof KNOWN_SETTINGS)[number]): Promise<PublicSettingRow> {
   const dbValue = await getDbValue(meta.key);
   const envValue = process.env[meta.key] ?? '';
@@ -113,6 +156,15 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(400)
           .send({ error: 'SESSION_SECRET must be at least 16 characters' });
+      }
+      // 0.18.12 — URL-typed keys must parse as a real URL. Catches
+      // typos like `@` for `.` (RFC-legal in the userinfo position
+      // but almost always a typo) that previously took hours to
+      // diagnose because the symptoms looked like SMTP relay
+      // mangling. See docs/SAAS_DEPLOY.md § 7 for the war story.
+      if (URL_TYPED_KEYS.has(key)) {
+        const err = validateUrlSetting(key, value);
+        if (err) return reply.code(400).send({ error: err });
       }
 
       await setDbValue(key, value);

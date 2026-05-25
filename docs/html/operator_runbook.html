@@ -400,8 +400,84 @@ psql &quot;$DATABASE_URL&quot; -c \
      GROUP BY 1 ORDER BY 1 DESC;&quot;
 </code></pre>
 <hr>
+<h2 id="user-stuck-on-verification-gate">User stuck on verification gate<a class="heading-anchor" href="#user-stuck-on-verification-gate">#</a></h2>
+<p>Symptom: a user accepted an invitation (or signed up via OIDC,
+or was created via the super-admin invite flow) and now can&#39;t
+log in. The login screen rejects them with &quot;Please confirm your
+email address before logging in.&quot;</p>
+<p>This is the pre-0.17.3 footgun. The 0.16.0 login gate refused
+any user whose <code>users.email_verified_at</code> was NULL. Three
+account-creation paths left that column NULL despite the path
+itself being equivalent proof of email ownership:</p>
+<ul>
+<li><strong>Invitation acceptance</strong> — clicking an invite link sent to
+the recipient&#39;s address IS the proof.</li>
+<li><strong>OIDC login</strong> — the IdP already verified the address.</li>
+<li><strong>Super-admin invite</strong> — the operator vouched explicitly.</li>
+</ul>
+<p>v0.17.3 fixed the create paths so new users go straight to
+<code>email_verified_at = now()</code>. Existing stuck users from earlier
+deploys are unaffected by that fix and need this manual unstick:</p>
+<pre><code class="language-sql">UPDATE users SET email_verified_at = now()
+  WHERE email_verified_at IS NULL
+    AND id IN (
+      SELECT user_id FROM memberships
+      UNION
+      SELECT user_id FROM user_identities WHERE provider != &#39;local&#39;
+    );
+</code></pre>
+<p>That covers everyone who has either a tenant membership (came
+in through an invite) or a non-local identity (OIDC). It
+deliberately does NOT touch users with only a <code>local</code> identity
+and no memberships — those are <code>/signup</code> users who genuinely
+should verify via email.</p>
+<h3 id="behavior-matrix">Behavior matrix<a class="heading-anchor" href="#behavior-matrix">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Created via</th>
+<th>Pre-0.17.3 <code>email_verified_at</code></th>
+<th>Post-0.17.3 <code>email_verified_at</code></th>
+<th>Unstick?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Public <code>/signup</code></td>
+<td>NULL (waits for email click)</td>
+<td>NULL (waits for email click)</td>
+<td>No — this is correct</td>
+</tr>
+<tr>
+<td>Email click on signup verification link</td>
+<td><code>now()</code></td>
+<td><code>now()</code></td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>Accept invitation link</td>
+<td>NULL ⚠️</td>
+<td><code>now()</code></td>
+<td>Yes for pre-0.17.3 deploys</td>
+</tr>
+<tr>
+<td>Super-admin invite</td>
+<td>NULL ⚠️</td>
+<td><code>now()</code></td>
+<td>Yes for pre-0.17.3 deploys</td>
+</tr>
+<tr>
+<td>First OIDC login (auto-provision)</td>
+<td>NULL ⚠️</td>
+<td><code>now()</code></td>
+<td>Yes for pre-0.17.3 deploys</td>
+</tr>
+</tbody></table>
+<p>If you&#39;ve never been on a pre-0.17.3 deploy you can skip this
+playbook entirely — there&#39;s nothing to fix.</p>
+<hr>
 <h2 id="related-docs">Related docs<a class="heading-anchor" href="#related-docs">#</a></h2>
 <ul>
+<li><code>docs/SAAS_DEPLOY.md</code> — fresh-box deploy walkthrough behind NPM</li>
 <li><code>docs/SAAS_PLAN.md</code> — pricing tiers + feature gating (source of truth)</li>
 <li><code>docs/STRIPE_SETUP.md</code> — initial Stripe configuration walkthrough</li>
 <li><code>docs/TERMS_OF_SERVICE.md</code> — placeholder (legal review required before launch)</li>
@@ -410,7 +486,7 @@ psql &quot;$DATABASE_URL&quot; -c \
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 03:32:09 UTC · commit 7453a6b</span>
+  <span>Generated 2026-05-25 03:43:37 UTC · commit 18b1b2d</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

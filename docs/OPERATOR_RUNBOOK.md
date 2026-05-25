@@ -255,8 +255,61 @@ psql "$DATABASE_URL" -c \
 
 ---
 
+## User stuck on verification gate
+
+Symptom: a user accepted an invitation (or signed up via OIDC,
+or was created via the super-admin invite flow) and now can't
+log in. The login screen rejects them with "Please confirm your
+email address before logging in."
+
+This is the pre-0.17.3 footgun. The 0.16.0 login gate refused
+any user whose `users.email_verified_at` was NULL. Three
+account-creation paths left that column NULL despite the path
+itself being equivalent proof of email ownership:
+
+- **Invitation acceptance** — clicking an invite link sent to
+  the recipient's address IS the proof.
+- **OIDC login** — the IdP already verified the address.
+- **Super-admin invite** — the operator vouched explicitly.
+
+v0.17.3 fixed the create paths so new users go straight to
+`email_verified_at = now()`. Existing stuck users from earlier
+deploys are unaffected by that fix and need this manual unstick:
+
+```sql
+UPDATE users SET email_verified_at = now()
+  WHERE email_verified_at IS NULL
+    AND id IN (
+      SELECT user_id FROM memberships
+      UNION
+      SELECT user_id FROM user_identities WHERE provider != 'local'
+    );
+```
+
+That covers everyone who has either a tenant membership (came
+in through an invite) or a non-local identity (OIDC). It
+deliberately does NOT touch users with only a `local` identity
+and no memberships — those are `/signup` users who genuinely
+should verify via email.
+
+### Behavior matrix
+
+| Created via | Pre-0.17.3 `email_verified_at` | Post-0.17.3 `email_verified_at` | Unstick? |
+| --- | --- | --- | --- |
+| Public `/signup` | NULL (waits for email click) | NULL (waits for email click) | No — this is correct |
+| Email click on signup verification link | `now()` | `now()` | n/a |
+| Accept invitation link | NULL ⚠️ | `now()` | Yes for pre-0.17.3 deploys |
+| Super-admin invite | NULL ⚠️ | `now()` | Yes for pre-0.17.3 deploys |
+| First OIDC login (auto-provision) | NULL ⚠️ | `now()` | Yes for pre-0.17.3 deploys |
+
+If you've never been on a pre-0.17.3 deploy you can skip this
+playbook entirely — there's nothing to fix.
+
+---
+
 ## Related docs
 
+- `docs/SAAS_DEPLOY.md` — fresh-box deploy walkthrough behind NPM
 - `docs/SAAS_PLAN.md` — pricing tiers + feature gating (source of truth)
 - `docs/STRIPE_SETUP.md` — initial Stripe configuration walkthrough
 - `docs/TERMS_OF_SERVICE.md` — placeholder (legal review required before launch)

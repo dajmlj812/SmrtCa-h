@@ -246,7 +246,7 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <tr>
 <td><strong>0.18.x</strong></td>
 <td><strong>Competitive parity &amp; depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower</strong></td>
-<td>🔜 In progress — 0.18.0…0.18.8 shipped 2026-05-24</td>
+<td>✅ Complete — 0.18.0…0.18.12 shipped 2026-05-24</td>
 </tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
@@ -729,48 +729,35 @@ app key) and deletes them. New
 billing, webhook, tenant invites, super-admin invites).
 Legacy env-var names still work as fallback so operators
 with old <code>.env</code> files keep working. 102 tests still pass.</li>
-<li><strong>0.18.9</strong> 📋 — <strong>SaaS deploy guide + runbook gaps</strong> (~3
-hours, docs-only). Two artifacts left over from the
-smrtcash-test deploy:<ul>
-<li><strong>New <code>docs/SAAS_DEPLOY.md</code></strong> — step-by-step for putting
-SmrtCash behind Nginx Proxy Manager on a fresh box.
-Covers the actual sequence we ran:
-SSH preflight, deploy-key generation, <code>docker-compose. override.yml</code> for the <code>proxy</code> network (no host port
-publish), <code>.env</code> generation with strong secrets, NPM
-proxy-host config with the right advanced-tab snippet,
-SMTP relay choice (with the Maileroo URL-mangling
-lesson called out so future operators don&#39;t go on the
-same wild-goose chase), DNS verification, sandbox cleanup.
-The self-host single-container doc covers a developer&#39;s
-laptop — this covers a SaaS deploy.</li>
-<li><strong>Operator runbook entry: &quot;User stuck on verification
-gate&quot;</strong> — append to <code>docs/OPERATOR_RUNBOOK.md</code> with
-the SQL one-liner from 0.17.3&#39;s CHANGELOG and the
-pre-0.17.3 vs post-0.17.3 behavior matrix. Future
-operators upgrading from an older deploy will have a
-list of stuck users to unblock; this is the
-one-command fix.</li>
+<li><strong>0.18.9</strong> ✅ (released as v0.18.9 2026-05-24) — <strong>Form
+contrast fix</strong> (out-of-band). Inputs without explicit
+<code>type=</code> attributes fell through to an older CSS rule that
+hardcoded white background → washed-out look in dark mode.
+Consolidated to one rule covering every input type +
+themed file-input + <code>::file-selector-button</code>.</li>
+<li><strong>0.18.10</strong> ✅ (released as v0.18.10 2026-05-24) —
+<strong>Dropdown lifecycle audit + defensive <code>&lt;select&gt;</code> fix</strong>
+(out-of-band). Audited every popover; all already on the
+safe <code>mousedown</code> outside-click pattern. Dropped the CSS
+<code>transition</code> on <code>&lt;select&gt;:focus</code> as a guard against a
+Chromium bug.</li>
+<li><strong>0.18.11</strong> ✅ (released 2026-05-24) — **SaaS deploy guide<ul>
+<li>runbook gaps**. New <code>docs/SAAS_DEPLOY.md</code> walking through
+NPM-fronted deploy on a fresh box (11 sections, with the
+Maileroo URL-mangling lesson called out). New runbook
+entry for &quot;User stuck on verification gate&quot; with the SQL
+one-liner + pre-0.17.3-vs-post behavior matrix.</li>
 </ul>
 </li>
-<li><strong>0.18.10</strong> 📋 — <strong>Settings input validation guardrails</strong>
-(~half day). The <code>@</code>-instead-of-<code>.</code> typo that consumed
-hours of diagnosis would have been caught instantly by
-client-side or server-side URL-shape validation on the
-settings page. Slice scope:<ul>
-<li>Server: every URL-typed setting key
-(<code>PUBLIC_BASE_URL</code>, <code>SUPPORT_URL</code>, <code>OLLAMA_BASE_URL</code>,
-<code>STRIPE_PUBLIC_BASE_URL</code> until 0.18.6 retires it)
-runs through <code>new URL(value)</code> at write time; reject
-400 + clear error message on parse failure.</li>
-<li>Web: per-key input validation on <code>SettingsPage</code> —
-URL keys get a small &quot;this doesn&#39;t look like a valid
-URL&quot; hint inline before the Save button enables.</li>
-<li>Bonus: visual warning when a URL host contains an <code>@</code>
-(RFC-allowed but almost always a typo of a <code>.</code>). The
-one-line check that would have saved this week&#39;s
-diagnosis time.</li>
-</ul>
-</li>
+<li><strong>0.18.12</strong> ✅ (released 2026-05-24) — <strong>Settings URL
+validation guardrails</strong>. Server-side <code>validateUrlSetting()</code>
+runs every URL-typed key through <code>new URL()</code> at write
+time, rejects 400 with an actionable message. Catches the
+<code>@</code>-instead-of-<code>.</code> typo that consumed hours of debugging
+on the test deploy. Web: per-key URL hint inline below
+the input, Save button disabled while invalid. Bonus:
+styled the <code>.hint.warn</code> CSS class that 3 pre-existing
+call sites were using without any rule. 6 new unit tests.</li>
 </ul>
 <h3 id="deeper-bench-slice-tbd">Deeper bench (slice TBD)<a class="heading-anchor" href="#deeper-bench-slice-tbd">#</a></h3>
 <p>These showed up in the competitive read but are heavier; they
@@ -832,7 +819,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 03:32:10 UTC · commit 7453a6b</span>
+  <span>Generated 2026-05-25 03:43:37 UTC · commit 18b1b2d</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

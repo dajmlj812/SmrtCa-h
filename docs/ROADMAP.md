@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.8 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | ✅ Complete — 0.18.0…0.18.12 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -548,45 +548,33 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   billing, webhook, tenant invites, super-admin invites).
   Legacy env-var names still work as fallback so operators
   with old `.env` files keep working. 102 tests still pass.
-- **0.18.9** 📋 — **SaaS deploy guide + runbook gaps** (~3
-  hours, docs-only). Two artifacts left over from the
-  smrtcash-test deploy:
-  - **New `docs/SAAS_DEPLOY.md`** — step-by-step for putting
-    SmrtCash behind Nginx Proxy Manager on a fresh box.
-    Covers the actual sequence we ran:
-    SSH preflight, deploy-key generation, `docker-compose.
-    override.yml` for the `proxy` network (no host port
-    publish), `.env` generation with strong secrets, NPM
-    proxy-host config with the right advanced-tab snippet,
-    SMTP relay choice (with the Maileroo URL-mangling
-    lesson called out so future operators don't go on the
-    same wild-goose chase), DNS verification, sandbox cleanup.
-    The self-host single-container doc covers a developer's
-    laptop — this covers a SaaS deploy.
-  - **Operator runbook entry: "User stuck on verification
-    gate"** — append to `docs/OPERATOR_RUNBOOK.md` with
-    the SQL one-liner from 0.17.3's CHANGELOG and the
-    pre-0.17.3 vs post-0.17.3 behavior matrix. Future
-    operators upgrading from an older deploy will have a
-    list of stuck users to unblock; this is the
-    one-command fix.
-- **0.18.10** 📋 — **Settings input validation guardrails**
-  (~half day). The `@`-instead-of-`.` typo that consumed
-  hours of diagnosis would have been caught instantly by
-  client-side or server-side URL-shape validation on the
-  settings page. Slice scope:
-  - Server: every URL-typed setting key
-    (`PUBLIC_BASE_URL`, `SUPPORT_URL`, `OLLAMA_BASE_URL`,
-    `STRIPE_PUBLIC_BASE_URL` until 0.18.6 retires it)
-    runs through `new URL(value)` at write time; reject
-    400 + clear error message on parse failure.
-  - Web: per-key input validation on `SettingsPage` —
-    URL keys get a small "this doesn't look like a valid
-    URL" hint inline before the Save button enables.
-  - Bonus: visual warning when a URL host contains an `@`
-    (RFC-allowed but almost always a typo of a `.`). The
-    one-line check that would have saved this week's
-    diagnosis time.
+- **0.18.9** ✅ (released as v0.18.9 2026-05-24) — **Form
+  contrast fix** (out-of-band). Inputs without explicit
+  `type=` attributes fell through to an older CSS rule that
+  hardcoded white background → washed-out look in dark mode.
+  Consolidated to one rule covering every input type +
+  themed file-input + `::file-selector-button`.
+- **0.18.10** ✅ (released as v0.18.10 2026-05-24) —
+  **Dropdown lifecycle audit + defensive `<select>` fix**
+  (out-of-band). Audited every popover; all already on the
+  safe `mousedown` outside-click pattern. Dropped the CSS
+  `transition` on `<select>:focus` as a guard against a
+  Chromium bug.
+- **0.18.11** ✅ (released 2026-05-24) — **SaaS deploy guide
+  + runbook gaps**. New `docs/SAAS_DEPLOY.md` walking through
+  NPM-fronted deploy on a fresh box (11 sections, with the
+  Maileroo URL-mangling lesson called out). New runbook
+  entry for "User stuck on verification gate" with the SQL
+  one-liner + pre-0.17.3-vs-post behavior matrix.
+- **0.18.12** ✅ (released 2026-05-24) — **Settings URL
+  validation guardrails**. Server-side `validateUrlSetting()`
+  runs every URL-typed key through `new URL()` at write
+  time, rejects 400 with an actionable message. Catches the
+  `@`-instead-of-`.` typo that consumed hours of debugging
+  on the test deploy. Web: per-key URL hint inline below
+  the input, Save button disabled while invalid. Bonus:
+  styled the `.hint.warn` CSS class that 3 pre-existing
+  call sites were using without any rule. 6 new unit tests.
 
 ### Deeper bench (slice TBD)
 

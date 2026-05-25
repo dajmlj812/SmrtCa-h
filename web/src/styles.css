@@ -375,6 +375,18 @@ a:hover {
   font-weight: 600;
   color: var(--muted);
 }
+/* 0.18.12 — inline form hint (used by ResetPasswordPage, SignupPage,
+ * SettingsPage URL validation). Renders below a form field to
+ * explain why the Save button is disabled. */
+.hint {
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--muted);
+}
+.hint.warn {
+  color: var(--warn);
+}
+
 /* 0.18.9 — base input/select rule. Uses theme variables instead
  * of a hardcoded white background so the field doesn't render as
  * a bright-white block on dark mode. The more specific rule near

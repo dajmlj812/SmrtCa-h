@@ -9,10 +9,80 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.10 audits every dropdown / popover lifecycle for
-mouse-move-causes-close issues and drops the CSS transition on
-`<select>:focus` as a defensive guard against a known Chromium
-bug._
+_0.18.11 + 0.18.12 close out the 0.18.x competitive-parity series.
+0.18.11 ships the SaaS deploy walkthrough + an operator runbook
+entry for the verification-gate stuck-user case. 0.18.12 adds
+URL-shape validation on every URL-typed setting (with a
+specific catch for the `@`-instead-of-`.` typo that drove this
+whole slice)._
+
+---
+
+## [0.18.12] — 2026-05-24 — Settings URL validation guardrails
+
+The `@`-instead-of-`.` typo that consumed hours of diagnosis
+during the smrtcash-test deploy (CHANGELOG 0.18.8) would have
+been caught instantly by URL-shape validation on the settings
+page. This slice adds that validation in both directions.
+
+**Server** (`server/src/routes/settings.ts`):
+- New `validateUrlSetting(key, value)` exported for testing.
+  Runs `new URL(value)`, rejects 400 on parse failure with an
+  actionable message.
+- Requires `http:` or `https:` scheme — no `file:`, `ftp:`,
+  `javascript:` etc.
+- Specifically rejects URLs with a `username` or `password`
+  component (RFC-legal userinfo, but in our settings context
+  always a typo of `.` in a hostname — the exact bug pattern).
+- New `URL_TYPED_KEYS` set: `PUBLIC_BASE_URL`, `SUPPORT_URL`,
+  `OLLAMA_BASE_URL`. PUT to any of these runs through the
+  validator before persistence.
+
+**Web** (`web/src/pages/SettingsPage.tsx`):
+- Per-key URL hint shown below the input when the typed value
+  doesn't parse, has a non-http scheme, or contains an `@` in
+  the host position.
+- Save button disabled while the hint is non-null — you can't
+  even submit a typo.
+- Input gets `type="url"` for URL-typed keys so the browser's
+  native invalid-URL state engages too.
+
+**Tests**: 6 new unit tests covering happy paths, non-URLs,
+non-http schemes, and the specific `@`-typo case from the
+deploy. All 77 server unit + tenant-iso tests pass.
+
+**Bonus polish**: the `.hint.warn` CSS class (used here and on
+ResetPasswordPage + SignupPage password validation) had no CSS
+rule at all — it was rendering as plain unstyled text in every
+spot it was used. Now styled as small warn-colored text below
+the field.
+
+---
+
+## [0.18.11] — 2026-05-24 — SaaS deploy guide + runbook entry
+
+Docs-only — captures the smrtcash-test deploy sequence so the
+next operator doesn't rediscover the gotchas.
+
+- **New `docs/SAAS_DEPLOY.md`** — 11-section walkthrough for
+  putting SmrtCash on a fresh box behind Nginx Proxy Manager:
+  SSH preflight, deploy-key generation, `docker-compose.
+  override.yml` for the `proxy` network (no host-port publish),
+  `.env` generation with strong secrets, NPM proxy-host config
+  with the exact advanced-tab snippet, SMTP relay choice (with
+  the Maileroo URL-mangling lesson called out so future
+  operators don't repeat the wild-goose chase), DNS
+  verification, first super-admin creation, sandbox cleanup,
+  day-2 ops, and a troubleshooting table.
+- **`docs/OPERATOR_RUNBOOK.md` § "User stuck on verification
+  gate"** — appended. Covers the pre-0.17.3 footgun where
+  invitation / OIDC / super-admin-invite users were left with
+  `email_verified_at IS NULL` and bounced at login. Ships the
+  SQL one-liner that unsticks them in bulk, plus a
+  pre-0.17.3 vs post-0.17.3 behavior matrix so the operator
+  can tell at a glance whether the playbook even applies.
+
+HTML mirror regenerated.
 
 ---
 

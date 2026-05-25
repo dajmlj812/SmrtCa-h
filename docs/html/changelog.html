@@ -161,10 +161,73 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.10 audits every dropdown / popover lifecycle for
-mouse-move-causes-close issues and drops the CSS transition on
-<code>&lt;select&gt;:focus</code> as a defensive guard against a known Chromium
-bug.</em></p>
+<p><em>0.18.11 + 0.18.12 close out the 0.18.x competitive-parity series.
+0.18.11 ships the SaaS deploy walkthrough + an operator runbook
+entry for the verification-gate stuck-user case. 0.18.12 adds
+URL-shape validation on every URL-typed setting (with a
+specific catch for the <code>@</code>-instead-of-<code>.</code> typo that drove this
+whole slice).</em></p>
+<hr>
+<h2 id="01812-2026-05-24-settings-url-validation-guardrails">[0.18.12] — 2026-05-24 — Settings URL validation guardrails<a class="heading-anchor" href="#01812-2026-05-24-settings-url-validation-guardrails">#</a></h2>
+<p>The <code>@</code>-instead-of-<code>.</code> typo that consumed hours of diagnosis
+during the smrtcash-test deploy (CHANGELOG 0.18.8) would have
+been caught instantly by URL-shape validation on the settings
+page. This slice adds that validation in both directions.</p>
+<p><strong>Server</strong> (<code>server/src/routes/settings.ts</code>):</p>
+<ul>
+<li>New <code>validateUrlSetting(key, value)</code> exported for testing.
+Runs <code>new URL(value)</code>, rejects 400 on parse failure with an
+actionable message.</li>
+<li>Requires <code>http:</code> or <code>https:</code> scheme — no <code>file:</code>, <code>ftp:</code>,
+<code>javascript:</code> etc.</li>
+<li>Specifically rejects URLs with a <code>username</code> or <code>password</code>
+component (RFC-legal userinfo, but in our settings context
+always a typo of <code>.</code> in a hostname — the exact bug pattern).</li>
+<li>New <code>URL_TYPED_KEYS</code> set: <code>PUBLIC_BASE_URL</code>, <code>SUPPORT_URL</code>,
+<code>OLLAMA_BASE_URL</code>. PUT to any of these runs through the
+validator before persistence.</li>
+</ul>
+<p><strong>Web</strong> (<code>web/src/pages/SettingsPage.tsx</code>):</p>
+<ul>
+<li>Per-key URL hint shown below the input when the typed value
+doesn&#39;t parse, has a non-http scheme, or contains an <code>@</code> in
+the host position.</li>
+<li>Save button disabled while the hint is non-null — you can&#39;t
+even submit a typo.</li>
+<li>Input gets <code>type=&quot;url&quot;</code> for URL-typed keys so the browser&#39;s
+native invalid-URL state engages too.</li>
+</ul>
+<p><strong>Tests</strong>: 6 new unit tests covering happy paths, non-URLs,
+non-http schemes, and the specific <code>@</code>-typo case from the
+deploy. All 77 server unit + tenant-iso tests pass.</p>
+<p><strong>Bonus polish</strong>: the <code>.hint.warn</code> CSS class (used here and on
+ResetPasswordPage + SignupPage password validation) had no CSS
+rule at all — it was rendering as plain unstyled text in every
+spot it was used. Now styled as small warn-colored text below
+the field.</p>
+<hr>
+<h2 id="01811-2026-05-24-saas-deploy-guide-runbook-entry">[0.18.11] — 2026-05-24 — SaaS deploy guide + runbook entry<a class="heading-anchor" href="#01811-2026-05-24-saas-deploy-guide-runbook-entry">#</a></h2>
+<p>Docs-only — captures the smrtcash-test deploy sequence so the
+next operator doesn&#39;t rediscover the gotchas.</p>
+<ul>
+<li><strong>New <code>docs/SAAS_DEPLOY.md</code></strong> — 11-section walkthrough for
+putting SmrtCash on a fresh box behind Nginx Proxy Manager:
+SSH preflight, deploy-key generation, <code>docker-compose. override.yml</code> for the <code>proxy</code> network (no host-port publish),
+<code>.env</code> generation with strong secrets, NPM proxy-host config
+with the exact advanced-tab snippet, SMTP relay choice (with
+the Maileroo URL-mangling lesson called out so future
+operators don&#39;t repeat the wild-goose chase), DNS
+verification, first super-admin creation, sandbox cleanup,
+day-2 ops, and a troubleshooting table.</li>
+<li><strong><code>docs/OPERATOR_RUNBOOK.md</code> § &quot;User stuck on verification
+gate&quot;</strong> — appended. Covers the pre-0.17.3 footgun where
+invitation / OIDC / super-admin-invite users were left with
+<code>email_verified_at IS NULL</code> and bounced at login. Ships the
+SQL one-liner that unsticks them in bulk, plus a
+pre-0.17.3 vs post-0.17.3 behavior matrix so the operator
+can tell at a glance whether the playbook even applies.</li>
+</ul>
+<p>HTML mirror regenerated.</p>
 <hr>
 <h2 id="01810-2026-05-24-dropdown-lifecycle-audit-defensive-fix">[0.18.10] — 2026-05-24 — Dropdown lifecycle audit + defensive fix<a class="heading-anchor" href="#01810-2026-05-24-dropdown-lifecycle-audit-defensive-fix">#</a></h2>
 <p>User reported that some dropdowns were retracting when the mouse
@@ -6805,7 +6868,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 03:32:09 UTC · commit 7453a6b</span>
+  <span>Generated 2026-05-25 03:43:36 UTC · commit 18b1b2d</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
