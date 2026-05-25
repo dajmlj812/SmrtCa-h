@@ -69,7 +69,45 @@ export function validateUrlSetting(
   if (parsed.hostname === '') {
     return `${key} has no host. Got: "${value}"`;
   }
+  // F-23 (security audit 2026-05-25) — for keys whose value drives a
+  // server-initiated fetch (OLLAMA_BASE_URL), refuse private /
+  // loopback / link-local / metadata-service IPs at save time.
+  // SUPPORT_URL is displayed but not fetched, so it's exempt.
+  // PUBLIC_BASE_URL goes in email/redirect links — also not fetched
+  // server-side. Only OLLAMA_BASE_URL is fetched, but checking all
+  // three URL-typed keys is cheap defense-in-depth.
+  if (key === 'OLLAMA_BASE_URL' || key === 'PUBLIC_BASE_URL') {
+    const host = parsed.hostname.replace(/^\[/, '').replace(/\]$/, '');
+    if (isInternalIpLiteral(host)) {
+      return `${key} host ${host} is in a private/loopback IP range — refusing.`;
+    }
+  }
   return null;
+}
+
+// Inline copy of the IPv4/IPv6 private-range check so we don't have
+// to import url-safety into this hot path. Same logic, no DNS work
+// (the async fetch-time path in url-safety.ts handles DNS rebinding).
+function isInternalIpLiteral(host: string): boolean {
+  // Quick reject if not an IP literal.
+  const isV4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+  const isV6 = /:/.test(host);
+  if (!isV4 && !isV6) return false;
+  if (isV4) {
+    const [a, b] = host.split('.').map(Number) as [number, number, number, number];
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a >= 224) return true;
+    return false;
+  }
+  const norm = host.toLowerCase();
+  if (norm === '::1' || norm === '::' || norm.startsWith('fe8') || norm.startsWith('fe9') ||
+      norm.startsWith('fea') || norm.startsWith('feb') || norm.startsWith('fc') || norm.startsWith('fd')) {
+    return true;
+  }
+  return false;
 }
 
 async function buildRow(meta: (typeof KNOWN_SETTINGS)[number]): Promise<PublicSettingRow> {

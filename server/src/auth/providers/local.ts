@@ -69,6 +69,12 @@ export class LocalAuthProvider implements AuthProvider {
       providerUserId: user.id,
       email: user.email ?? email,
       displayName: user.name ?? undefined,
+      // F-20 — local users have already passed the verify-email loop
+      // by the time they can sign in (the login route gates on
+      // email_verified_at). So asserting emailVerified is safe and
+      // lets resolveIdentity link this identity to an existing
+      // user row if any.
+      emailVerified: true,
     };
   }
 }

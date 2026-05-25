@@ -347,7 +347,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const token = newVerificationToken();
     const expiresAt = new Date(Date.now() + VERIFICATION_TTL_HOURS * 3_600_000);
 
-    await withTransaction(async (client) => {
+    // F-25 (security audit 2026-05-25) — concurrent signups for the
+    // same email previously raced: the EXISTS check above isn't
+    // transactional with the INSERT, so two parallel callers could
+    // both pass the check and the loser would hit users.email's
+    // UNIQUE constraint, producing an uncaught 500. Now: catch the
+    // duplicate-key error from the INSERT and convert to the same
+    // idempotent 202 response a sequential second-signup would get.
+    try {
+      await withTransaction(async (client) => {
       // Unverified user — email_verified_at stays NULL until
       // /api/auth/verify-email runs. No tenant yet; that's
       // provisioned at verify time so abandoned signups don't
@@ -370,6 +378,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         [userId, token, expiresAt],
       );
     });
+    } catch (err) {
+      // F-25 — duplicate key on users.email = race lost. Return the
+      // same idempotent 202 a normal "email already in use" caller
+      // would get. Anything else is a genuine 500.
+      const message = err instanceof Error ? err.message : String(err);
+      if (/duplicate key/i.test(message) && /users_email/i.test(message)) {
+        return reply.code(202).send({ status: 'verification_sent' });
+      }
+      throw err;
+    }
 
     await sendVerificationEmail(req, email, token, expiresAt);
     return reply.code(202).send({ status: 'verification_sent' });
@@ -1023,6 +1041,159 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return { user: r.rows[0] };
     },
   );
+
+  // ── F-35: user-initiated account deletion ──────────────────────
+  //
+  // GDPR Article 17 / CCPA / state-level "right to erasure" gives the
+  // user a self-service path to delete their account and the data
+  // associated with it. This endpoint:
+  //
+  //   1. Confirms the request with a body confirmation token (the
+  //      user's own email + literal "DELETE") so a CSRF can't trick
+  //      a session into self-destruction.
+  //   2. For every tenant where the user is the SOLE ADMIN:
+  //      a) cancels the Stripe subscription if any (best effort);
+  //      b) walks the attachments dir for that tenant and unlink()s
+  //         every file (DB rows go away with cascade);
+  //      c) DELETE FROM tenants WHERE id = X — cascades to every
+  //         tenant-scoped data table (F-34 migration 052 made every
+  //         tenant_id FK CASCADE).
+  //   3. DELETE FROM users WHERE id = current_user — cascades to
+  //      memberships, sessions, user_identities, api_keys,
+  //      password_resets, email_verifications. audit_log rows
+  //      survive with actor_user_id SET NULL so platform-level
+  //      forensics is preserved.
+  //
+  // For tenants where the user is NOT the sole admin (e.g., a
+  // household child, or a spouse in a Family plan), only the
+  // membership row is deleted; the tenant stays.
+  app.delete('/api/me/account', async (req, reply) => {
+    if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
+    if (req.user.via === 'apikey') {
+      return reply.code(403).send({
+        error: 'API keys cannot delete the underlying user account. Sign in with the browser session to delete your account.',
+      });
+    }
+    const body = (req.body ?? {}) as { confirm?: unknown };
+    const confirm = typeof body.confirm === 'string' ? body.confirm.trim() : '';
+    // Look up the user's email for the confirmation match.
+    const u = await query<{ email: string | null }>(
+      `SELECT email FROM users WHERE id = $1`,
+      [req.user.id],
+    );
+    if (u.rowCount === 0) {
+      return reply.code(404).send({ error: 'User not found' });
+    }
+    const userEmail = (u.rows[0]!.email ?? '').toLowerCase();
+    if (confirm.toLowerCase() !== `delete ${userEmail}`) {
+      return reply.code(400).send({
+        error: `To confirm deletion, send body { "confirm": "DELETE ${userEmail}" }`,
+      });
+    }
+
+    // Find every tenant where this user is the sole admin. Those
+    // tenants are "owned" by them and go away too.
+    const ownedTenants = await query<{
+      tenant_id: string;
+      stripe_customer_id: string | null;
+      stripe_subscription_id: string | null;
+    }>(
+      `WITH admin_counts AS (
+         SELECT tenant_id, COUNT(*) FILTER (WHERE role = 'admin') AS admins
+           FROM memberships
+          GROUP BY tenant_id
+       )
+       SELECT m.tenant_id,
+              s.stripe_customer_id,
+              s.stripe_subscription_id
+         FROM memberships m
+         JOIN admin_counts c ON c.tenant_id = m.tenant_id
+    LEFT JOIN subscriptions s ON s.tenant_id = m.tenant_id
+        WHERE m.user_id = $1
+          AND m.role   = 'admin'
+          AND c.admins = 1`,
+      [req.user.id],
+    );
+
+    // Best-effort cleanup of EXTERNAL resources (Stripe customer +
+    // attachment files on disk) BEFORE the DB delete cascade nukes
+    // their pointers. If any of these throw, we log and continue so
+    // the actual user delete still happens — a half-cleaned external
+    // resource is fixable; a stuck account is not.
+    const { config } = await import('../config.js');
+    const { unlink } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    for (const t of ownedTenants.rows) {
+      // 1) Cancel + delete Stripe customer if any.
+      if (t.stripe_customer_id) {
+        try {
+          const { isStripeConfigured, getStripe } = await import('../billing/stripe.js');
+          if (isStripeConfigured()) {
+            const stripe = getStripe();
+            if (t.stripe_subscription_id) {
+              await stripe.subscriptions
+                .cancel(t.stripe_subscription_id)
+                .catch(() => undefined);
+            }
+            await stripe.customers
+              .del(t.stripe_customer_id)
+              .catch(() => undefined);
+          }
+        } catch (err) {
+          req.log.warn(
+            { err, tenantId: t.tenant_id },
+            'Stripe cleanup failed during account deletion — continuing',
+          );
+        }
+      }
+      // 2) Walk the tenant's attachments and unlink the files.
+      try {
+        const paths = await query<{ storage_path: string }>(
+          `SELECT storage_path FROM attachments WHERE tenant_id = $1`,
+          [t.tenant_id],
+        );
+        for (const row of paths.rows) {
+          const resolved = join(config.attachmentsDir, row.storage_path);
+          // Guard against a malformed storage_path escaping the root.
+          if (!resolved.startsWith(config.attachmentsDir)) continue;
+          await unlink(resolved).catch(() => undefined);
+        }
+      } catch (err) {
+        req.log.warn(
+          { err, tenantId: t.tenant_id },
+          'Attachment file cleanup failed during account deletion — continuing',
+        );
+      }
+    }
+
+    // The DB delete cascade does the rest. ON DELETE CASCADE on
+    // memberships -> sessions -> identities -> api_keys, and (post
+    // migration 052) every tenant_id FK on data tables cascades to
+    // the data when the tenant is deleted. audit_log.actor_user_id
+    // is SET NULL so the platform-level audit history survives.
+    await withTransaction(async (client) => {
+      for (const t of ownedTenants.rows) {
+        await client.query(`DELETE FROM tenants WHERE id = $1`, [t.tenant_id]);
+      }
+      await client.query(`DELETE FROM users WHERE id = $1`, [req.user!.id]);
+    });
+
+    // Clear the cookie — the session row is already gone via cascade.
+    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+
+    await recordAudit({
+      actorUserId: null,
+      actorKind: 'tenant_user',
+      action: 'user.account_deleted',
+      details: {
+        tenants_deleted: ownedTenants.rowCount ?? 0,
+      },
+    });
+    return reply.code(200).send({
+      deleted: true,
+      tenants_deleted: ownedTenants.rowCount ?? 0,
+    });
+  });
 }
 
 // Helper used by membership / invite routes to mint a fresh random token.

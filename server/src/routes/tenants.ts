@@ -241,6 +241,18 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
         `DELETE FROM memberships WHERE tenant_id = $1 AND user_id = $2`,
         [req.params.id, req.params.userId],
       );
+      // F-36 (security audit 2026-05-25) — invalidate the removed
+      // user's session if it was active in this tenant. Otherwise
+      // the user keeps full access for up to 7 days until their
+      // session expires. NULLing active_tenant_id leaves the session
+      // intact (so they remain logged in) but the requireTenant gate
+      // will 403 on every subsequent tenant-scoped API hit.
+      await query(
+        `UPDATE sessions
+            SET active_tenant_id = NULL
+          WHERE user_id = $1 AND active_tenant_id = $2`,
+        [req.params.userId, req.params.id],
+      );
       return reply.code(204).send();
     },
   );

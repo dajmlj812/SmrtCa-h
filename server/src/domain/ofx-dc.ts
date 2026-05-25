@@ -225,6 +225,12 @@ export async function postOfxRequest(
   body: string,
   opts: PostOfxOptions = {},
 ): Promise<string> {
+  // F-23 — re-check at fetch time so DNS rebinding (resolver returns
+  // 8.8.8.8 at save time, 127.0.0.1 at fetch time) doesn't slip past
+  // the settings-time check. The import is dynamic to avoid a circular
+  // dependency with util/url-safety pulling in dns lookups.
+  const { assertSafeUrlForFetch } = await import('../util/url-safety.js');
+  await assertSafeUrlForFetch(url);
   const f = opts.fetchImpl ?? fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);

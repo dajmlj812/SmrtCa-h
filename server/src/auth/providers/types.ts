@@ -38,6 +38,19 @@ export interface ProviderIdentity {
   providerUserId: string;
   email?: string;
   displayName?: string;
+  /**
+   * F-20 — true when the identity provider asserts the email is
+   * verified at the provider end (OIDC `email_verified` claim,
+   * SAML mailVerified attribute, etc.). The `local` provider sets
+   * this to true after the verify-email loop completes.
+   *
+   * resolveIdentity() refuses to auto-LINK a new provider identity
+   * to an EXISTING local user by email unless this is true — without
+   * the check, an attacker who controls an OIDC provider that allows
+   * unverified emails could claim victim@example.com and be logged
+   * in as the local user with that email.
+   */
+  emailVerified?: boolean;
 }
 
 export interface BeginRedirect {

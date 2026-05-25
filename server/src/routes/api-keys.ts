@@ -18,7 +18,7 @@ import { recordAudit } from '../domain/audit.js';
  */
 
 const KEY_COLUMNS = `id, tenant_id, key_prefix, label, scopes,
-  last_used_at, last_used_ip, revoked_at, created_at`;
+  last_used_at, last_used_ip, revoked_at, expires_at, created_at`;
 
 const MAX_KEYS_PER_USER = 10;
 
@@ -42,7 +42,7 @@ export async function apiKeyRoutes(app: FastifyInstance): Promise<void> {
   // caller's currently active tenant, so the request needs an
   // active tenant context (the user must pick one if they're
   // multi-tenant before minting).
-  app.post<{ Body: { label?: string } }>(
+  app.post<{ Body: { label?: string; expiresInDays?: number } }>(
     '/api/me/api-keys',
     async (req, reply) => {
       if (!req.user) return reply.code(401).send({ error: 'Not authenticated' });
@@ -53,6 +53,20 @@ export async function apiKeyRoutes(app: FastifyInstance): Promise<void> {
       }
       if (label.length > 200) {
         return reply.code(400).send({ error: 'label is too long (max 200)' });
+      }
+      // F-12 — optional expiry. Caller sends `expiresInDays` (1-365);
+      // omitted = no expiry (current behavior). The DB column stores
+      // the absolute timestamp so the auth path doesn't have to do
+      // any arithmetic per request.
+      let expiresAt: Date | null = null;
+      if (req.body?.expiresInDays !== undefined) {
+        const days = Number(req.body.expiresInDays);
+        if (!Number.isFinite(days) || days < 1 || days > 365) {
+          return reply
+            .code(400)
+            .send({ error: 'expiresInDays must be between 1 and 365' });
+        }
+        expiresAt = new Date(Date.now() + days * 86_400_000);
       }
       // Cap. Prevents a runaway script from minting unlimited
       // tokens, and the operator can always raise the constant if
@@ -75,10 +89,10 @@ export async function apiKeyRoutes(app: FastifyInstance): Promise<void> {
       const { token, hash, prefix } = generateToken();
       const r = await query(
         `INSERT INTO api_keys
-           (user_id, tenant_id, key_hash, key_prefix, label, scopes)
-         VALUES ($1, $2, $3, $4, $5, 'read')
+           (user_id, tenant_id, key_hash, key_prefix, label, scopes, expires_at)
+         VALUES ($1, $2, $3, $4, $5, 'read', $6)
          RETURNING ${KEY_COLUMNS}`,
-        [req.user.id, req.user.tenantId, hash, prefix, label],
+        [req.user.id, req.user.tenantId, hash, prefix, label, expiresAt],
       );
       await recordAudit({
         tenantId: req.user.tenantId,

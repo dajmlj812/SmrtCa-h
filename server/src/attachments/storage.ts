@@ -93,6 +93,62 @@ export function validateMimeType(mime: string): void {
   }
 }
 
+/**
+ * F-21 (security audit 2026-05-25) — magic-byte sniff.
+ *
+ * The Content-Type header is operator-controlled (a multipart part
+ * carries whatever Content-Type the caller stuffed into it). Before
+ * this check, an attacker could upload an SVG (with embedded <script>)
+ * with Content-Type: application/pdf and we'd store it as PDF, then
+ * the preview endpoint serving inline + missing X-Content-Type-Options
+ * (now fixed by helmet, F-04) created an XSS-via-attachment-preview
+ * vector.
+ *
+ * We sniff the first few bytes of the actual content and refuse when
+ * the magic bytes don't match the claimed type. The four allowed
+ * types have well-known magic byte signatures:
+ *
+ *   JPEG: FF D8 FF
+ *   PNG:  89 50 4E 47 0D 0A 1A 0A
+ *   WebP: 52 49 46 46 .. .. .. .. 57 45 42 50  (RIFF....WEBP)
+ *   PDF:  25 50 44 46 2D                       (%PDF-)
+ */
+export function validateMagicBytes(mime: string, buffer: Buffer): void {
+  const sniff = (sig: number[], offset = 0): boolean => {
+    if (buffer.length < offset + sig.length) return false;
+    for (let i = 0; i < sig.length; i++) {
+      if (buffer[offset + i] !== sig[i]) return false;
+    }
+    return true;
+  };
+  let matched = false;
+  switch (mime) {
+    case 'image/jpeg':
+      matched = sniff([0xff, 0xd8, 0xff]);
+      break;
+    case 'image/png':
+      matched = sniff([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      break;
+    case 'image/webp':
+      matched =
+        sniff([0x52, 0x49, 0x46, 0x46]) && // RIFF
+        sniff([0x57, 0x45, 0x42, 0x50], 8); // WEBP at offset 8
+      break;
+    case 'application/pdf':
+      matched = sniff([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
+      break;
+    default:
+      // validateMimeType ran before us; we should never see another
+      // mime here, but fail closed if we do.
+      matched = false;
+  }
+  if (!matched) {
+    throw new AttachmentValidationError(
+      `File content does not match the claimed type "${mime}". Refusing to store.`,
+    );
+  }
+}
+
 export function validateSize(bytes: number): void {
   if (bytes > MAX_FILE_BYTES) {
     throw new AttachmentValidationError(

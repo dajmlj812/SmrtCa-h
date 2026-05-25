@@ -23,6 +23,7 @@ import {
   storeAttachment,
   validateMimeType,
   validateSize,
+  validateMagicBytes,
 } from '../attachments/storage.js';
 import { getOcrProvider } from '../ocr/factory.js';
 import {
@@ -120,6 +121,11 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         try {
           validateMimeType(part.mimetype);
           validateSize(buffer.byteLength);
+          // F-21 — magic-byte sniff happens AFTER mime-type allowlist
+          // so the error messages stay clear when both checks would
+          // fail. A claimed-but-mismatched mime is more interesting
+          // to log than an outright-unsupported one.
+          validateMagicBytes(part.mimetype, buffer);
         } catch (err) {
           const message =
             err instanceof AttachmentValidationError

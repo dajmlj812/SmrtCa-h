@@ -76,6 +76,32 @@ services:
       - "${APP_PORT:-4000}:4000"
     volumes:
       - smrtcash-attachments:/data/attachments
+      # F-31 (security audit 2026-05-25) — backups live on disk so
+      # they need a writable mount too. Backups directory is
+      # /data/backups by default; the BACKUP_DIR setting overrides.
+      - smrtcash-backups:/data/backups
+    # F-31 — container hardening. The runtime image already uses a
+    # non-root `node` user (Dockerfile USER directive). These compose-
+    # level options layer defense-in-depth:
+    #   • read_only rootfs: the only writable paths are the explicit
+    #     volume mounts above (/data/attachments, /data/backups) + the
+    #     tmpfs below. A successful RCE can't drop a payload into /app
+    #     or anywhere else on the image filesystem.
+    #   • tmpfs for /tmp: Node needs a writable temp dir; this gives
+    #     it 64MB in RAM, not on disk, and it's cleared on restart.
+    #   • cap_drop ALL + no-new-privileges: container starts with the
+    #     minimal Linux capability set Node needs; CAP_NET_BIND_SERVICE
+    #     and friends aren't required since we bind on the unprivileged
+    #     port 4000.
+    #   • security_opt no-new-privileges: even if a process inside
+    #     the container has setuid bits, it can't elevate.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health"]
       interval: 10s
@@ -86,3 +112,4 @@ services:
 volumes:
   smrtcash-db-data:
   smrtcash-attachments:
+  smrtcash-backups:

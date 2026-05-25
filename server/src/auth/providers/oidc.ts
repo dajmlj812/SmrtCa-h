@@ -1,10 +1,27 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type {
   AuthProvider,
   BeginResult,
   ProviderDescriptor,
   ProviderIdentity,
 } from './types.js';
+
+/**
+ * F-20 (security audit 2026-05-25) — JWKS cache for ID-token
+ * signature verification. createRemoteJWKSet returns a function that
+ * fetches + caches the key set, including handling kid rotation and
+ * retrying on misses.
+ */
+const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+function getJwks(jwksUri: string): ReturnType<typeof createRemoteJWKSet> {
+  let jwks = jwksCache.get(jwksUri);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(jwksUri));
+    jwksCache.set(jwksUri, jwks);
+  }
+  return jwks;
+}
 
 /**
  * Generic OIDC provider (Authorization Code + PKCE).
@@ -167,28 +184,43 @@ export class OidcAuthProvider implements AuthProvider {
       throw new Error('OIDC token response had no id_token');
     }
 
-    const claims = decodeIdTokenPayload(tokens.id_token);
-
-    // Validate iss + aud claim shape. We don't verify signature in this
-    // first cut — the token came over a direct TLS POST.
-    if (claims.iss !== doc.issuer) {
+    // F-20 — verify the id_token's JWS signature against the
+    // provider's JWKS before trusting any claim in it. Previously we
+    // only decoded the payload and trusted the iss/aud/exp claims; a
+    // forged token signed by anyone would have passed. jose handles
+    // kid rotation, retries on miss, and rejects expired/not-before
+    // tokens in one call.
+    if (!doc.jwks_uri) {
       throw new Error(
-        `OIDC iss mismatch — got ${claims.iss}, expected ${doc.issuer}`,
+        'OIDC provider discovery document has no jwks_uri — cannot verify id_token signature',
       );
     }
-    const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-    if (!aud.includes(this.cfg.clientId)) {
-      throw new Error('OIDC aud claim does not include this client_id');
+    let claims: DecodedIdToken;
+    try {
+      const result = await jwtVerify(tokens.id_token, getJwks(doc.jwks_uri), {
+        issuer: doc.issuer,
+        audience: this.cfg.clientId,
+        clockTolerance: 30,
+      });
+      claims = result.payload as unknown as DecodedIdToken;
+    } catch (err) {
+      throw new Error(
+        `OIDC id_token signature verification failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
     if (claims.nonce && claims.nonce !== state.nonce) {
       throw new Error('OIDC nonce mismatch');
     }
-    if (claims.exp && claims.exp * 1000 < Date.now()) {
-      throw new Error('OIDC id_token expired');
-    }
 
     let email = claims.email;
     let name = claims.name ?? claims.preferred_username;
+    // F-20 — record whether the provider asserts the email is
+    // verified. resolveIdentity refuses to auto-LINK to an existing
+    // local user when this is false, so an attacker who controls a
+    // misconfigured IdP can't claim victim@example.com.
+    let emailVerified = claims.email_verified === true;
 
     // Some providers (GitHub) don't include email in the ID token.
     if ((!email || this.cfg.fetchUserInfo) && doc.userinfo_endpoint && tokens.access_token) {
@@ -199,10 +231,17 @@ export class OidcAuthProvider implements AuthProvider {
         if (uiRes.ok) {
           const info = (await uiRes.json()) as {
             email?: string;
+            email_verified?: boolean;
             name?: string;
             preferred_username?: string;
           };
-          email = email ?? info.email;
+          if (!email && info.email) email = info.email;
+          // If the ID token didn't carry email_verified but userinfo
+          // does, trust userinfo. Otherwise keep whatever the ID
+          // token said (defaults to false).
+          if (!emailVerified && info.email_verified === true) {
+            emailVerified = true;
+          }
           name = name ?? info.name ?? info.preferred_username;
         }
       } catch {
@@ -215,6 +254,7 @@ export class OidcAuthProvider implements AuthProvider {
       providerUserId: claims.sub,
       email,
       displayName: name,
+      emailVerified,
     };
   }
 

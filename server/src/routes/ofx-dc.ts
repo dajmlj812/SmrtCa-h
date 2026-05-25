@@ -12,6 +12,7 @@ import {
   CryptoNotConfiguredError,
 } from '../domain/crypto.js';
 import { OfxDcError, type PostOfxOptions } from '../domain/ofx-dc.js';
+import { validatePublicUrlSync } from '../util/url-safety.js';
 import {
   ofxDirectConnectSource,
   type OfxDirectConnectContext,
@@ -423,6 +424,16 @@ function validateBody(
   if (!name) return 'name is required';
   const ofxUrl = (b.ofxUrl ?? '').trim();
   if (!/^https?:\/\//.test(ofxUrl)) return 'ofxUrl must be an http(s) URL';
+  // F-23 (security audit 2026-05-25) — refuse private / loopback /
+  // link-local / metadata-service IPs. Without this, a paying customer
+  // with BANK_SYNC could point ofxUrl at 169.254.169.254 (cloud
+  // instance metadata) or 127.0.0.1:5432 (database) and trigger
+  // server-initiated requests with their OFX credentials in body.
+  try {
+    validatePublicUrlSync(ofxUrl);
+  } catch (err) {
+    return err instanceof Error ? err.message : 'ofxUrl is not a safe URL';
+  }
   const ofxOrg = (b.ofxOrg ?? '').trim();
   const ofxFid = (b.ofxFid ?? '').trim();
   if (!ofxOrg || !ofxFid) return 'ofxOrg and ofxFid are required';

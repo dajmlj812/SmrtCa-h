@@ -39,7 +39,17 @@ export async function createSession(
   };
 }
 
-/** Look up a session by id. Returns null when missing OR expired. */
+/**
+ * Look up a session by id. Returns null when missing, expired, or
+ * idle for longer than the configured idle window.
+ *
+ * F-11 (security audit 2026-05-25) — idle timeout. The
+ * `last_activity_at` column is bumped on every authenticated
+ * request; sessions older than WEB_INACTIVITY_TIMEOUT_MINUTES of
+ * idle are treated as expired. Set the env to 0 (default) to
+ * disable server-side idle enforcement and keep just the client-
+ * side hook. The 7-day absolute `expires_at` still applies.
+ */
 export async function loadSession(id: string): Promise<Session | null> {
   const r = await pool.query<{
     id: string;
@@ -47,9 +57,10 @@ export async function loadSession(id: string): Promise<Session | null> {
     expires_at: Date;
     active_tenant_id: string | null;
     is_super_admin: boolean;
+    last_activity_at: Date;
   }>(
     `SELECT s.id, s.user_id, s.expires_at, s.active_tenant_id,
-            u.is_super_admin
+            u.is_super_admin, s.last_activity_at
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.id = $1 AND s.expires_at > now()`,
@@ -57,6 +68,27 @@ export async function loadSession(id: string): Promise<Session | null> {
   );
   if (r.rowCount === 0) return null;
   const row = r.rows[0]!;
+
+  // F-11 — idle-timeout reject. Reads the runtime-mutable setting
+  // every load so an operator's change takes effect on the next
+  // request. Zero (the default) disables enforcement.
+  const idleMinutes = await idleTimeoutMinutes();
+  if (idleMinutes > 0) {
+    const idleMs = Date.now() - row.last_activity_at.getTime();
+    if (idleMs > idleMinutes * 60_000) {
+      // Drop the session row so a follow-up doesn't reanimate it.
+      await query(`DELETE FROM sessions WHERE id = $1`, [id]).catch(() => undefined);
+      return null;
+    }
+  }
+
+  // Bump last_activity_at. Fire-and-forget: a failure (DB hiccup)
+  // doesn't fail the request, the worst outcome is one tick of
+  // missed idle bookkeeping.
+  void query(`UPDATE sessions SET last_activity_at = now() WHERE id = $1`, [
+    id,
+  ]).catch(() => undefined);
+
   return {
     id: row.id,
     userId: row.user_id,
@@ -64,6 +96,24 @@ export async function loadSession(id: string): Promise<Session | null> {
     activeTenantId: row.active_tenant_id,
     isSuperAdmin: row.is_super_admin,
   };
+}
+
+let cachedIdleMinutes: { value: number; expires: number } | null = null;
+const IDLE_CACHE_MS = 30_000;
+
+async function idleTimeoutMinutes(): Promise<number> {
+  // Brief cache so we don't hit the settings table on every request.
+  // 30s is short enough that an operator change shows up promptly.
+  const now = Date.now();
+  if (cachedIdleMinutes && cachedIdleMinutes.expires > now) {
+    return cachedIdleMinutes.value;
+  }
+  const { getEffectiveValue } = await import('../domain/settings.js');
+  const raw = (await getEffectiveValue('WEB_INACTIVITY_TIMEOUT_MINUTES')).trim();
+  const n = Number(raw);
+  const value = Number.isFinite(n) && n > 0 ? n : 0;
+  cachedIdleMinutes = { value, expires: now + IDLE_CACHE_MS };
+  return value;
 }
 
 export async function setSessionTenant(

@@ -258,9 +258,28 @@ export async function buildApp(
       if (!session) {
         return reply.code(401).send({ error: 'Session expired' });
       }
+      // F-36 (security audit 2026-05-25) — verify membership on every
+      // tenant-scoped request. The on-delete invalidation in
+      // tenants.ts:removeMember handles the proactive case, but this
+      // gate catches any race where the session was loaded before the
+      // membership delete and still holds an active_tenant_id. We
+      // surface tenantId=null to the route, which the existing
+      // requireTenant() helpers translate to a 403.
+      let activeTenantId = session.activeTenantId;
+      if (activeTenantId !== null && !session.isSuperAdmin) {
+        const m = await pool.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n
+             FROM memberships
+            WHERE user_id = $1 AND tenant_id = $2`,
+          [session.userId, activeTenantId],
+        );
+        if (Number(m.rows[0]?.n ?? '0') === 0) {
+          activeTenantId = null;
+        }
+      }
       req.user = {
         id: session.userId,
-        tenantId: session.activeTenantId,
+        tenantId: activeTenantId,
         isSuperAdmin: session.isSuperAdmin,
         via: 'session',
       };

@@ -56,7 +56,18 @@ export async function resolveIdentity(
   }
 
   // 2) Email match? Link identity to existing user.
-  if (identity.email) {
+  //
+  // F-20 (security audit 2026-05-25) — the auto-link is gated on the
+  // provider asserting that the email has been verified at its end.
+  // Without this gate, an attacker who controls (or finds a
+  // misconfigured) OIDC provider that allows users to set arbitrary
+  // unverified emails could claim `victim@example.com` and be
+  // logged in as the existing local user with that email. The
+  // `local` provider sets emailVerified=true after the
+  // /api/auth/verify-email loop; OIDC reads it from the
+  // `email_verified` claim (defaulting to false). SAML or any future
+  // provider must set it deliberately.
+  if (identity.email && identity.emailVerified === true) {
     const byEmail = await query<{
       id: string;
       email: string | null;

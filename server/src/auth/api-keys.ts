@@ -64,14 +64,20 @@ export async function lookupKey(
     tenant_id: string | null;
     scopes: 'read';
     revoked_at: string | null;
+    expires_at: string | null;
   }>(
-    `SELECT id, user_id, tenant_id, scopes, revoked_at
+    `SELECT id, user_id, tenant_id, scopes, revoked_at, expires_at
        FROM api_keys WHERE key_hash = $1`,
     [hash],
   );
   if (r.rowCount === 0) return null;
   const row = r.rows[0]!;
   if (row.revoked_at !== null) return null;
+  // F-12 (security audit 2026-05-25) — refuse a key past its
+  // optional expires_at, the same way we refuse a revoked one.
+  if (row.expires_at !== null && new Date(row.expires_at).getTime() < Date.now()) {
+    return null;
+  }
 
   // Touch last-used asynchronously. Errors here would only mask
   // the rate-limit signal, so swallow them.
