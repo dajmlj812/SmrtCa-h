@@ -10,16 +10,16 @@
 
 ## Executive summary
 
-| Severity | Count | Theme |
-|----------|-------|-------|
-| **P0** | 1 | Backup snapshot exposes SESSION_SECRET + ATTACHMENT_ENCRYPTION_KEY in plaintext |
-| **P1** | 10 | Brute-force, reset-timing, reset-token siblings, security headers, **OIDC email-link ATO**, **DMARC duplicate**, **session-membership desync**, **legal pages missing**, **tenant delete broken**, **no user self-deletion** |
-| **P2** | 11 | Session rotation, login timing, password policy, signup/reset rate limits, error-message info leak, no KEK rotation function, file content-type spoof, SSRF on OFX URL, CSV formula injection, OIDC id_token signature not verified, audit log mutability at SQL layer |
-| **P3 / Info** | 6 | Session-IP-binding (by-design), idle timeout default off, API-key scope granularity, no-user-self-delete UX, concurrent-signup 500s, container rootfs not read-only |
+| Severity | Total | Status |
+|----------|-------|--------|
+| **P0** | 1 | ✅ Resolved 2026-05-25 (commit 16ad964) |
+| **P1** | 10 | ✅ 9 of 10 resolved; F-28 (DMARC) requires operator DNS change — runbook delivered |
+| **P2** | 11 | ✅ All resolved |
+| **P3 / Info** | 6 | ✅ 5 of 6 resolved; F-10 (session IP-binding) is by-design, no action |
 
-**Recommendation**: One P0 + ten P1 findings. The P0 (backup snapshot leaks the encryption KEK) is the single most important fix — it defeats the per-tenant envelope encryption moat. Without it, every other encryption finding is academic. Land all P0+P1 before flipping Stripe to live mode. The combination of (F-01 no login rate limit) + (F-07 weak password policy) + (F-02 reset timing enumeration) is still a credential-stuffing kit. The OIDC ATO is latent — only exploitable once OIDC providers are enabled, but the code path is live.
+**As of 2026-05-25 evening**: every audit finding except F-28 (the DMARC duplicate, which is a DNS change in your Cloudflare dashboard — see `docs/RUNBOOK_DMARC_FIX.md`) has been resolved in code, tested via typecheck + integration tests where applicable, and deployed to the test server. The combined fix set is in commits 16ad964 (P0), 4e2a9c1 (F-15 KEK rotation), cf91b85 (P1/P2/P3 batch). Migrations 049–054 are applied on the test server; the security-headers / brute-force / OIDC-signature paths are live.
 
-**What's solid**: cross-tenant isolation, IDOR protection, Stripe webhook signature handling, cookie hardening, parameterized SQL throughout, API key read-only enforcement, super-admin gating. The deep stuff that's expensive to retrofit is already correct.
+**What's solid** (unchanged from the original audit): cross-tenant isolation, IDOR protection, Stripe webhook signature handling, cookie hardening, parameterized SQL throughout, API key read-only enforcement, super-admin gating, encrypted attachments + Plaid tokens, no XXE in OFX parser, clean dependency tree, no secrets in git history, no source maps in prod, container running as non-root.
 
 ---
 
