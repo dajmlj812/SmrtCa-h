@@ -4260,8 +4260,25 @@ code {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
-.widget-body > * { flex: 1; min-height: 0; }
+/* The chart wrapper grows to fill remaining body space; everything
+   else (headlines, milestone strips) stays its natural size. The
+   previous universal `> * { flex: 1 }` gave non-chart elements an
+   equal share of the body and squished the chart into ~50% of the
+   card height. */
+.widget-chart {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+/* Lists fill remaining height with their own scroll if overflowed. */
+.widget-body > .dashboard-goals,
+.widget-body > .upcoming-bills {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 
 /* Edit mode: subtle dashed outline around each card and the
  * resize handle becomes visible (RGL hides it by default unless
@@ -4274,10 +4291,36 @@ code {
   box-shadow: 0 4px 16px rgba(79, 70, 229, 0.15);
 }
 .dashboard-grid .react-resizable-handle {
-  /* RGL ships a default — keep it but make it more visible in edit mode. */
-  opacity: 0.5;
+  /* Hidden in read-only mode so the card edges read clean. */
+  display: none;
 }
 .dashboard-shell.is-editing .react-resizable-handle {
+  /* In edit mode: visible 16×16 grab-corner with a clear diagonal-
+     stripe indicator. RGL's default ::after triangle is too subtle. */
+  display: block;
+  width: 20px;
+  height: 20px;
+  background: var(--accent, #4f46e5);
+  border-radius: 4px 0 4px 0;
+  opacity: 0.65;
+  cursor: nwse-resize;
+  bottom: 2px;
+  right: 2px;
+}
+.dashboard-shell.is-editing .react-resizable-handle::after {
+  /* Replace RGL's default arrow with a stronger 2-stripe icon. */
+  display: block;
+  content: '';
+  position: absolute;
+  inset: 4px 4px auto auto;
+  width: 10px;
+  height: 10px;
+  background-image:
+    linear-gradient(135deg, transparent 45%, white 45%, white 55%, transparent 55%),
+    linear-gradient(135deg, transparent 70%, white 70%, white 80%, transparent 80%);
+  border: none;
+}
+.dashboard-shell.is-editing .react-resizable-handle:hover {
   opacity: 1;
 }
 

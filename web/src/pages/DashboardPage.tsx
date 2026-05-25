@@ -19,12 +19,20 @@ import {
 } from 'recharts';
 import { Link } from 'react-router-dom';
 import {
-  Responsive as ResponsiveGridLayout,
+  Responsive,
+  WidthProvider,
   type Layout,
   type Layouts,
 } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+
+// react-grid-layout's <Responsive> needs to know its container width
+// to compute item positions. Without WidthProvider it falls back to
+// a hardcoded 1280px assumption and items overlay each other when
+// the actual container is narrower. WidthProvider measures the
+// element on mount + resize and feeds the value in as a prop.
+const ResponsiveGridLayout = WidthProvider(Responsive);
 import {
   api,
   type Bill,
@@ -82,13 +90,17 @@ interface WidgetDef {
   defaultLayout: { x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 }
 
+// Default layout — vertical flow tuned so the hero + two side-by-side
+// charts fit in the initial viewport on a 1440px desktop. Heights are
+// in row units (1 row = 60px + 16px margin). Lists (goals + bills)
+// get shorter heights since they're naturally compact.
 const WIDGETS: WidgetDef[] = [
-  { id: 'cashflow-hero',  title: 'Cash-flow forecast', defaultLayout: { x: 0, y: 0, w: 12, h: 8, minW: 6, minH: 5 } },
-  { id: 'spending-pie',   title: 'Spending this month', defaultLayout: { x: 0, y: 8, w: 6, h: 7, minW: 3, minH: 4 } },
-  { id: 'income-expense', title: 'Income vs. expense', defaultLayout: { x: 6, y: 8, w: 6, h: 7, minW: 3, minH: 4 } },
-  { id: 'net-worth',      title: 'Net worth', defaultLayout: { x: 0, y: 15, w: 12, h: 6, minW: 4, minH: 4 } },
-  { id: 'savings-goals',  title: 'Top savings goals', defaultLayout: { x: 0, y: 21, w: 6, h: 6, minW: 3, minH: 3 } },
-  { id: 'upcoming-bills', title: 'Upcoming bills', defaultLayout: { x: 6, y: 21, w: 6, h: 6, minW: 3, minH: 3 } },
+  { id: 'cashflow-hero',  title: 'Cash-flow forecast', defaultLayout: { x: 0, y: 0,  w: 12, h: 6, minW: 6, minH: 4 } },
+  { id: 'spending-pie',   title: 'Spending this month', defaultLayout: { x: 0, y: 6,  w: 6,  h: 5, minW: 3, minH: 3 } },
+  { id: 'income-expense', title: 'Income vs. expense', defaultLayout: { x: 6, y: 6,  w: 6,  h: 5, minW: 3, minH: 3 } },
+  { id: 'net-worth',      title: 'Net worth',           defaultLayout: { x: 0, y: 11, w: 12, h: 5, minW: 4, minH: 3 } },
+  { id: 'savings-goals',  title: 'Top savings goals',   defaultLayout: { x: 0, y: 16, w: 6,  h: 4, minW: 3, minH: 3 } },
+  { id: 'upcoming-bills', title: 'Upcoming bills',      defaultLayout: { x: 6, y: 16, w: 6,  h: 4, minW: 3, minH: 3 } },
 ];
 
 function defaultLayout(): Layout[] {
@@ -299,7 +311,8 @@ export function DashboardPage() {
             </div>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height="80%">
+        <div className="widget-chart">
+        <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={cashFlowChart}>
             <defs>
               <linearGradient id="cashflow-band" x1="0" y1="0" x2="0" y2="1">
@@ -340,6 +353,7 @@ export function DashboardPage() {
             />
           </ComposedChart>
         </ResponsiveContainer>
+        </div>
       </>
     ),
 
@@ -355,7 +369,8 @@ export function DashboardPage() {
               ({data.spendingStart} → {data.spendingEnd})
             </span>
           </div>
-          <ResponsiveContainer width="100%" height="80%">
+          <div className="widget-chart">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={pieData}
@@ -371,12 +386,14 @@ export function DashboardPage() {
               <Tooltip formatter={tooltipCents} />
             </PieChart>
           </ResponsiveContainer>
+          </div>
         </>
       )
     ),
 
     'income-expense': () => (
-      <ResponsiveContainer width="100%" height="90%">
+      <div className="widget-chart">
+      <ResponsiveContainer width="100%" height="100%">
         <BarChart data={incomeExpenseChart}>
           <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
           <XAxis dataKey="month" />
@@ -387,10 +404,12 @@ export function DashboardPage() {
           <Bar dataKey="Expense" fill="#ff7b54" />
         </BarChart>
       </ResponsiveContainer>
+      </div>
     ),
 
     'net-worth': () => (
-      <ResponsiveContainer width="100%" height="90%">
+      <div className="widget-chart">
+      <ResponsiveContainer width="100%" height="100%">
         <LineChart data={netWorthChart}>
           <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
           <XAxis dataKey="month" />
@@ -405,6 +424,7 @@ export function DashboardPage() {
           />
         </LineChart>
       </ResponsiveContainer>
+      </div>
     ),
 
     'savings-goals': () => (
