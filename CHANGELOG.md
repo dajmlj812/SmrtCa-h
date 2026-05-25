@@ -9,9 +9,62 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.17 shipped. 0.17.17 drops the "household-wide"
-NULL-account fallback for bills and recurring income — an
-untagged bill no longer leaks onto every plan's card._
+_0.17.0–0.17.18 shipped. 0.17.18 audits transaction imports
+(all clean — DB-enforced NOT NULL) and ships migration 038 +
+inline account pickers so the user can tag any straggler
+bills or income to their correct account from the UI._
+
+---
+
+## [0.17.18] — 2026-05-24 — Bills + income account tagging
+
+Followup to 0.17.17's strict scope: now that untagged bills
+disappear from plan cards, the user needs a way to fix them.
+
+### Audit
+
+Walked every INSERT path into `transactions`. The `account_id`
+column is DB-enforced NOT NULL with an FK to `accounts(id)`,
+and every importer (CSV/OFX/QIF via importer.ts, OFX Direct
+Connect via stored connection.account_id, Plaid via the
+plaid_account_links table) routes through `persistBatch()`
+with a validated account_id. No INSERT path can drop an
+account_id today. All 2,039 transactions on the test box
+have one.
+
+### Backfill
+
+Migration 038 retries bills + recurring_income with FULL-NAME
+matching (vs migration 036's first-word heuristic). For each
+NULL-account row, picks the transaction account it matches
+most often by `ILIKE '%<name>%'` against raw_description or
+normalized_merchant. Catches the cases 036 missed (e.g. "GM
+Financial" and "We Energies" on the test box). Idempotent +
+safe to re-run.
+
+### Edit support
+
+- `PATCH /api/bills/:id` accepts `accountId` (uuid or null to
+  clear)
+- New `PATCH /api/recurring-income/:id` supporting name,
+  amountCents, frequency, nextExpectedDate, active, and
+  accountId
+- `api.updateBill` + `api.updateRecurringIncome` on the web
+  client
+
+### UI
+
+- New Account column on both the Bills and Recurring Income
+  tables on /bills
+- Inline `<select>` in each row's actions: pick a different
+  account (or "— No account —") and the change persists
+  immediately
+
+Result: no more digging into SQL to fix tagging. Run the
+migration, see what's still wrong on /bills, pick the right
+account from the dropdown.
+
+15 budget + 7 bills tests pass.
 
 ---
 

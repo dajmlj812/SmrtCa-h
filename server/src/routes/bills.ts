@@ -190,6 +190,23 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         params.push(Boolean(body.active));
         updates.push(`active = $${params.length}`);
       }
+      // 0.17.18 — let the user fix account_id on existing bills.
+      // accountId === null clears it (bill becomes unscoped =
+      // no longer shown on any plan card under strict semantics).
+      if (body.accountId !== undefined) {
+        if (body.accountId === null) {
+          params.push(null);
+          updates.push(`account_id = $${params.length}`);
+        } else {
+          if (typeof body.accountId !== 'string' || !isUuid(body.accountId)) {
+            return reply.code(400).send({ error: 'Invalid accountId' });
+          }
+          const ok = await assertAccountInTenant(tenantId, body.accountId);
+          if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+          params.push(body.accountId);
+          updates.push(`account_id = $${params.length}`);
+        }
+      }
       if (updates.length === 0)
         return reply.code(400).send({ error: 'No updates' });
       params.push(req.params.id);
@@ -396,6 +413,83 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
       if (r.rowCount === 0)
         return reply.code(404).send({ error: 'Not found' });
       return reply.code(204).send();
+    },
+  );
+
+  // 0.17.18 — recurring-income PATCH. Pre-fix there was no way
+  // to edit an income source — the wizard / auto-detector
+  // created it and that was it. Now editable, including
+  // account_id so the user can fix mismatches the same way
+  // bills support it.
+  app.patch<{ Params: { id: string } }>(
+    '/api/recurring-income/:id',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid id' });
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const updates: string[] = [];
+      const params: unknown[] = [];
+
+      if (body.name !== undefined) {
+        const n = asString(body.name);
+        if (n === '') return reply.code(400).send({ error: 'Empty name' });
+        params.push(n);
+        updates.push(`name = $${params.length}`);
+      }
+      if (body.amountCents !== undefined) {
+        const a = asPositiveInt(body.amountCents);
+        if (a === null)
+          return reply.code(400).send({ error: 'amountCents must be > 0' });
+        params.push(a);
+        updates.push(`amount_cents = $${params.length}`);
+      }
+      if (body.frequency !== undefined) {
+        if (!INCOME_FREQUENCIES.includes(body.frequency as Frequency))
+          return reply.code(400).send({ error: 'Invalid frequency' });
+        params.push(body.frequency);
+        updates.push(`frequency = $${params.length}`);
+      }
+      if (body.nextExpectedDate !== undefined) {
+        if (typeof body.nextExpectedDate !== 'string' || !YMD.test(body.nextExpectedDate))
+          return reply.code(400).send({ error: 'nextExpectedDate must be YYYY-MM-DD' });
+        params.push(body.nextExpectedDate);
+        updates.push(`next_expected_date = $${params.length}`);
+      }
+      if (body.active !== undefined) {
+        params.push(Boolean(body.active));
+        updates.push(`active = $${params.length}`);
+      }
+      if (body.accountId !== undefined) {
+        if (body.accountId === null) {
+          params.push(null);
+          updates.push(`account_id = $${params.length}`);
+        } else {
+          if (typeof body.accountId !== 'string' || !isUuid(body.accountId)) {
+            return reply.code(400).send({ error: 'Invalid accountId' });
+          }
+          const ok = await assertAccountInTenant(tenantId, body.accountId);
+          if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+          params.push(body.accountId);
+          updates.push(`account_id = $${params.length}`);
+        }
+      }
+      if (updates.length === 0)
+        return reply.code(400).send({ error: 'No updates' });
+      params.push(req.params.id);
+      const idIdx = params.length;
+      params.push(tenantId);
+      const tenantIdx = params.length;
+      const r = await query(
+        `UPDATE recurring_income SET ${updates.join(', ')}
+          WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
+       RETURNING ${INCOME_COLUMNS}`,
+        params,
+      );
+      if (r.rowCount === 0)
+        return reply.code(404).send({ error: 'Income source not found' });
+      return { income: r.rows[0] };
     },
   );
 

@@ -161,9 +161,53 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.17 shipped. 0.17.17 drops the &quot;household-wide&quot;
-NULL-account fallback for bills and recurring income — an
-untagged bill no longer leaks onto every plan&#39;s card.</em></p>
+<p><em>0.17.0–0.17.18 shipped. 0.17.18 audits transaction imports
+(all clean — DB-enforced NOT NULL) and ships migration 038 +
+inline account pickers so the user can tag any straggler
+bills or income to their correct account from the UI.</em></p>
+<hr>
+<h2 id="01718-2026-05-24-bills-income-account-tagging">[0.17.18] — 2026-05-24 — Bills + income account tagging<a class="heading-anchor" href="#01718-2026-05-24-bills-income-account-tagging">#</a></h2>
+<p>Followup to 0.17.17&#39;s strict scope: now that untagged bills
+disappear from plan cards, the user needs a way to fix them.</p>
+<h3 id="audit">Audit<a class="heading-anchor" href="#audit">#</a></h3>
+<p>Walked every INSERT path into <code>transactions</code>. The <code>account_id</code>
+column is DB-enforced NOT NULL with an FK to <code>accounts(id)</code>,
+and every importer (CSV/OFX/QIF via importer.ts, OFX Direct
+Connect via stored connection.account_id, Plaid via the
+plaid_account_links table) routes through <code>persistBatch()</code>
+with a validated account_id. No INSERT path can drop an
+account_id today. All 2,039 transactions on the test box
+have one.</p>
+<h3 id="backfill">Backfill<a class="heading-anchor" href="#backfill">#</a></h3>
+<p>Migration 038 retries bills + recurring_income with FULL-NAME
+matching (vs migration 036&#39;s first-word heuristic). For each
+NULL-account row, picks the transaction account it matches
+most often by <code>ILIKE &#39;%&lt;name&gt;%&#39;</code> against raw_description or
+normalized_merchant. Catches the cases 036 missed (e.g. &quot;GM
+Financial&quot; and &quot;We Energies&quot; on the test box). Idempotent +
+safe to re-run.</p>
+<h3 id="edit-support">Edit support<a class="heading-anchor" href="#edit-support">#</a></h3>
+<ul>
+<li><code>PATCH /api/bills/:id</code> accepts <code>accountId</code> (uuid or null to
+clear)</li>
+<li>New <code>PATCH /api/recurring-income/:id</code> supporting name,
+amountCents, frequency, nextExpectedDate, active, and
+accountId</li>
+<li><code>api.updateBill</code> + <code>api.updateRecurringIncome</code> on the web
+client</li>
+</ul>
+<h3 id="ui">UI<a class="heading-anchor" href="#ui">#</a></h3>
+<ul>
+<li>New Account column on both the Bills and Recurring Income
+tables on /bills</li>
+<li>Inline <code>&lt;select&gt;</code> in each row&#39;s actions: pick a different
+account (or &quot;— No account —&quot;) and the change persists
+immediately</li>
+</ul>
+<p>Result: no more digging into SQL to fix tagging. Run the
+migration, see what&#39;s still wrong on /bills, pick the right
+account from the dropdown.</p>
+<p>15 budget + 7 bills tests pass.</p>
 <hr>
 <h2 id="01717-2026-05-24-strict-account-scope-for-bills-income">[0.17.17] — 2026-05-24 — Strict account scope for bills + income<a class="heading-anchor" href="#01717-2026-05-24-strict-account-scope-for-bills-income">#</a></h2>
 <p>Pre-0.17.17 a bill or recurring income source with
@@ -6222,7 +6266,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 00:03:58 UTC · commit 8197a37</span>
+  <span>Generated 2026-05-25 00:16:12 UTC · commit d58f0b0</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

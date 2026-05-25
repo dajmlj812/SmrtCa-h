@@ -1904,6 +1904,24 @@ export const api = {
       body: JSON.stringify(input),
     }).then((r) => r.bill),
 
+  // 0.17.18 — partial update; accountId === null clears it.
+  updateBill: (
+    id: string,
+    input: {
+      name?: string;
+      amountCents?: number;
+      frequency?: BillFrequency;
+      nextDueDate?: string;
+      active?: boolean;
+      accountId?: string | null;
+    },
+  ) =>
+    http<{ bill: Bill }>(`/api/bills/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.bill),
+
   deleteBill: (id: string) =>
     http<void>(`/api/bills/${id}`, { method: 'DELETE' }),
 
@@ -1931,6 +1949,24 @@ export const api = {
   }) =>
     http<{ income: RecurringIncome }>('/api/recurring-income', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then((r) => r.income),
+
+  // 0.17.18 — partial update for recurring income.
+  updateRecurringIncome: (
+    id: string,
+    input: {
+      name?: string;
+      amountCents?: number;
+      frequency?: IncomeFrequency;
+      nextExpectedDate?: string;
+      active?: boolean;
+      accountId?: string | null;
+    },
+  ) =>
+    http<{ income: RecurringIncome }>(`/api/recurring-income/${id}`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }).then((r) => r.income),

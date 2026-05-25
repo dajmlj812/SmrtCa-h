@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   api,
+  type Account,
   type Bill,
   type BillFrequency,
   type IncomeFrequency,
@@ -16,6 +17,9 @@ const BILL_TABLE_COLUMNS: ReportColumn[] = [
   { key: 'frequency', label: 'Frequency', type: 'string' },
   { key: 'next_due_date', label: 'Next due', type: 'date' },
   { key: 'amount_cents', label: 'Amount', type: 'cents' },
+  // 0.17.18 — display the bill's account so users can spot the
+  // ones that need fixing. Editable via the rowActions picker.
+  { key: 'account_name', label: 'Account', type: 'string' },
   { key: 'status_label', label: 'Status', type: 'string' },
 ];
 const INCOME_TABLE_COLUMNS: ReportColumn[] = [
@@ -23,6 +27,7 @@ const INCOME_TABLE_COLUMNS: ReportColumn[] = [
   { key: 'frequency', label: 'Frequency', type: 'string' },
   { key: 'next_expected_date', label: 'Next expected', type: 'date' },
   { key: 'amount_cents', label: 'Amount', type: 'cents' },
+  { key: 'account_name', label: 'Account', type: 'string' },
 ];
 
 function formatTableCell(col: ReportColumn, raw: unknown): string {
@@ -54,6 +59,8 @@ const INCOME_FREQUENCIES: IncomeFrequency[] = [
 export function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [income, setIncome] = useState<RecurringIncome[]>([]);
+  // 0.17.18 — accounts list for the row-level account picker.
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [suggestions, setSuggestions] = useState<RecurringSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,14 +77,16 @@ export function BillsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [b, i, s] = await Promise.all([
+      const [b, i, s, a] = await Promise.all([
         api.listBills(),
         api.listRecurringIncome(),
         api.listRecurringSuggestions('pending'),
+        api.listAccounts(),
       ]);
       setBills(b);
       setIncome(i);
       setSuggestions(s);
+      setAccounts(a);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -193,6 +202,29 @@ export function BillsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
     }
+  }
+
+  // 0.17.18 — update a bill's account_id; null = "no account".
+  async function setBillAccount(id: string, accountId: string | null) {
+    try {
+      await api.updateBill(id, { accountId });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Account update failed');
+    }
+  }
+  async function setIncomeAccount(id: string, accountId: string | null) {
+    try {
+      await api.updateRecurringIncome(id, { accountId });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Account update failed');
+    }
+  }
+
+  function accountName(id: string | null): string {
+    if (id === null) return '—';
+    return accounts.find((a) => a.id === id)?.name ?? '(removed)';
   }
 
   return (
@@ -311,6 +343,7 @@ export function BillsPage() {
               // Display amount as a negative outflow to match the old table.
               amount_cents: -b.amount_cents,
               status_label: b.active ? 'Active' : 'Closed',
+              account_name: accountName(b.account_id),
             }))}
             formatCell={formatTableCell}
             storageKey="bills:list"
@@ -318,6 +351,11 @@ export function BillsPage() {
               const r = row as unknown as Bill & { status_label: string };
               return (
                 <>
+                  <AccountPicker
+                    value={r.account_id}
+                    accounts={accounts}
+                    onChange={(v) => void setBillAccount(r.id, v)}
+                  />
                   {r.active && (
                     <button
                       className="btn-link"
@@ -353,18 +391,31 @@ export function BillsPage() {
         ) : (
           <FilterableTable
             columns={INCOME_TABLE_COLUMNS}
-            rows={income as unknown as Array<Record<string, unknown>>}
+            rows={income.map((i) => ({
+              ...i,
+              account_name: accountName(i.account_id),
+            })) as unknown as Array<Record<string, unknown>>}
             formatCell={formatTableCell}
             storageKey="income:list"
-            rowActions={(row) => (
-              <button
-                className="btn-link danger"
-                type="button"
-                onClick={() => void deleteIncome(String(row.id))}
-              >
-                Delete
-              </button>
-            )}
+            rowActions={(row) => {
+              const r = row as unknown as RecurringIncome;
+              return (
+                <>
+                  <AccountPicker
+                    value={r.account_id}
+                    accounts={accounts}
+                    onChange={(v) => void setIncomeAccount(r.id, v)}
+                  />
+                  <button
+                    className="btn-link danger"
+                    type="button"
+                    onClick={() => void deleteIncome(r.id)}
+                  >
+                    Delete
+                  </button>
+                </>
+              );
+            }}
           />
         )}
       </div>
@@ -807,5 +858,37 @@ function IncomeForm({
         </form>
       </div>
     </div>
+  );
+}
+
+/**
+ * 0.17.18 — inline account picker for the bill + recurring-income
+ * rowActions. Renders a tiny <select> with the current account
+ * pre-selected (or "— None —" when null). Calling `onChange`
+ * persists the new value through the parent's API call.
+ */
+function AccountPicker({
+  value,
+  accounts,
+  onChange,
+}: {
+  value: string | null;
+  accounts: Account[];
+  onChange: (next: string | null) => void;
+}) {
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+      style={{ fontSize: '0.85em', padding: '2px 6px', maxWidth: 200 }}
+      title="Change the account this row is tied to"
+    >
+      <option value="">— No account —</option>
+      {accounts.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.name}
+        </option>
+      ))}
+    </select>
   );
 }
