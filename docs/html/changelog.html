@@ -161,10 +161,45 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.20 shipped. 0.17.20 tags vehicles + commute
-routes with an account_id so the wizard&#39;s fuel/tolls
-projection only counts items belonging to the plan&#39;s
-accounts — no more same-fuel-cost-on-every-plan.</em></p>
+<p><em>0.17.0–0.17.21 shipped. 0.17.21 closes the last per-plan
+leak: savings_goals now carry account_id, so the wizard&#39;s
+&quot;goal-required&quot; suggestion only includes goals funded from
+the plan&#39;s accounts.</em></p>
+<hr>
+<h2 id="01721-2026-05-24-account-scope-for-savings_goals">[0.17.21] — 2026-05-24 — Account scope for savings_goals<a class="heading-anchor" href="#01721-2026-05-24-account-scope-for-savings_goals">#</a></h2>
+<p>Final piece of the per-account plan audit. Walking back through
+each wizard input:</p>
+<ul>
+<li><strong>Groceries</strong> (categories of historical transactions) —
+already scoped via <code>weeklyGroceriesMedian(tenantId, accountIds)</code></li>
+<li><strong>Fuel</strong> — vehicles tagged with account_id (0.17.20)</li>
+<li><strong>Tolls</strong> — commute_routes tagged with account_id (0.17.20)</li>
+<li><strong>Bills</strong> — tagged with account_id (0.17.16 + 0.17.17)</li>
+<li><strong>Recurring income</strong> — tagged with account_id (0.17.16 + 0.17.17)</li>
+<li><strong>Savings goals</strong> — until now, NOT scoped: every plan&#39;s
+&quot;goal-required&quot; suggestion summed every tenant goal, so a
+$200/week emergency-fund contribution showed up on Chase
+AND Savings plan cards (would have budgeted $400/week)</li>
+</ul>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<p>Migration 041 adds <code>savings_goals.account_id</code>. The wizard&#39;s
+<code>goalRequiredForPeriod()</code> now takes the same <code>accountIds</code>
+filter — when set, only goals tagged to those accounts feed
+the per-period suggestion. NULL <code>account_id</code> goals are
+excluded from scoped runs (strict semantics, matching every
+other axis).</p>
+<h3 id="api-ui">API + UI<a class="heading-anchor" href="#api-ui">#</a></h3>
+<ul>
+<li><code>POST/PATCH /api/goals</code> accept <code>accountId</code> (uuid or null)</li>
+<li>GoalForm modal has a &quot;Funded from&quot; dropdown</li>
+<li>GoalCard shows &quot;Funded from&quot; + inline picker for in-place
+edits</li>
+</ul>
+<p>20 budget + wizard + 5 goals tests pass. The five tagging
+axes — bills, recurring_income, vehicles, commute_routes,
+and savings_goals — are now consistent. Combined with
+transactions&#39; DB-enforced <code>NOT NULL</code>, every input to the
+wizard&#39;s per-plan projection is account-aware.</p>
 <hr>
 <h2 id="01720-2026-05-24-account-scope-for-vehicles-routes">[0.17.20] — 2026-05-24 — Account scope for vehicles + routes<a class="heading-anchor" href="#01720-2026-05-24-account-scope-for-vehicles-routes">#</a></h2>
 <p>Pre-fix: the wizard&#39;s <code>routeDrivenWeekly()</code> aggregated fuel
@@ -6314,7 +6349,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 00:32:08 UTC · commit d087a82</span>
+  <span>Generated 2026-05-25 00:38:23 UTC · commit 4182bd7</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

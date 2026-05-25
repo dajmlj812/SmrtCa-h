@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
-import { requireTenant } from '../auth/rbac.js';
+import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
 
 interface GoalBody {
   name?: unknown;
   targetAmountCents?: unknown;
   currentAmountCents?: unknown;
   targetDate?: unknown;
+  accountId?: unknown;
 }
 
 function asString(value: unknown): string {
@@ -32,7 +33,7 @@ function isYmdOrNull(value: unknown): value is string | null {
 }
 
 const GOAL_COLUMNS = `id, name, target_amount_cents, current_amount_cents,
-  target_date, created_at,
+  target_date, account_id, created_at,
   CASE WHEN target_amount_cents = 0 THEN 0
        ELSE LEAST(1.0, current_amount_cents::numeric / target_amount_cents)
   END AS progress`;
@@ -88,12 +89,25 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
         .code(400)
         .send({ error: 'targetDate must be YYYY-MM-DD or null' });
     }
+    let accountId: string | null = null;
+    if (typeof body.accountId === 'string' && isUuid(body.accountId)) {
+      const ok = await assertAccountInTenant(tenantId, body.accountId);
+      if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+      accountId = body.accountId;
+    }
     const r = await query(
       `INSERT INTO savings_goals
-         (tenant_id, name, target_amount_cents, current_amount_cents, target_date)
-       VALUES ($1, $2, $3, $4, $5)
+         (tenant_id, name, target_amount_cents, current_amount_cents, target_date, account_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${GOAL_COLUMNS}`,
-      [tenantId, name, target, current, (body.targetDate as string | null) ?? null],
+      [
+        tenantId,
+        name,
+        target,
+        current,
+        (body.targetDate as string | null) ?? null,
+        accountId,
+      ],
     );
     return reply.code(201).send({ goal: r.rows[0] });
   });
@@ -146,6 +160,21 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
         }
         params.push(body.targetDate);
         updates.push(`target_date = $${params.length}`);
+      }
+      // 0.17.21 — accountId editable; null clears.
+      if (body.accountId !== undefined) {
+        if (body.accountId === null) {
+          params.push(null);
+          updates.push(`account_id = $${params.length}`);
+        } else {
+          if (typeof body.accountId !== 'string' || !isUuid(body.accountId)) {
+            return reply.code(400).send({ error: 'Invalid accountId' });
+          }
+          const ok = await assertAccountInTenant(tenantId, body.accountId);
+          if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+          params.push(body.accountId);
+          updates.push(`account_id = $${params.length}`);
+        }
       }
       if (updates.length === 0) {
         return reply

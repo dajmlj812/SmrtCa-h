@@ -657,6 +657,8 @@ export interface SavingsGoal {
   target_amount_cents: number;
   current_amount_cents: number;
   target_date: string | null;
+  /** 0.17.21 — account this goal is funded from; null = unscoped. */
+  account_id: string | null;
   created_at: string;
   /** Server-computed: current / target, capped at 1. */
   progress: number;
@@ -1836,6 +1838,8 @@ export const api = {
     targetAmountCents: number;
     currentAmountCents?: number;
     targetDate?: string | null;
+    /** 0.17.21 */
+    accountId?: string | null;
   }) =>
     http<{ goal: SavingsGoal }>('/api/goals', {
       method: 'POST',
@@ -1850,6 +1854,8 @@ export const api = {
       targetAmountCents: number;
       currentAmountCents: number;
       targetDate: string | null;
+      /** 0.17.21 — null clears. */
+      accountId: string | null;
     }>,
   ) =>
     http<{ goal: SavingsGoal }>(`/api/goals/${id}`, {

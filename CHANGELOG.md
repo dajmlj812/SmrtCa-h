@@ -9,10 +9,50 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.20 shipped. 0.17.20 tags vehicles + commute
-routes with an account_id so the wizard's fuel/tolls
-projection only counts items belonging to the plan's
-accounts — no more same-fuel-cost-on-every-plan._
+_0.17.0–0.17.21 shipped. 0.17.21 closes the last per-plan
+leak: savings_goals now carry account_id, so the wizard's
+"goal-required" suggestion only includes goals funded from
+the plan's accounts._
+
+---
+
+## [0.17.21] — 2026-05-24 — Account scope for savings_goals
+
+Final piece of the per-account plan audit. Walking back through
+each wizard input:
+
+- **Groceries** (categories of historical transactions) —
+  already scoped via `weeklyGroceriesMedian(tenantId, accountIds)`
+- **Fuel** — vehicles tagged with account_id (0.17.20)
+- **Tolls** — commute_routes tagged with account_id (0.17.20)
+- **Bills** — tagged with account_id (0.17.16 + 0.17.17)
+- **Recurring income** — tagged with account_id (0.17.16 + 0.17.17)
+- **Savings goals** — until now, NOT scoped: every plan's
+  "goal-required" suggestion summed every tenant goal, so a
+  $200/week emergency-fund contribution showed up on Chase
+  AND Savings plan cards (would have budgeted $400/week)
+
+### Fix
+
+Migration 041 adds `savings_goals.account_id`. The wizard's
+`goalRequiredForPeriod()` now takes the same `accountIds`
+filter — when set, only goals tagged to those accounts feed
+the per-period suggestion. NULL `account_id` goals are
+excluded from scoped runs (strict semantics, matching every
+other axis).
+
+### API + UI
+
+- `POST/PATCH /api/goals` accept `accountId` (uuid or null)
+- GoalForm modal has a "Funded from" dropdown
+- GoalCard shows "Funded from" + inline picker for in-place
+  edits
+
+20 budget + wizard + 5 goals tests pass. The five tagging
+axes — bills, recurring_income, vehicles, commute_routes,
+and savings_goals — are now consistent. Combined with
+transactions' DB-enforced `NOT NULL`, every input to the
+wizard's per-plan projection is account-aware.
 
 ---
 

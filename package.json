@@ -1,6 +1,6 @@
 {
   "name": "smrtcash",
-  "version": "0.17.20",
+  "version": "0.17.21",
   "private": true,
   "description": "Self-hosted personal finance manager",
   "scripts": {

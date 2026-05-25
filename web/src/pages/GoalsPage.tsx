@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type SavingsGoal } from '../api';
+import { api, type Account, type SavingsGoal } from '../api';
 import { formatCents, formatDate } from '../format';
 
 function daysUntil(dateStr: string): number {
@@ -11,6 +11,8 @@ function daysUntil(dateStr: string): number {
 
 export function GoalsPage() {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  // 0.17.21
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<SavingsGoal | null>(null);
@@ -20,11 +22,22 @@ export function GoalsPage() {
     setLoading(true);
     setError(null);
     try {
-      setGoals(await api.listGoals());
+      const [g, a] = await Promise.all([api.listGoals(), api.listAccounts()]);
+      setGoals(g);
+      setAccounts(a);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load goals');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function setGoalAccount(id: string, accountId: string | null) {
+    try {
+      await api.updateGoal(id, { accountId });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Account update failed');
     }
   }
 
@@ -75,8 +88,10 @@ export function GoalsPage() {
             <GoalCard
               key={g.id}
               goal={g}
+              accounts={accounts}
               onEdit={() => setEditing(g)}
               onDelete={() => void onDelete(g.id)}
+              onSetAccount={(aId) => void setGoalAccount(g.id, aId)}
             />
           ))}
         </div>
@@ -85,6 +100,7 @@ export function GoalsPage() {
       {(showCreate || editing) && (
         <GoalForm
           goal={editing ?? undefined}
+          accounts={accounts}
           onClose={() => {
             setShowCreate(false);
             setEditing(null);
@@ -102,12 +118,16 @@ export function GoalsPage() {
 
 function GoalCard({
   goal,
+  accounts,
   onEdit,
   onDelete,
+  onSetAccount,
 }: {
   goal: SavingsGoal;
+  accounts: Account[];
   onEdit: () => void;
   onDelete: () => void;
+  onSetAccount: (accountId: string | null) => void;
 }) {
   const pct = Math.round(Number(goal.progress) * 100);
   const remaining = Math.max(0, goal.target_amount_cents - goal.current_amount_cents);
@@ -147,16 +167,38 @@ function GoalCard({
       <div className="muted goal-card-foot">
         {pct}% complete · {formatCents(remaining)} remaining
       </div>
+      <div style={{ marginTop: 8 }}>
+        <label className="muted small" style={{ display: 'block', marginBottom: 2 }}>
+          Funded from
+        </label>
+        <select
+          value={goal.account_id ?? ''}
+          onChange={(e) =>
+            onSetAccount(e.target.value === '' ? null : e.target.value)
+          }
+          style={{ fontSize: '0.9em', width: '100%' }}
+          title="Account this goal is funded from; controls which plan's savings suggestion includes it"
+        >
+          <option value="">— No account —</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }
 
 function GoalForm({
   goal,
+  accounts,
   onClose,
   onSaved,
 }: {
   goal?: SavingsGoal;
+  accounts: Account[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -169,6 +211,8 @@ function GoalForm({
     goal ? (goal.current_amount_cents / 100).toFixed(2) : '0.00',
   );
   const [targetDate, setTargetDate] = useState(goal?.target_date ?? '');
+  // 0.17.21
+  const [accountId, setAccountId] = useState<string>(goal?.account_id ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -186,12 +230,14 @@ function GoalForm({
         throw new Error('Current must be ≥ 0');
       }
       const dateVal = targetDate === '' ? null : targetDate;
+      const acctVal = accountId === '' ? null : accountId;
       if (isEdit) {
         await api.updateGoal(goal!.id, {
           name,
           targetAmountCents: targetCents,
           currentAmountCents: currentCents,
           targetDate: dateVal,
+          accountId: acctVal,
         });
       } else {
         await api.createGoal({
@@ -199,6 +245,7 @@ function GoalForm({
           targetAmountCents: targetCents,
           currentAmountCents: currentCents,
           targetDate: dateVal,
+          accountId: acctVal,
         });
       }
       onSaved();
@@ -263,6 +310,22 @@ function GoalForm({
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
               />
+            </div>
+            {/* 0.17.21 — funded-from account */}
+            <div className="field">
+              <label htmlFor="goal-acct">Funded from (optional)</label>
+              <select
+                id="goal-acct"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+              >
+                <option value="">— No account —</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>

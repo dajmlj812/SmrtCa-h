@@ -325,9 +325,17 @@ async function goalRequiredForPeriod(
   tenantId: string,
   periodEnd: string,
   periodDays: number,
+  accountIds: string[] | null,
 ): Promise<number> {
   // 0.17.6 — tenant scope. savings_goals has tenant_id since
   // 0.11.0 multi-tenant; the wizard never filtered.
+  //
+  // 0.17.21 — strict account scope. When the wizard ran with
+  // an account filter, only goals tagged to those accounts
+  // contribute. NULL-account goals are excluded from scoped
+  // runs (matching bills/income/vehicles/routes). NULL
+  // accountIds = no filter, every goal counts (legacy
+  // behavior).
   const goals = await pool.query<{
     target_amount_cents: number;
     current_amount_cents: number;
@@ -336,8 +344,10 @@ async function goalRequiredForPeriod(
     `SELECT target_amount_cents, current_amount_cents,
             to_char(target_date, 'YYYY-MM-DD') AS target_date
        FROM savings_goals
-      WHERE target_date IS NOT NULL AND tenant_id = $1`,
-    [tenantId],
+      WHERE target_date IS NOT NULL
+        AND tenant_id = $1
+        AND ($2::uuid[] IS NULL OR account_id = ANY($2::uuid[]))`,
+    [tenantId, accountIds],
   );
   let total = 0;
   for (const g of goals.rows) {
@@ -518,7 +528,12 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
 
     // Savings suggestions — computed BEFORE the user's chosen value so
     // the four numbers are always visible.
-    const goalRequiredCents = await goalRequiredForPeriod(input.tenantId, end, days);
+    const goalRequiredCents = await goalRequiredForPeriod(
+      input.tenantId,
+      end,
+      days,
+      accountIds,
+    );
     const pctIncomeCents = Math.round(incomeTotal * (savingsIncomePct / 100));
     const preFlexCents =
       incomeTotal - billsTotal - groceriesCents - fuelCents - tollsCents - miscCents;
