@@ -697,7 +697,19 @@ export interface Bill {
   review_status: BillReviewStatus;
   review_note: string | null;
   last_reviewed_at: string | null;
+  cancel_url: string | null;
+  cancel_email_template: string | null;
+  cancel_steps: string | null;
+  cancel_notes: string | null;
   created_at: string;
+}
+
+export interface CancellationEntry {
+  merchant: string;
+  cancelUrl: string | null;
+  emailTemplate: string | null;
+  steps: string | null;
+  notes: string | null;
 }
 
 export interface RecurringIncome {
@@ -1929,6 +1941,10 @@ export const api = {
       nextDueDate?: string;
       active?: boolean;
       accountId?: string | null;
+      cancelUrl?: string | null;
+      cancelEmailTemplate?: string | null;
+      cancelSteps?: string | null;
+      cancelNotes?: string | null;
     },
   ) =>
     http<{ bill: Bill }>(`/api/bills/${id}`, {
@@ -1936,6 +1952,13 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }).then((r) => r.bill),
+
+  lookupCancellation: (name: string) =>
+    http<{
+      matched: boolean;
+      entry: CancellationEntry | null;
+      generic_email_template: string;
+    }>(`/api/cancellation/lookup?name=${encodeURIComponent(name)}`),
 
   deleteBill: (id: string) =>
     http<void>(`/api/bills/${id}`, { method: 'DELETE' }),

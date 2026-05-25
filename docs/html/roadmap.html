@@ -246,7 +246,7 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <tr>
 <td><strong>0.18.x</strong></td>
 <td><strong>Competitive parity &amp; depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower</strong></td>
-<td>🔜 In progress — 0.18.0 shipped 2026-05-24</td>
+<td>🔜 In progress — 0.18.0+0.18.1 shipped 2026-05-24</td>
 </tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
@@ -640,12 +640,19 @@ with three milestone tiles, a zero-reference line for
 overdraft visibility, and the daily-volatility figure
 surfaced in the subtitle. Steals Simplifi&#39;s hero feature
 using data we already had.</li>
-<li><strong>0.18.1</strong> 📋 — <strong>Subscription cancellation links</strong> (~1–2
-days). For each detected subscription, store the
-cancellation URL + a canned email template + step-by-step
-instructions. Don&#39;t try to be the concierge (that&#39;s a
-legal + ops moat we won&#39;t build); just remove the friction
-Rocket Money charges for.</li>
+<li><strong>0.18.1</strong> ✅ (released 2026-05-24) — <strong>Subscription
+cancellation help</strong>. Four nullable fields on <code>bills</code>
+(<code>cancel_url</code>, <code>cancel_email_template</code>, <code>cancel_steps</code>,
+<code>cancel_notes</code>) surfaced through a &quot;Cancel info&quot; modal on
+the Bills page. Built-in library of ~28 common merchants
+(Netflix, NYT, gym memberships, etc.) auto-fills blank
+fields on click; the library notes the <em>real</em> friction
+for each (NYT&#39;s chat funnel, WSJ&#39;s phone number, Planet
+Fitness&#39;s in-person-only rule). Copy-to-clipboard on the
+URL and email body. Green dot on the action button means
+the bill is documented. We don&#39;t try to be the concierge
+(legal + ops moat); just remove the friction Rocket Money
+charges $9/month for.</li>
 <li><strong>0.18.2</strong> 📋 — <strong>Public read-only API + per-user keys</strong>
 (~2–3 days). Each tenant member gets an API key for their
 own data. Existing routes already RBAC-enforce ownership;
@@ -795,7 +802,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 01:43:39 UTC · commit 803e858</span>
+  <span>Generated 2026-05-25 02:05:26 UTC · commit abb2836</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

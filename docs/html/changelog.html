@@ -161,10 +161,51 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.0 ships the cash-flow forecast as the dashboard hero —
-the data was already there, now it leads the page with a ±1σ
-confidence band and 30/60/90 day projected-balance tiles.
-Steals Simplifi&#39;s headline feature using data we already had.</em></p>
+<p><em>0.18.1 ships subscription cancellation help: per-bill
+fields for URL + email template + step-by-step instructions,
+backed by a built-in library of ~28 common merchants
+(Netflix, NYT, gym memberships, etc.). Closes Rocket Money&#39;s
+&quot;we&#39;ll cancel for you&quot; friction without SmrtCash trying to
+be the concierge — we just remove the friction of finding
+the cancel page.</em></p>
+<hr>
+<h2 id="0181-2026-05-24-subscription-cancellation-help">[0.18.1] — 2026-05-24 — Subscription cancellation help<a class="heading-anchor" href="#0181-2026-05-24-subscription-cancellation-help">#</a></h2>
+<p>Each bill now has four nullable fields — <code>cancel_url</code>,
+<code>cancel_email_template</code>, <code>cancel_steps</code>, <code>cancel_notes</code> —
+surfaced via a &quot;Cancel info&quot; action on the Bills page that
+opens a modal with copy-to-clipboard buttons on the URL and
+email body, plus a &quot;Open ↗&quot; link straight to the cancel page.</p>
+<p><strong>Built-in library</strong> (<code>server/src/domain/cancellation-library.ts</code>)
+ships ~28 common merchants pre-loaded — Netflix, Spotify,
+Hulu, Disney+, Max, Paramount+, Peacock, Apple TV+, YouTube
+Premium, Amazon Prime, Audible, Kindle Unlimited, NYT, WSJ,
+Washington Post, ChatGPT, GitHub Copilot, Adobe, Microsoft
+365, Dropbox, 1Password, LinkedIn Premium, NordVPN,
+ExpressVPN, Peloton, Crunchyroll, Planet Fitness, generic
+gym. The notes column carries warnings users actually need:
+NYT routes you into a chat, WSJ to a phone call, Planet
+Fitness is in-person or certified-mail only.</p>
+<p>Modal click &quot;Auto-fill from library&quot; → looks up the bill
+name against the library (case + non-alphanumeric
+insensitive substring match, longest match wins), fills any
+BLANK fields, leaves user edits alone. Everything is
+editable per-bill so a known merchant entry is just a
+starting point.</p>
+<p>A green dot on the &quot;Cancel info&quot; button indicates the bill
+already has at least one cancel-related field saved, so the
+user can see at-a-glance which subscriptions are documented.</p>
+<p><strong>New surface area:</strong></p>
+<ul>
+<li>Migration 043 — four nullable text columns on <code>bills</code></li>
+<li><code>GET /api/cancellation/lookup?name=X</code> (tenant-gated)</li>
+<li><code>PATCH /api/bills/:id</code> accepts <code>cancelUrl / cancelEmailTemplate / cancelSteps / cancelNotes</code></li>
+<li><code>CancelInfoModal</code> component on the Bills page</li>
+</ul>
+<p>Tenant-isolation tests still pass (the cancellation fields
+live on <code>bills</code> which is already tenant-scoped; the lookup
+route is read-only and returns the same shared library
+content for every tenant).</p>
+<p>Closes roadmap slice 0.18.1.</p>
 <hr>
 <h2 id="0180-2026-05-24-cash-flow-forecast-as-dashboard-hero">[0.18.0] — 2026-05-24 — Cash-flow forecast as dashboard hero<a class="heading-anchor" href="#0180-2026-05-24-cash-flow-forecast-as-dashboard-hero">#</a></h2>
 <p>The 90-day cash-flow projection has been on the dashboard
@@ -6461,7 +6502,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 01:43:38 UTC · commit 803e858</span>
+  <span>Generated 2026-05-25 02:05:25 UTC · commit abb2836</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -11,6 +11,7 @@ import {
 } from '../api';
 import { formatCents, formatDate } from '../format';
 import { FilterableTable } from '../components/FilterableTable';
+import { CancelInfoModal } from '../components/CancelInfoModal';
 
 const BILL_TABLE_COLUMNS: ReportColumn[] = [
   { key: 'name', label: 'Name', type: 'string' },
@@ -72,6 +73,8 @@ export function BillsPage() {
     new Set(),
   );
   const [bulkBusy, setBulkBusy] = useState(false);
+  // 0.18.1 — cancel-info modal target.
+  const [cancelingBill, setCancelingBill] = useState<Bill | null>(null);
 
   async function load() {
     setLoading(true);
@@ -402,6 +405,20 @@ export function BillsPage() {
                   <button
                     className="btn-link"
                     type="button"
+                    onClick={() => setCancelingBill(r)}
+                    title="How to cancel this subscription"
+                  >
+                    Cancel info
+                    {(r.cancel_url || r.cancel_steps || r.cancel_email_template) && (
+                      <span
+                        className="badge-dot"
+                        aria-label="cancellation info saved"
+                      />
+                    )}
+                  </button>
+                  <button
+                    className="btn-link"
+                    type="button"
                     onClick={() => void duplicateBill(r.id)}
                     title='Clone for a second person on the same account'
                   >
@@ -492,6 +509,18 @@ export function BillsPage() {
           onConfirmed={() => {
             setConfirming(null);
             void load();
+          }}
+        />
+      )}
+      {cancelingBill && (
+        <CancelInfoModal
+          bill={cancelingBill}
+          onClose={() => setCancelingBill(null)}
+          onSaved={(updated) => {
+            setCancelingBill(null);
+            setBills((prev) =>
+              prev.map((b) => (b.id === updated.id ? updated : b)),
+            );
           }}
         />
       )}

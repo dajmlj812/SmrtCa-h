@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0+0.18.1 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -465,12 +465,19 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   overdraft visibility, and the daily-volatility figure
   surfaced in the subtitle. Steals Simplifi's hero feature
   using data we already had.
-- **0.18.1** 📋 — **Subscription cancellation links** (~1–2
-  days). For each detected subscription, store the
-  cancellation URL + a canned email template + step-by-step
-  instructions. Don't try to be the concierge (that's a
-  legal + ops moat we won't build); just remove the friction
-  Rocket Money charges for.
+- **0.18.1** ✅ (released 2026-05-24) — **Subscription
+  cancellation help**. Four nullable fields on `bills`
+  (`cancel_url`, `cancel_email_template`, `cancel_steps`,
+  `cancel_notes`) surfaced through a "Cancel info" modal on
+  the Bills page. Built-in library of ~28 common merchants
+  (Netflix, NYT, gym memberships, etc.) auto-fills blank
+  fields on click; the library notes the *real* friction
+  for each (NYT's chat funnel, WSJ's phone number, Planet
+  Fitness's in-person-only rule). Copy-to-clipboard on the
+  URL and email body. Green dot on the action button means
+  the bill is documented. We don't try to be the concierge
+  (legal + ops moat); just remove the friction Rocket Money
+  charges $9/month for.
 - **0.18.2** 📋 — **Public read-only API + per-user keys**
   (~2–3 days). Each tenant member gets an API key for their
   own data. Existing routes already RBAC-enforce ownership;

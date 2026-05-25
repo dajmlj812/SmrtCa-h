@@ -51,7 +51,9 @@ export function advanceByFrequency(date: string, freq: Frequency): string | null
 
 const BILL_COLUMNS = `id, name, amount_cents, frequency, next_due_date,
   category_id, account_id, active, review_status, review_note,
-  last_reviewed_at, created_at`;
+  last_reviewed_at,
+  cancel_url, cancel_email_template, cancel_steps, cancel_notes,
+  created_at`;
 const REVIEW_STATUSES = ['active', 'review', 'cancel', 'alter', 'keep'] as const;
 type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 const INCOME_COLUMNS = `id, name, amount_cents, frequency, next_expected_date,
@@ -205,6 +207,33 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
           if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
           params.push(body.accountId);
           updates.push(`account_id = $${params.length}`);
+        }
+      }
+      // 0.18.1 — cancellation fields. All nullable text; explicit
+      // null clears the value, undefined leaves it alone, a string
+      // (after trim) is stored verbatim. No URL validation — users
+      // sometimes paste an account-specific deep link we don't
+      // want to over-constrain.
+      for (const [key, col] of [
+        ['cancelUrl', 'cancel_url'],
+        ['cancelEmailTemplate', 'cancel_email_template'],
+        ['cancelSteps', 'cancel_steps'],
+        ['cancelNotes', 'cancel_notes'],
+      ] as const) {
+        if (body[key] !== undefined) {
+          const v = body[key];
+          if (v === null) {
+            params.push(null);
+            updates.push(`${col} = $${params.length}`);
+          } else if (typeof v === 'string') {
+            const trimmed = v.trim();
+            params.push(trimmed === '' ? null : trimmed);
+            updates.push(`${col} = $${params.length}`);
+          } else {
+            return reply
+              .code(400)
+              .send({ error: `${key} must be a string or null` });
+          }
         }
       }
       if (updates.length === 0)

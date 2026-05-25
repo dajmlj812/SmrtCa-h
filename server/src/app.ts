@@ -22,6 +22,7 @@ import { authRoutes } from './routes/auth.js';
 import { budgetRoutes } from './routes/budgets.js';
 import { goalRoutes } from './routes/goals.js';
 import { billRoutes } from './routes/bills.js';
+import { cancellationRoutes } from './routes/cancellation.js';
 import { recurringRoutes } from './routes/recurring.js';
 import { subscriptionRoutes } from './routes/subscriptions.js';
 import { normalizationRuleRoutes } from './routes/normalization-rules.js';
@@ -229,6 +230,7 @@ export async function buildApp(
   await app.register(budgetRoutes);
   await app.register(goalRoutes);
   await app.register(billRoutes);
+  await app.register(cancellationRoutes);
   await app.register(recurringRoutes);
   await app.register(subscriptionRoutes);
   await app.register(normalizationRuleRoutes);

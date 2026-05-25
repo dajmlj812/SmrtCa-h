@@ -9,10 +9,59 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.0 ships the cash-flow forecast as the dashboard hero —
-the data was already there, now it leads the page with a ±1σ
-confidence band and 30/60/90 day projected-balance tiles.
-Steals Simplifi's headline feature using data we already had._
+_0.18.1 ships subscription cancellation help: per-bill
+fields for URL + email template + step-by-step instructions,
+backed by a built-in library of ~28 common merchants
+(Netflix, NYT, gym memberships, etc.). Closes Rocket Money's
+"we'll cancel for you" friction without SmrtCash trying to
+be the concierge — we just remove the friction of finding
+the cancel page._
+
+---
+
+## [0.18.1] — 2026-05-24 — Subscription cancellation help
+
+Each bill now has four nullable fields — `cancel_url`,
+`cancel_email_template`, `cancel_steps`, `cancel_notes` —
+surfaced via a "Cancel info" action on the Bills page that
+opens a modal with copy-to-clipboard buttons on the URL and
+email body, plus a "Open ↗" link straight to the cancel page.
+
+**Built-in library** (`server/src/domain/cancellation-library.ts`)
+ships ~28 common merchants pre-loaded — Netflix, Spotify,
+Hulu, Disney+, Max, Paramount+, Peacock, Apple TV+, YouTube
+Premium, Amazon Prime, Audible, Kindle Unlimited, NYT, WSJ,
+Washington Post, ChatGPT, GitHub Copilot, Adobe, Microsoft
+365, Dropbox, 1Password, LinkedIn Premium, NordVPN,
+ExpressVPN, Peloton, Crunchyroll, Planet Fitness, generic
+gym. The notes column carries warnings users actually need:
+NYT routes you into a chat, WSJ to a phone call, Planet
+Fitness is in-person or certified-mail only.
+
+Modal click "Auto-fill from library" → looks up the bill
+name against the library (case + non-alphanumeric
+insensitive substring match, longest match wins), fills any
+BLANK fields, leaves user edits alone. Everything is
+editable per-bill so a known merchant entry is just a
+starting point.
+
+A green dot on the "Cancel info" button indicates the bill
+already has at least one cancel-related field saved, so the
+user can see at-a-glance which subscriptions are documented.
+
+**New surface area:**
+- Migration 043 — four nullable text columns on `bills`
+- `GET /api/cancellation/lookup?name=X` (tenant-gated)
+- `PATCH /api/bills/:id` accepts `cancelUrl /
+  cancelEmailTemplate / cancelSteps / cancelNotes`
+- `CancelInfoModal` component on the Bills page
+
+Tenant-isolation tests still pass (the cancellation fields
+live on `bills` which is already tenant-scoped; the lookup
+route is read-only and returns the same shared library
+content for every tenant).
+
+Closes roadmap slice 0.18.1.
 
 ---
 
