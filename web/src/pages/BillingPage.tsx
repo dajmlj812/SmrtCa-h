@@ -35,6 +35,19 @@ const PLAN_BLURB: Record<Plan, string> = {
 const PLAN_PRICE_ANNUAL: Record<Plan, number> = { starter: 59, plus: 99, family: 149 };
 const PLAN_PRICE_MONTHLY: Record<Plan, number> = { starter: 7.99, plus: 13.99, family: 19.99 };
 
+// 0.22.0 — annual-vs-monthly framing. Derives per-plan savings %
+// from the prices above (they're the source of truth; this layer
+// just presents the math). Plus has the deepest discount at 41%,
+// Starter and Family land around 38%.
+function annualSavingsPct(plan: Plan): number {
+  const monthly12 = PLAN_PRICE_MONTHLY[plan] * 12;
+  return Math.round((1 - PLAN_PRICE_ANNUAL[plan] / monthly12) * 100);
+}
+
+function annualPerMonth(plan: Plan): number {
+  return PLAN_PRICE_ANNUAL[plan] / 12;
+}
+
 function StatusPill({ status }: { status: SubscriptionStatus | null }) {
   if (!status) return <span className="badge muted">No subscription</span>;
   const variant: Record<SubscriptionStatus, string> = {
@@ -324,14 +337,27 @@ export function BillingPage() {
         <div className="plan-grid">
           {(['starter', 'plus', 'family'] as const).map((p) => {
             const current = status?.plan === p;
+            const savings = annualSavingsPct(p);
+            const perMonth = annualPerMonth(p);
             return (
               <div key={p} className={`plan-card ${current ? 'current' : ''}`}>
-                <h4>{PLAN_LABEL[p]}</h4>
+                <div className="plan-card-head">
+                  <h4>{PLAN_LABEL[p]}</h4>
+                  {savings >= 10 && (
+                    <span
+                      className="plan-savings-badge"
+                      title={`Annual billing saves ${savings}% vs paying monthly`}
+                    >
+                      Save {savings}%
+                    </span>
+                  )}
+                </div>
                 <p className="plan-price">
-                  <strong>${PLAN_PRICE_ANNUAL[p]}</strong>/yr
-                  <span className="muted small">
-                    {' '}or ${PLAN_PRICE_MONTHLY[p].toFixed(2)}/mo
-                  </span>
+                  <strong>${PLAN_PRICE_ANNUAL[p]}</strong>
+                  <span className="plan-price-unit">/yr</span>
+                </p>
+                <p className="plan-price-sub muted small">
+                  ${perMonth.toFixed(2)}/mo billed annually
                 </p>
                 <p className="plan-blurb">{PLAN_BLURB[p]}</p>
                 {current ? (
@@ -353,8 +379,11 @@ export function BillingPage() {
                       className="btn secondary"
                       disabled={acting !== null}
                       onClick={() => startCheckout(`${p}_monthly` as PlanLookupKey)}
+                      title={`Or $${PLAN_PRICE_MONTHLY[p].toFixed(2)}/mo billed monthly`}
                     >
-                      {acting === `${p}_monthly` ? 'Opening…' : 'Pick monthly'}
+                      {acting === `${p}_monthly`
+                        ? 'Opening…'
+                        : `Monthly $${PLAN_PRICE_MONTHLY[p].toFixed(2)}`}
                     </button>
                   </div>
                 )}

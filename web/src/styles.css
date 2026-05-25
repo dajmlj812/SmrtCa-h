@@ -3615,7 +3615,52 @@ code {
   background: rgba(16, 185, 129, 0.05);
 }
 .plan-card h4 { margin: 0; font-size: 15px; }
-.plan-card .plan-price { font-size: 18px; margin: 4px 0; }
+/* 0.22.0 — annual-vs-monthly framing. Header row holds the plan name
+   + the savings badge side-by-side; price block leads with the annual
+   amount + monthly-equivalent sub-line. The monthly button keeps its
+   actual price visible on its label so users compare like-for-like. */
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plan-savings-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  white-space: nowrap;
+}
+@media (prefers-color-scheme: dark) {
+  .plan-savings-badge {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.4);
+  }
+}
+.plan-card .plan-price {
+  font-size: 22px;
+  margin: 6px 0 0 0;
+  line-height: 1.1;
+}
+.plan-card .plan-price strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.plan-card .plan-price-unit {
+  font-size: 14px;
+  color: var(--muted, #6b7280);
+  font-weight: 500;
+}
+.plan-card .plan-price-sub {
+  margin: 0 0 4px 0;
+}
 .plan-card .plan-blurb {
   font-size: 13px;
   color: var(--muted, #6b7280);
