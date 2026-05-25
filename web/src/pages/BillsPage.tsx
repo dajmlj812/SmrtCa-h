@@ -194,6 +194,17 @@ export function BillsPage() {
     }
   }
 
+  // 0.17.24 — clone a bill (multiple users sharing one account
+  // but paying separate subscriptions, e.g. two Netflix subs).
+  async function duplicateBill(id: string) {
+    try {
+      await api.duplicateBill(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Duplicate failed');
+    }
+  }
+
   async function deleteIncome(id: string) {
     if (!window.confirm('Delete this recurring income entry?')) return;
     try {
@@ -388,6 +399,14 @@ export function BillsPage() {
                       Mark paid
                     </button>
                   )}
+                  <button
+                    className="btn-link"
+                    type="button"
+                    onClick={() => void duplicateBill(r.id)}
+                    title='Clone for a second person on the same account'
+                  >
+                    Duplicate
+                  </button>
                   <button
                     className="btn-link danger"
                     type="button"

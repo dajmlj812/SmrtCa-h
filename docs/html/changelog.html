@@ -161,9 +161,28 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.23 shipped. 0.17.23 adds an inline frequency
-picker on /bills so the user can change a bill&#39;s or income&#39;s
-cadence without re-creating it.</em></p>
+<p><em>0.17.0–0.17.24 shipped. 0.17.24 adds a Duplicate action on
+each /bills row so two roommates / family members with
+separate subscriptions on the same card can clone the bill
+once instead of re-entering it.</em></p>
+<hr>
+<h2 id="01724-2026-05-24-duplicate-bill-action">[0.17.24] — 2026-05-24 — Duplicate bill action<a class="heading-anchor" href="#01724-2026-05-24-duplicate-bill-action">#</a></h2>
+<p>Real-world case: two people in a household each have their
+own Netflix subscription, both billed to the same Chase
+card. Pre-fix the user had to re-enter all the bill fields
+(amount, frequency, due date, category, account) by hand.</p>
+<h3 id="change">Change<a class="heading-anchor" href="#change">#</a></h3>
+<ul>
+<li><code>POST /api/bills/:id/duplicate</code> — copies every persistable
+field except id/review fields and appends &quot; (copy)&quot; to the
+name. Returns the new bill.</li>
+<li><code>api.duplicateBill(id)</code> on the web client</li>
+<li>&quot;Duplicate&quot; button in each bill row&#39;s actions, between
+&quot;Mark paid&quot; and &quot;Delete&quot;</li>
+</ul>
+<p>Renaming the duplicate uses the existing PATCH path (no UI
+yet for inline rename, but the cadence + account pickers are
+already on the row). 7 bills tests still pass.</p>
 <hr>
 <h2 id="01723-2026-05-24-inline-frequency-editor-for-bills-income">[0.17.23] — 2026-05-24 — Inline frequency editor for bills + income<a class="heading-anchor" href="#01723-2026-05-24-inline-frequency-editor-for-bills-income">#</a></h2>
 <p>The PATCH endpoints already accepted <code>frequency</code>; the UI just
@@ -6397,7 +6416,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 00:57:30 UTC · commit 911684e</span>
+  <span>Generated 2026-05-25 01:02:50 UTC · commit f580a43</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

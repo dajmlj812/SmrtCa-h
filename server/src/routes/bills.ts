@@ -283,6 +283,41 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // 0.17.24 — clone a bill for the "multiple people sharing one
+  // account but paying for separate subscriptions" case (two
+  // Netflix accounts on the same Chase card, etc.). Copies every
+  // field except id/review fields, names the new row "X (copy)"
+  // so the user can spot + rename it.
+  app.post<{ Params: { id: string } }>(
+    '/api/bills/:id/duplicate',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      if (!isUuid(req.params.id))
+        return reply.code(400).send({ error: 'Invalid bill id' });
+      const r = await query(
+        `INSERT INTO bills
+           (tenant_id, name, amount_cents, frequency, next_due_date,
+            category_id, account_id, active)
+         SELECT tenant_id,
+                name || ' (copy)',
+                amount_cents,
+                frequency,
+                next_due_date,
+                category_id,
+                account_id,
+                active
+           FROM bills
+          WHERE id = $1 AND tenant_id = $2
+       RETURNING ${BILL_COLUMNS}`,
+        [req.params.id, tenantId],
+      );
+      if (r.rowCount === 0)
+        return reply.code(404).send({ error: 'Bill not found' });
+      return reply.code(201).send({ bill: r.rows[0] });
+    },
+  );
+
   // Advances next_due_date by one period. One-time bills are deactivated.
   app.post<{ Params: { id: string } }>(
     '/api/bills/:id/mark-paid',

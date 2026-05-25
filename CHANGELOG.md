@@ -9,9 +9,32 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.23 shipped. 0.17.23 adds an inline frequency
-picker on /bills so the user can change a bill's or income's
-cadence without re-creating it._
+_0.17.0–0.17.24 shipped. 0.17.24 adds a Duplicate action on
+each /bills row so two roommates / family members with
+separate subscriptions on the same card can clone the bill
+once instead of re-entering it._
+
+---
+
+## [0.17.24] — 2026-05-24 — Duplicate bill action
+
+Real-world case: two people in a household each have their
+own Netflix subscription, both billed to the same Chase
+card. Pre-fix the user had to re-enter all the bill fields
+(amount, frequency, due date, category, account) by hand.
+
+### Change
+
+- `POST /api/bills/:id/duplicate` — copies every persistable
+  field except id/review fields and appends " (copy)" to the
+  name. Returns the new bill.
+- `api.duplicateBill(id)` on the web client
+- "Duplicate" button in each bill row's actions, between
+  "Mark paid" and "Delete"
+
+Renaming the duplicate uses the existing PATCH path (no UI
+yet for inline rename, but the cadence + account pickers are
+already on the row). 7 bills tests still pass.
 
 ---
 

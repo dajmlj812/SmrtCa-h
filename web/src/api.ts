@@ -1940,6 +1940,12 @@ export const api = {
   deleteBill: (id: string) =>
     http<void>(`/api/bills/${id}`, { method: 'DELETE' }),
 
+  // 0.17.24 — clone a bill (e.g. two Netflix subs from one card).
+  duplicateBill: (id: string) =>
+    http<{ bill: Bill }>(`/api/bills/${id}/duplicate`, {
+      method: 'POST',
+    }).then((r) => r.bill),
+
   markBillPaid: (id: string) =>
     http<{ bill: Bill }>(`/api/bills/${id}/mark-paid`, { method: 'POST' }).then(
       (r) => r.bill,
