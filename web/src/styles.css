@@ -4153,3 +4153,138 @@ code {
 }
 .auth-legal-links a { color: var(--muted, #6b7280); }
 
+
+/* ── Dashboard widget grid (0.18.14) ───────────────────────────────
+ * Draggable + resizable per-user dashboard layout. react-grid-layout
+ * handles the grid mechanics; we provide the widget chrome and an
+ * edit-mode visual state that makes drag affordances obvious.
+ * ────────────────────────────────────────────────────────────── */
+.dashboard-shell { width: 100%; }
+.dashboard-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.dashboard-page-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.dashboard-hidden-tray {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--card-bg, #fff);
+}
+.pill-action {
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--border, #e5e7eb);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text, #111);
+}
+.pill-action:hover {
+  background: var(--accent, #4f46e5);
+  color: white;
+  border-color: var(--accent, #4f46e5);
+}
+
+.dashboard-grid { position: relative; }
+.dashboard-grid .react-grid-item {
+  /* RGL applies inline width/height/transform — we just add visuals. */
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.dashboard-grid .react-grid-item.react-grid-placeholder {
+  /* The dropzone hint while dragging. */
+  background: var(--accent, #4f46e5);
+  opacity: 0.15;
+  border-radius: 8px;
+}
+.dashboard-grid .react-grid-item.react-draggable-dragging {
+  z-index: 10;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.widget-card {
+  /* Override .card defaults so the card fills the RGL cell exactly. */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+.widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+  flex-shrink: 0;
+}
+.widget-title {
+  flex: 1;
+  user-select: none;
+}
+.widget-drag-handle {
+  cursor: move;
+  cursor: grab;
+}
+.widget-drag-handle:active {
+  cursor: grabbing;
+}
+.widget-hide-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted, #6b7280);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 6px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.widget-hide-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+.widget-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.widget-body > * { flex: 1; min-height: 0; }
+
+/* Edit mode: subtle dashed outline around each card and the
+ * resize handle becomes visible (RGL hides it by default unless
+ * isResizable). */
+.dashboard-shell.is-editing .widget-card {
+  border: 1px dashed var(--accent, #4f46e5);
+  background: var(--card-bg, #fff);
+}
+.dashboard-shell.is-editing .widget-card:hover {
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.15);
+}
+.dashboard-grid .react-resizable-handle {
+  /* RGL ships a default — keep it but make it more visible in edit mode. */
+  opacity: 0.5;
+}
+.dashboard-shell.is-editing .react-resizable-handle {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .dashboard-page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dashboard-page-actions { justify-content: flex-end; }
+}

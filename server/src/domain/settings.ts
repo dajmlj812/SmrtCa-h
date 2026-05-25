@@ -45,14 +45,12 @@ export const KNOWN_SETTINGS = [
   // totals. Default USD when unset.
   { key: 'DISPLAY_CURRENCY', isSecret: false, restartRequired: false, superOnly: true, label: 'Display currency (ISO 4217)' },
   { key: 'FX_PROVIDER', isSecret: false, restartRequired: false, superOnly: true, label: 'FX rate provider' },
-  // Savings suggestion tuning — live, super-admin only (0.9.3).
-  // Used by the budget wizard as global defaults; per-tenant overrides
-  // are queued for a later release.
-  { key: 'SAVINGS_INCOME_PCT', isSecret: false, restartRequired: false, superOnly: true, label: 'Savings — % of income (legacy)' },
-  { key: 'SAVINGS_LEFTOVER_PCT', isSecret: false, restartRequired: false, superOnly: true, label: 'Savings — % of leftover (legacy)' },
-  // 0.17.22 — three configurable percentages of post-deduction
-  // leftover used by the savings suggestion chips. Defaults 25/50/75
-  // if unset; per-wizard-run overrides supersede.
+  // Savings suggestion tuning — three configurable percentages of
+  // post-deduction leftover used by the budget wizard chips.
+  // Defaults 25/50/75 if unset; per-wizard-run overrides supersede.
+  // (Two predecessor keys — SAVINGS_INCOME_PCT, SAVINGS_LEFTOVER_PCT —
+  // were superseded in 0.17.22 and removed from KNOWN_SETTINGS in
+  // 0.18.14 since nothing consumed them.)
   { key: 'SAVINGS_PCT_LOW',  isSecret: false, restartRequired: false, superOnly: true, label: 'Savings — low % chip (default 25)' },
   { key: 'SAVINGS_PCT_MID',  isSecret: false, restartRequired: false, superOnly: true, label: 'Savings — mid % chip (default 50)' },
   { key: 'SAVINGS_PCT_HIGH', isSecret: false, restartRequired: false, superOnly: true, label: 'Savings — high % chip (default 75)' },

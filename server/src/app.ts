@@ -22,6 +22,7 @@ import { attachmentRoutes } from './routes/attachments.js';
 import { transferRoutes } from './routes/transfers.js';
 import { insightsRoutes } from './routes/insights.js';
 import { authRoutes } from './routes/auth.js';
+import { userPreferencesRoutes } from './routes/user-preferences.js';
 import { budgetRoutes } from './routes/budgets.js';
 import { goalRoutes } from './routes/goals.js';
 import { billRoutes } from './routes/bills.js';
@@ -381,6 +382,7 @@ export async function buildApp(
   });
 
   await app.register(authRoutes);
+  await app.register(userPreferencesRoutes);
   await app.register(accountRoutes);
   await app.register(categoryRoutes);
   await app.register(transactionRoutes);

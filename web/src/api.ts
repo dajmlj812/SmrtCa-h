@@ -2769,6 +2769,27 @@ export const api = {
       body: JSON.stringify({ name }),
     }).then((r) => r.plan),
 
+  // ── Per-user preferences (0.18.14) ───────────────────────
+  getPreferences: () =>
+    http<{ preferences: Record<string, unknown> }>('/api/me/preferences').then(
+      (r) => r.preferences,
+    ),
+
+  putDashboardLayout: (payload: {
+    layout: Record<string, unknown>;
+    hidden: string[];
+  }) =>
+    http<{ ok: true }>('/api/me/preferences/dashboard-layout', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+
+  resetDashboardLayout: () =>
+    http<{ ok: true }>('/api/me/preferences/dashboard-layout', {
+      method: 'DELETE',
+    }),
+
   // ── Settings (Phase 7.2) ─────────────────────────────────
   listSettings: () =>
     http<{ settings: AppSetting[] }>('/api/settings').then((r) => r.settings),
