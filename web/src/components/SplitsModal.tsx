@@ -6,6 +6,7 @@ import {
   type TransactionSplit,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { AttachmentPreviewPane } from './AttachmentPreviewPane';
 
 interface Props {
   transaction: Transaction;
@@ -160,7 +161,7 @@ export function SplitsModal({ transaction, categories, onClose, onSaved }: Props
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-wide split-modal-shell" onClick={(e) => e.stopPropagation()}>
         <header className="modal-header">
           <div>
             <h2>Split transaction</h2>
@@ -177,6 +178,15 @@ export function SplitsModal({ transaction, categories, onClose, onSaved }: Props
           </button>
         </header>
         {error && <div className="banner error">{error}</div>}
+        <div className="split-modal-body">
+          {/* 0.18.13 — Attachment preview alongside the split editor.
+              Returns null when the transaction has no attachments so
+              the layout collapses to single-column on its own. */}
+          <AttachmentPreviewPane
+            transactionId={transaction.id}
+            className="split-modal-preview"
+          />
+          <div className="split-modal-editor">
         {loading ? (
           <p className="empty">Loading…</p>
         ) : (
@@ -268,6 +278,8 @@ export function SplitsModal({ transaction, categories, onClose, onSaved }: Props
             </div>
           </form>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );

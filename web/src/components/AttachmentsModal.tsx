@@ -21,7 +21,15 @@ export function AttachmentsModal({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // 0.18.13 — phase + bytes for the upload progress UI. `null` = idle.
+  const [progress, setProgress] = useState<{
+    phase: 'uploading' | 'processing';
+    loaded: number;
+    total: number;
+    fileLabel: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const onCountChangeRef = useRef(onCountChange);
   onCountChangeRef.current = onCountChange;
 
@@ -72,8 +80,23 @@ export function AttachmentsModal({
     if (files.length === 0) return;
     setUploading(true);
     setError(null);
+    const fileLabel =
+      files.length === 1 ? files[0]!.name : `${files.length} files`;
+    setProgress({ phase: 'uploading', loaded: 0, total: 0, fileLabel });
     try {
-      const result = await api.uploadAttachments(transaction.id, files);
+      // 0.18.13 — use the progress-aware uploader so the user sees
+      // bytes-out while the receipt is in flight, and a "Processing…"
+      // step while the server parses the upload + writes to disk.
+      // After the response lands, the OCR poll (further down) drives
+      // the "Scanning…" indicator on each new card.
+      const { promise } = api.uploadAttachmentsWithProgress(
+        transaction.id,
+        files,
+        (state) => {
+          setProgress({ ...state, fileLabel });
+        },
+      );
+      const result = await promise;
       if (result.errors && result.errors.length > 0) {
         setError(result.errors.join('; '));
       }
@@ -82,7 +105,9 @@ export function AttachmentsModal({
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setUploading(false);
+      setProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   }
 
@@ -138,6 +163,8 @@ export function AttachmentsModal({
           onFiles={handleFiles}
           disabled={uploading}
           inputRef={fileInputRef}
+          cameraInputRef={cameraInputRef}
+          progress={progress}
         />
 
         {loading ? (
@@ -165,15 +192,27 @@ function DropZone({
   onFiles,
   disabled,
   inputRef,
+  cameraInputRef,
+  progress,
 }: {
   onFiles: (files: File[]) => void;
   disabled: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  cameraInputRef: React.RefObject<HTMLInputElement | null>;
+  progress: {
+    phase: 'uploading' | 'processing';
+    loaded: number;
+    total: number;
+    fileLabel: string;
+  } | null;
 }) {
   const [hover, setHover] = useState(false);
 
   function pickFiles() {
     inputRef.current?.click();
+  }
+  function pickCamera() {
+    cameraInputRef.current?.click();
   }
 
   return (
@@ -183,7 +222,7 @@ function DropZone({
       }`}
       onDragOver={(e) => {
         e.preventDefault();
-        setHover(true);
+        if (!disabled) setHover(true);
       }}
       onDragLeave={() => setHover(false)}
       onDrop={(e) => {
@@ -193,26 +232,45 @@ function DropZone({
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) onFiles(files);
       }}
-      onClick={() => !disabled && pickFiles()}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && !disabled) pickFiles();
-      }}
+      role="region"
+      aria-label="Receipt upload"
     >
-      <div className="attachment-dropzone-text">
-        {disabled ? (
-          <>Uploading…</>
-        ) : (
-          <>
+      {progress ? (
+        <UploadProgress progress={progress} />
+      ) : (
+        <>
+          <div className="attachment-dropzone-text">
             <strong>Drop receipts here</strong>
             <span className="muted">
               {' '}
-              or click to browse · JPEG / PNG / WEBP / PDF · 25 MB max
+              · JPEG / PNG / WEBP / PDF · 25 MB max
             </span>
-          </>
-        )}
-      </div>
+          </div>
+          <div className="attachment-dropzone-actions">
+            <button
+              type="button"
+              className="btn small"
+              onClick={pickFiles}
+              disabled={disabled}
+            >
+              Choose file
+            </button>
+            {/* 0.18.13 — Camera-capture button. On phones/tablets that
+                support it, the `capture="environment"` hint opens the
+                rear camera. On desktops it falls back to a normal file
+                picker, so the button is safe to show everywhere. */}
+            <button
+              type="button"
+              className="btn small secondary"
+              onClick={pickCamera}
+              disabled={disabled}
+              title="Use your phone camera to take a photo of the receipt"
+            >
+              📷 Take photo
+            </button>
+          </div>
+        </>
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -225,6 +283,61 @@ function DropZone({
           if (files.length > 0) onFiles(files);
         }}
       />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        disabled={disabled}
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length > 0) onFiles(files);
+        }}
+      />
+    </div>
+  );
+}
+
+function UploadProgress({
+  progress,
+}: {
+  progress: {
+    phase: 'uploading' | 'processing';
+    loaded: number;
+    total: number;
+    fileLabel: string;
+  };
+}) {
+  const pct =
+    progress.total > 0
+      ? Math.min(100, Math.round((progress.loaded / progress.total) * 100))
+      : 0;
+  const isUploading = progress.phase === 'uploading';
+  return (
+    <div
+      className="upload-progress"
+      role="status"
+      aria-live="polite"
+      aria-label={isUploading ? `Uploading ${pct}%` : 'Processing upload'}
+    >
+      <div className="upload-progress-label">
+        <strong>
+          {isUploading ? `Uploading ${pct}%` : 'Processing upload…'}
+        </strong>
+        <span className="muted"> {progress.fileLabel}</span>
+      </div>
+      <div className="upload-progress-bar">
+        <div
+          className={`upload-progress-fill ${isUploading ? '' : 'indeterminate'}`}
+          style={isUploading ? { width: `${pct}%` } : undefined}
+        />
+      </div>
+      <div className="muted small">
+        {isUploading
+          ? `${formatBytes(progress.loaded)} of ${formatBytes(progress.total)}`
+          : 'Server is saving the file and scheduling the receipt scan. Scan progress appears below once the upload lands.'}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type SplitParticipant, type TransactionShare } from '../api';
 import { formatCents } from '../format';
+import { AttachmentPreviewPane } from './AttachmentPreviewPane';
 
 /**
  * Phase 9.2 — modal to assign per-participant shares to a transaction.
@@ -123,7 +124,7 @@ export function SplitTransactionModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-wide split-modal-shell" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Split transaction</h2>
           <button
@@ -140,6 +141,15 @@ export function SplitTransactionModal({
         </div>
 
         {error && <div className="banner error">{error}</div>}
+
+        <div className="split-modal-body">
+          {/* 0.18.13 — Receipt visible while configuring per-person
+              shares. Returns null when there's no attachment. */}
+          <AttachmentPreviewPane
+            transactionId={transactionId}
+            className="split-modal-preview"
+          />
+          <div className="split-modal-editor">
 
         {participants.length === 0 ? (
           <p className="empty">
@@ -212,6 +222,8 @@ export function SplitTransactionModal({
             </button>
           </div>
         </form>
+          </div>
+        </div>
       </div>
     </div>
   );

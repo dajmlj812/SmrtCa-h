@@ -1440,15 +1440,77 @@ export const api = {
       `/api/transactions/${transactionId}/attachments`,
     ).then((r) => r.attachments),
 
-  uploadAttachments: (transactionId: string, files: File[]) => {
+  /**
+   * 0.18.13 — XHR-backed upload that surfaces byte-level progress.
+   *
+   * Why XHR instead of fetch: as of 2026 there's still no standard
+   * way to observe the request-body bytes-out of a fetch() call. The
+   * Streams API can do it but isn't broadly supported as an upload
+   * progress signal, and fetch's body iterator doesn't fire on bytes
+   * sent. XHR's `upload.onprogress` has been reliable forever and
+   * matches what every other "show me upload %" UI uses.
+   *
+   * Returns a thin {promise, abort} so the caller can cancel a slow
+   * upload without leaking the XHR.
+   */
+  uploadAttachmentsWithProgress: (
+    transactionId: string,
+    files: File[],
+    onProgress: (state: {
+      phase: 'uploading' | 'processing';
+      loaded: number;
+      total: number;
+    }) => void,
+  ): { promise: Promise<UploadResult>; abort: () => void } => {
     const fd = new FormData();
+    let totalBytes = 0;
     for (const file of files) {
       fd.append('file', file, file.name);
+      totalBytes += file.size;
     }
-    return http<UploadResult>(
-      `/api/transactions/${transactionId}/attachments`,
-      { method: 'POST', body: fd },
-    );
+    const xhr = new XMLHttpRequest();
+    const promise = new Promise<UploadResult>((resolve, reject) => {
+      xhr.open('POST', `/api/transactions/${transactionId}/attachments`);
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress({
+            phase: 'uploading',
+            loaded: e.loaded,
+            total: e.total,
+          });
+        }
+      };
+      xhr.upload.onload = () => {
+        // Bytes are all up — the server is now processing (parsing
+        // multipart, sniffing the file, writing to disk, optionally
+        // launching OCR). UI flips to indeterminate "Processing…".
+        onProgress({ phase: 'processing', loaded: totalBytes, total: totalBytes });
+      };
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.onabort = () => reject(new Error('Upload aborted'));
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText) as UploadResult);
+          } catch {
+            reject(new Error('Server returned malformed JSON'));
+          }
+        } else {
+          // Best-effort error parse — match what http() does.
+          let message = `Upload failed (HTTP ${xhr.status})`;
+          try {
+            const body = JSON.parse(xhr.responseText) as { error?: string };
+            if (body.error) message = body.error;
+          } catch {
+            /* keep generic message */
+          }
+          reject(new Error(message));
+        }
+      };
+      xhr.send(fd);
+    });
+    return { promise, abort: () => xhr.abort() };
   },
 
   deleteAttachment: (id: string) =>

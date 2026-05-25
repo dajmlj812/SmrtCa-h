@@ -757,7 +757,6 @@ select:focus {
   border-radius: 12px;
   padding: 28px;
   text-align: center;
-  cursor: pointer;
   background: #f8fafc;
   transition: border-color 0.15s, background 0.15s;
   margin-bottom: 16px;
@@ -767,12 +766,55 @@ select:focus {
   background: #ecfdf5;
 }
 .attachment-dropzone.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  opacity: 0.85;
 }
 .attachment-dropzone-text {
   color: var(--text);
   font-size: 14px;
+  margin-bottom: 14px;
+}
+.attachment-dropzone-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* 0.18.13 — upload progress bar (replaces dropzone content during
+   an in-flight upload). Two phases: determinate while bytes are
+   uploading, indeterminate while the server is processing. */
+.upload-progress {
+  text-align: left;
+  padding: 4px 8px;
+}
+.upload-progress-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.upload-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.upload-progress-fill {
+  height: 100%;
+  background: var(--accent, #4f46e5);
+  border-radius: 4px;
+  transition: width 0.15s ease-out;
+}
+.upload-progress-fill.indeterminate {
+  width: 35%;
+  animation: upload-progress-slide 1.1s linear infinite;
+}
+@keyframes upload-progress-slide {
+  0%   { margin-left: -35%; }
+  100% { margin-left: 100%; }
 }
 
 .attachment-grid {
@@ -3076,6 +3118,112 @@ code {
 .legal-footer a {
   color: inherit;
   margin: 0 4px;
+}
+
+/* ── Split modals: attachment preview alongside editor ────────
+   0.18.13 — when a transaction has a receipt attached, show it
+   beside the splits editor (SplitsModal for category splits and
+   SplitTransactionModal for household splits). Single-column
+   fallback on narrow viewports + when there's no attachment. */
+.split-modal-shell {
+  /* Slightly wider when the preview is present; modal-wide already
+     gives a reasonable cap so we only tweak the body grid. */
+}
+.split-modal-body {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .split-modal-body {
+    grid-template-columns: 1fr;
+  }
+}
+.split-modal-editor {
+  min-width: 0; /* allow grid track to actually shrink */
+}
+.split-modal-preview {
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.attachment-preview-pane {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--card-bg, #fff);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+.attachment-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: rgba(0, 0, 0, 0.02);
+}
+.attachment-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.attachment-preview-body {
+  flex: 1 1 auto;
+  min-height: 280px;
+  max-height: 60vh;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 8px;
+}
+.attachment-preview-image {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.attachment-preview-pdf {
+  width: 100%;
+  height: 60vh;
+  border: 0;
+}
+.attachment-preview-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  background: rgba(0, 0, 0, 0.02);
+  overflow-x: auto;
+}
+.attachment-preview-tab {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 4px;
+  background: var(--card-bg, #fff);
+  font-size: 12px;
+  cursor: pointer;
+}
+.attachment-preview-tab.active {
+  background: var(--accent, #4f46e5);
+  color: white;
+  border-color: var(--accent, #4f46e5);
+}
+.attachment-preview-ocr {
+  padding: 6px 12px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* Footer-of-form links from LoginPage, SignupPage, ForgotPasswordPage. */
