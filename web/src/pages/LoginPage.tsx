@@ -116,6 +116,13 @@ export function LoginPage({ onAuthenticated, signupEnabled, supportUrl }: Props)
             — feature requests welcome too.
           </p>
         )}
+        <p className="muted small auth-legal-links">
+          <Link to="/privacy">Privacy</Link>
+          {' · '}
+          <Link to="/terms">Terms</Link>
+          {' · '}
+          <Link to="/cookies">Cookies</Link>
+        </p>
       </form>
       <BrandTagline />
     </div>

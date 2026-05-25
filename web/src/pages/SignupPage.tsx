@@ -168,6 +168,11 @@ export function SignupPage({ supportUrl }: Props = {}) {
             — feature requests welcome too.
           </p>
         )}
+        <p className="muted small auth-legal-links">
+          By creating an account you agree to our{' '}
+          <Link to="/terms">Terms</Link> and{' '}
+          <Link to="/privacy">Privacy Policy</Link>.
+        </p>
       </form>
       <BrandTagline />
     </div>

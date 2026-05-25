@@ -25,5 +25,12 @@ export default defineConfig({
     proxy: {
       '/api': apiProxyTarget,
     },
+    fs: {
+      // Allow importing the legal markdown drafts from ../docs/legal/.
+      // The .md files are the single source of truth (what the
+      // reviewing attorney edits); the React pages import them via
+      // ?raw so we never have to hand-sync content.
+      allow: ['..'],
+    },
   },
 });

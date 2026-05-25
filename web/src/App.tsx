@@ -17,6 +17,9 @@ import { SignupPage } from './pages/SignupPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
+import { CookieNoticePage } from './pages/CookieNoticePage';
 import { BudgetsPage } from './pages/BudgetsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
@@ -69,6 +72,12 @@ export function App() {
   // 0.16.2 — /forgot-password and /reset-password are public.
   const isForgotPasswordRoute = location.pathname === '/forgot-password';
   const isResetPasswordRoute = location.pathname.startsWith('/reset-password');
+  // 0.18.13 — /privacy, /terms, /cookies are public (draft-state per
+  // the security audit's F-33; attorney review pending).
+  const isLegalRoute =
+    location.pathname === '/privacy' ||
+    location.pathname === '/terms' ||
+    location.pathname === '/cookies';
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -135,6 +144,15 @@ export function App() {
           path="/reset-password"
           element={<ResetPasswordPage supportUrl={supportUrl} />}
         />
+      </Routes>
+    );
+  }
+  if (isLegalRoute) {
+    return (
+      <Routes>
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/cookies" element={<CookieNoticePage />} />
       </Routes>
     );
   }
