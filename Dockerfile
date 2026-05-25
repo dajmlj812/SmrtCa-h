@@ -13,6 +13,12 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# 0.18.13 — the legal pages (PrivacyPage, TermsPage, CookieNoticePage)
+# import their markdown via `../../../docs/legal/*.md?raw` so the .md
+# files are the single source of truth (also what the reviewing
+# attorney edits). Ship the legal/ subdir into the builder image at the
+# matching relative path so Vite can resolve the imports.
+COPY docs/legal /app/docs/legal
 RUN npm run build
 
 # ── Stage 2: server build ────────────────────────────────────
