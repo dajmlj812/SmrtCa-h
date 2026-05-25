@@ -127,6 +127,28 @@ const SECTIONS: Array<{ title: string; subtitle: string; keys: string[] }> = [
       'Rotating these breaks things if done wrong. The server must restart for new values to apply.',
     keys: ['SESSION_SECRET', 'ATTACHMENT_ENCRYPTION_KEY'],
   },
+  // 0.18.13 — performance analyzer cadence. Live (no restart needed).
+  {
+    title: 'Performance analysis',
+    subtitle:
+      'How often the /health performance analyzer re-runs. Operators can also force an immediate run via the "Run now" button on /health.',
+    keys: ['PERFORMANCE_ANALYSIS_INTERVAL_HOURS'],
+  },
+  // 0.18.13 — boot-time performance knobs. Restart required because
+  // the values are read by Node / pg.Pool / module constants at
+  // process boot. The /system page has the "Restart application"
+  // button that picks up the new values.
+  {
+    title: 'Performance — restart required',
+    subtitle:
+      'These take effect on the next process restart. After editing any of them, go to /system → Restart application.',
+    keys: [
+      'NODE_OPTIONS',
+      'PG_POOL_MAX',
+      'OCR_TIMEOUT_MS',
+      'SLOW_QUERY_THRESHOLD_MS',
+    ],
+  },
 ];
 
 const DESTRUCTIVE_CONFIRM: Record<string, string> = {
