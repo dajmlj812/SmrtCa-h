@@ -375,6 +375,12 @@ a:hover {
   font-weight: 600;
   color: var(--muted);
 }
+/* 0.18.9 — base input/select rule. Uses theme variables instead
+ * of a hardcoded white background so the field doesn't render as
+ * a bright-white block on dark mode. The more specific rule near
+ * the bottom of this file (covering individual `input[type=...]`
+ * selectors) extends this with a slightly different look for
+ * design-system surfaces. */
 input,
 select {
   font: inherit;
@@ -382,7 +388,7 @@ select {
   padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface-2);
   color: var(--text);
 }
 input:focus,
@@ -571,7 +577,8 @@ select:focus {
   padding: 6px 8px;
   width: 100%;
   max-width: 220px;
-  background: #fff;
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .pill.status-pending {
@@ -1872,8 +1879,9 @@ tr.selected {
 }
 .reports-list-item {
   text-align: left;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
   border-radius: 6px;
   padding: 10px 12px;
   cursor: pointer;
@@ -1921,8 +1929,9 @@ tr.selected {
   right: 0;
   top: 100%;
   margin-top: 4px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   padding: 8px;
@@ -1974,12 +1983,13 @@ tr.selected {
   margin-bottom: 16px;
 }
 .gauge {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
   border-radius: 8px;
   padding: 10px 12px 12px;
   text-align: center;
-  border-top: 4px solid #e5e7eb;
+  border-top: 4px solid var(--border);
 }
 .gauge-tone-ok   { border-top-color: #10b981; }
 .gauge-tone-warn { border-top-color: #f59e0b; }
@@ -2259,9 +2269,14 @@ a:hover { color: var(--accent-hover); text-decoration: none; }
   color: var(--muted);
   letter-spacing: 0.01em;
 }
-input[type="text"], input[type="email"], input[type="password"],
-input[type="number"], input[type="url"], input[type="date"],
-input[type="time"], input[type="search"], select, textarea {
+/* 0.18.9 — make the design-system input rule match EVERY input,
+ * not just the ones with explicit `type=` attributes. Pre-0.18.9
+ * `<input>` (default type=text), `<input list="...">`, and
+ * `<input type="file">` all fell through to the older rule and
+ * picked up its hardcoded white background — fine in light mode,
+ * but rendered as a bright-white block in dark mode that looked
+ * "washed out" against the page surface. */
+input, select, textarea {
   font: inherit;
   font-size: 13.5px;
   padding: 8px 12px;
@@ -2271,12 +2286,40 @@ input[type="time"], input[type="search"], select, textarea {
   color: var(--text);
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
+/* Checkboxes + radios are visual primitives, not text fields —
+ * leave their native sizing/padding alone. */
+input[type="checkbox"], input[type="radio"] {
+  padding: 0;
+  border-radius: 3px;
+  width: auto;
+  background: initial;
+}
+/* File inputs render their own button; theme the wrapper but
+ * leave the button styling to the browser so it still looks
+ * native and accessible. */
+input[type="file"] {
+  padding: 6px 8px;
+}
+input[type="file"]::file-selector-button {
+  font: inherit;
+  margin-right: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text);
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-input::placeholder, textarea::placeholder { color: var(--dim); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
 /* Tables */
 .table-wrap {

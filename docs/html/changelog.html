@@ -161,11 +161,49 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.8 collapses APP_BASE_URL + STRIPE_PUBLIC_BASE_URL into a
-single PUBLIC_BASE_URL key, behind one shared <code>resolveBaseUrl</code>
-helper. Prevents the &quot;two settings, one source of truth, drift in
-between&quot; class of bug that consumed hours during the smrtcash-test
-deploy.</em></p>
+<p><em>0.18.9 fixes washed-out form inputs in dark mode. Several inputs
+without explicit <code>type=</code> attributes (the Categories tax-tag
+autocomplete, the Import file picker, anywhere <code>&lt;input list=&quot;...&quot;&gt;</code>
+is used) were falling through to an older rule that hardcoded
+<code>background: #fff</code>, producing a bright-white block on dark UI.</em></p>
+<hr>
+<h2 id="0189-2026-05-24-form-contrast-fix-washed-out-inputs">[0.18.9] — 2026-05-24 — Form contrast fix (washed-out inputs)<a class="heading-anchor" href="#0189-2026-05-24-form-contrast-fix-washed-out-inputs">#</a></h2>
+<p>Root cause: <code>styles.css</code> had two competing input rules. The newer
+design-system rule used theme variables but only matched explicit
+<code>input[type=&quot;text&quot;]</code> / <code>input[type=&quot;number&quot;]</code> / etc. selectors.
+Any <code>&lt;input&gt;</code> without a <code>type</code> attribute (HTML defaults to text
+but CSS attribute selectors don&#39;t match the implicit default), and
+<code>&lt;input type=&quot;file&quot;&gt;</code>, fell through to the older rule which
+hardcoded <code>background: #fff</code> — fine in light mode, but in dark
+mode it produced a near-white block where the field&#39;s text
+blended into the background.</p>
+<p>Specific places the user flagged:</p>
+<ul>
+<li>new account creation</li>
+<li>transactions filter row</li>
+<li>Categories &quot;tax tag&quot; autocomplete (<code>&lt;input list=&quot;...&quot;&gt;</code>)</li>
+<li>new goal entry</li>
+<li>Import &quot;choose file&quot; area</li>
+<li>Connections</li>
+<li>new vehicle dialog</li>
+<li>Sharing</li>
+</ul>
+<p>All resolved by the same fix.</p>
+<p><strong>Changes:</strong></p>
+<ul>
+<li>Old base rule (<code>input, select</code>) now uses <code>background: var(--surface-2)</code> instead of the hardcoded <code>#fff</code>.</li>
+<li>Design-system rule consolidated to plain <code>input, select, textarea</code> — every input type matches, no more fall-through.</li>
+<li>New explicit styles for <code>&lt;input type=&quot;file&quot;&gt;</code> including a
+themed <code>::file-selector-button</code>.</li>
+<li>Checkboxes + radios get an override that restores their
+native sizing (don&#39;t want a padded box around them).</li>
+<li>Placeholder color bumped from <code>var(--dim)</code> to <code>var(--muted)</code>
+for better visibility in both themes.</li>
+<li>Same fix applied to three other surfaces with the same
+hardcoded-white-bg bug: <code>.cell-select</code> (in-row dropdowns),
+<code>.reports-list-item</code> (Reports left rail), <code>.column-chooser-menu</code>
+(FilterableTable column menu), and <code>.gauge</code> (Health page).</li>
+</ul>
 <hr>
 <h2 id="0188-2026-05-24-unify-base-url-settings">[0.18.8] — 2026-05-24 — Unify base URL settings<a class="heading-anchor" href="#0188-2026-05-24-unify-base-url-settings">#</a></h2>
 <p>Pre-0.18.8 there were two operator settings that answered the
@@ -6738,7 +6776,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 03:07:57 UTC · commit d2e8914</span>
+  <span>Generated 2026-05-25 03:22:10 UTC · commit c6f4253</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

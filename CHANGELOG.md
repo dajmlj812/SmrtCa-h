@@ -9,11 +9,53 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.8 collapses APP_BASE_URL + STRIPE_PUBLIC_BASE_URL into a
-single PUBLIC_BASE_URL key, behind one shared `resolveBaseUrl`
-helper. Prevents the "two settings, one source of truth, drift in
-between" class of bug that consumed hours during the smrtcash-test
-deploy._
+_0.18.9 fixes washed-out form inputs in dark mode. Several inputs
+without explicit `type=` attributes (the Categories tax-tag
+autocomplete, the Import file picker, anywhere `<input list="...">`
+is used) were falling through to an older rule that hardcoded
+`background: #fff`, producing a bright-white block on dark UI._
+
+---
+
+## [0.18.9] — 2026-05-24 — Form contrast fix (washed-out inputs)
+
+Root cause: `styles.css` had two competing input rules. The newer
+design-system rule used theme variables but only matched explicit
+`input[type="text"]` / `input[type="number"]` / etc. selectors.
+Any `<input>` without a `type` attribute (HTML defaults to text
+but CSS attribute selectors don't match the implicit default), and
+`<input type="file">`, fell through to the older rule which
+hardcoded `background: #fff` — fine in light mode, but in dark
+mode it produced a near-white block where the field's text
+blended into the background.
+
+Specific places the user flagged:
+- new account creation
+- transactions filter row
+- Categories "tax tag" autocomplete (`<input list="...">`)
+- new goal entry
+- Import "choose file" area
+- Connections
+- new vehicle dialog
+- Sharing
+
+All resolved by the same fix.
+
+**Changes:**
+- Old base rule (`input, select`) now uses `background:
+  var(--surface-2)` instead of the hardcoded `#fff`.
+- Design-system rule consolidated to plain `input, select,
+  textarea` — every input type matches, no more fall-through.
+- New explicit styles for `<input type="file">` including a
+  themed `::file-selector-button`.
+- Checkboxes + radios get an override that restores their
+  native sizing (don't want a padded box around them).
+- Placeholder color bumped from `var(--dim)` to `var(--muted)`
+  for better visibility in both themes.
+- Same fix applied to three other surfaces with the same
+  hardcoded-white-bg bug: `.cell-select` (in-row dropdowns),
+  `.reports-list-item` (Reports left rail), `.column-chooser-menu`
+  (FilterableTable column menu), and `.gauge` (Health page).
 
 ---
 
