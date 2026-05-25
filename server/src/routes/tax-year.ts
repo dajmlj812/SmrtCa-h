@@ -143,8 +143,20 @@ async function buildTaxYear(
 
 function csvCell(v: unknown): string {
   let s = String(v ?? '');
-  // F-22 — neutralize spreadsheet formula triggers.
-  if (s.length > 0 && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  // F-22 — neutralize spreadsheet formula triggers. Refined to allow
+  // signed numbers (-40.00, +1.5) through unmodified — see
+  // routes/transactions.ts for the shared rationale.
+  if (s.length > 0) {
+    const first = s.charCodeAt(0);
+    let dangerous = first === 0x3d || first === 0x40 || first === 0x09 || first === 0x0d;
+    if (!dangerous && (first === 0x2d || first === 0x2b) && s.length > 1) {
+      const second = s.charCodeAt(1);
+      const secondIsDigit = second >= 0x30 && second <= 0x39;
+      const secondIsDot = second === 0x2e;
+      dangerous = !(secondIsDigit || secondIsDot);
+    }
+    if (dangerous) s = `'${s}`;
+  }
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
