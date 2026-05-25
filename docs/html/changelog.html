@@ -161,10 +161,24 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.24 shipped. 0.17.24 adds a Duplicate action on
-each /bills row so two roommates / family members with
-separate subscriptions on the same card can clone the bill
-once instead of re-entering it.</em></p>
+<p><em>0.17.0–0.17.25 shipped. 0.17.25 surfaces the Plaid + Anomaly
+toggles on /settings so they can be flipped on without
+editing <code>.env</code> or hand-poking the API.</em></p>
+<hr>
+<h2 id="01725-2026-05-24-plaid-anomaly-toggles-in-settings-ui">[0.17.25] — 2026-05-24 — Plaid + Anomaly toggles in Settings UI<a class="heading-anchor" href="#01725-2026-05-24-plaid-anomaly-toggles-in-settings-ui">#</a></h2>
+<p>Both feature switches already existed as super-admin settings
+in the backend (<code>PLAID_ENABLED</code>, <code>ANOMALY_ENABLED</code>) but
+weren&#39;t listed in the SettingsPage&#39;s <code>SECTIONS</code>, so the UI
+didn&#39;t render them. Adds two new sections:</p>
+<ul>
+<li><strong>Plaid — bank sync</strong> with <code>PLAID_ENABLED</code>, <code>PLAID_CLIENT_ID</code>,
+<code>PLAID_SECRET</code>, <code>PLAID_ENV</code></li>
+<li><strong>Anomaly alerts</strong> with <code>ANOMALY_ENABLED</code>,
+<code>ANOMALY_LARGE_TXN_THRESHOLD_CENTS</code>, <code>ANOMALY_MULTIPLIER</code>,
+<code>ANOMALY_EMAIL_TO</code></li>
+</ul>
+<p>Each setting uses the existing save/clear/show-source UI from
+SettingsPage. No backend or schema change.</p>
 <hr>
 <h2 id="01724-2026-05-24-duplicate-bill-action">[0.17.24] — 2026-05-24 — Duplicate bill action<a class="heading-anchor" href="#01724-2026-05-24-duplicate-bill-action">#</a></h2>
 <p>Real-world case: two people in a household each have their
@@ -6416,7 +6430,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 01:02:50 UTC · commit f580a43</span>
+  <span>Generated 2026-05-25 01:07:03 UTC · commit c3e73ae</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

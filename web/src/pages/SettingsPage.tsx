@@ -63,6 +63,25 @@ const SECTIONS: Array<{ title: string; subtitle: string; keys: string[] }> = [
       'Operator-configured help destination — surfaced as "Help & feature requests" in the sidebar and on every unauthenticated page. Clear it to hide the link everywhere.',
     keys: ['SUPPORT_URL'],
   },
+  // 0.17.25 — surface Plaid + Anomaly toggles so they can be
+  // enabled without editing .env or hand-poking the settings API.
+  {
+    title: 'Plaid — bank sync',
+    subtitle:
+      'When enabled, /plaid lets you link accounts and import transactions automatically. PLAID_ENABLED=true requires all four keys to be set. PLAID_ENV is "sandbox" for testing or "production" for live linkage.',
+    keys: ['PLAID_ENABLED', 'PLAID_CLIENT_ID', 'PLAID_SECRET', 'PLAID_ENV'],
+  },
+  {
+    title: 'Anomaly alerts',
+    subtitle:
+      'Flags unusual transactions on import — single transactions over the threshold, or merchant-level outliers (N× the median for that merchant). When ANOMALY_EMAIL_TO is set, a digest is mailed; otherwise alerts stay in-app at /anomalies. Defaults: threshold $500, multiplier 5×.',
+    keys: [
+      'ANOMALY_ENABLED',
+      'ANOMALY_LARGE_TXN_THRESHOLD_CENTS',
+      'ANOMALY_MULTIPLIER',
+      'ANOMALY_EMAIL_TO',
+    ],
+  },
   {
     title: 'Security — restart required',
     subtitle:

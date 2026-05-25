@@ -9,10 +9,27 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.24 shipped. 0.17.24 adds a Duplicate action on
-each /bills row so two roommates / family members with
-separate subscriptions on the same card can clone the bill
-once instead of re-entering it._
+_0.17.0–0.17.25 shipped. 0.17.25 surfaces the Plaid + Anomaly
+toggles on /settings so they can be flipped on without
+editing `.env` or hand-poking the API._
+
+---
+
+## [0.17.25] — 2026-05-24 — Plaid + Anomaly toggles in Settings UI
+
+Both feature switches already existed as super-admin settings
+in the backend (`PLAID_ENABLED`, `ANOMALY_ENABLED`) but
+weren't listed in the SettingsPage's `SECTIONS`, so the UI
+didn't render them. Adds two new sections:
+
+- **Plaid — bank sync** with `PLAID_ENABLED`, `PLAID_CLIENT_ID`,
+  `PLAID_SECRET`, `PLAID_ENV`
+- **Anomaly alerts** with `ANOMALY_ENABLED`,
+  `ANOMALY_LARGE_TXN_THRESHOLD_CENTS`, `ANOMALY_MULTIPLIER`,
+  `ANOMALY_EMAIL_TO`
+
+Each setting uses the existing save/clear/show-source UI from
+SettingsPage. No backend or schema change.
 
 ---
 
