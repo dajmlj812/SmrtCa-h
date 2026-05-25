@@ -161,10 +161,46 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.17.0–0.17.19 shipped. 0.17.19 is a one-liner fix for
-migration 038: it joined tenant via transactions.tenant_id
-(unpopulated on this deploy) instead of accounts.tenant_id.
-039 re-runs the backfill with the right join.</em></p>
+<p><em>0.17.0–0.17.20 shipped. 0.17.20 tags vehicles + commute
+routes with an account_id so the wizard&#39;s fuel/tolls
+projection only counts items belonging to the plan&#39;s
+accounts — no more same-fuel-cost-on-every-plan.</em></p>
+<hr>
+<h2 id="01720-2026-05-24-account-scope-for-vehicles-routes">[0.17.20] — 2026-05-24 — Account scope for vehicles + routes<a class="heading-anchor" href="#01720-2026-05-24-account-scope-for-vehicles-routes">#</a></h2>
+<p>Pre-fix: the wizard&#39;s <code>routeDrivenWeekly()</code> aggregated fuel
+and tolls across every vehicle and commute route in the
+tenant, regardless of which plan&#39;s accounts paid for them.
+With per-account plans (0.17.16), that meant the same
+$250/week fuel cost landed on every plan&#39;s card —
+double-counted across budgets.</p>
+<h3 id="schema">Schema<a class="heading-anchor" href="#schema">#</a></h3>
+<p>Migration 040 adds <code>account_id uuid REFERENCES accounts(id) ON DELETE SET NULL</code> to both <code>vehicles</code> and <code>commute_routes</code>.
+No backfill — these tables have no transaction history to
+learn from. Existing rows stay NULL until the user tags them.</p>
+<h3 id="wizard">Wizard<a class="heading-anchor" href="#wizard">#</a></h3>
+<p><code>routeDrivenWeekly()</code> now takes an <code>accountIds</code> filter.
+When set, the vehicle and tolls SQL both gate on <code>account_id = ANY($accountIds)</code>. NULL <code>account_id</code> items are excluded
+from scoped wizard runs — matching the strict semantics
+introduced for bills in 0.17.17.</p>
+<h3 id="routes">Routes<a class="heading-anchor" href="#routes">#</a></h3>
+<ul>
+<li><code>POST /api/vehicles</code> + <code>PATCH /api/vehicles/:id</code> accept
+<code>accountId</code> (uuid or null to clear)</li>
+<li><code>POST /api/commute-routes</code> + <code>PATCH /api/commute-routes/:id</code>
+accept the same</li>
+</ul>
+<h3 id="ui">UI<a class="heading-anchor" href="#ui">#</a></h3>
+<ul>
+<li>New Account column on the Vehicles fleet table with an
+inline <code>&lt;select&gt;</code> per row</li>
+<li>The same picker on each RouteCard in the actions bar</li>
+</ul>
+<p>After this slice: the four account-tagging axes (transactions,
+bills, recurring_income, vehicles, commute_routes) all support
+strict per-plan scoping. The wizard&#39;s groceries/fuel/tolls/
+bills/income projections all honor the plan&#39;s account scope
+cleanly.</p>
+<p>20 budget + wizard + commute-routes tests pass.</p>
 <hr>
 <h2 id="01719-2026-05-24-fix-migration-038-tenant-join">[0.17.19] — 2026-05-24 — Fix migration 038 tenant join<a class="heading-anchor" href="#01719-2026-05-24-fix-migration-038-tenant-join">#</a></h2>
 <p>Migration 038 silently no-op&#39;d: it joined transactions via
@@ -6278,7 +6314,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 00:19:07 UTC · commit d52e3eb</span>
+  <span>Generated 2026-05-25 00:32:08 UTC · commit d087a82</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -303,6 +303,8 @@ export interface Vehicle {
   electricity_rate_cents_per_kwh: number | null;
   weekly_avg_miles: number;
   active: boolean;
+  /** 0.17.20 — when set, only the plan scoping this account counts this vehicle's fuel cost. */
+  account_id: string | null;
   created_at: string;
 }
 
@@ -320,6 +322,8 @@ export interface CommuteRoute {
   distance_miles: number;
   toll_per_crossing_cents: number | null;
   active: boolean;
+  /** 0.17.20 — same semantics as Vehicle.account_id; gates per-plan toll inclusion. */
+  account_id: string | null;
   created_at: string;
   assignments: RouteAssignment[];
 }
@@ -2176,6 +2180,8 @@ export const api = {
     kwhPerMile?: number;
     electricityRateCentsPerKwh?: number;
     weeklyAvgMiles: number;
+    /** 0.17.20 */
+    accountId?: string | null;
   }) =>
     http<{ vehicle: Vehicle }>('/api/vehicles', {
       method: 'POST',
@@ -2192,6 +2198,8 @@ export const api = {
       electricityRateCentsPerKwh: number | null;
       weeklyAvgMiles: number;
       active: boolean;
+      /** 0.17.20 — null clears. */
+      accountId: string | null;
     }>,
   ) =>
     http<{ vehicle: Vehicle }>(`/api/vehicles/${id}`, {
@@ -2211,6 +2219,8 @@ export const api = {
     distanceMiles: number;
     tollPerCrossingCents?: number | null;
     assignments?: Array<{ vehicleId: string; crossingsPerWeek: number }>;
+    /** 0.17.20 */
+    accountId?: string | null;
   }) =>
     http<{ route: CommuteRoute }>('/api/commute-routes', {
       method: 'POST',
@@ -2225,6 +2235,8 @@ export const api = {
       distanceMiles: number;
       tollPerCrossingCents: number | null;
       active: boolean;
+      /** 0.17.20 — null clears. */
+      accountId: string | null;
     }>,
   ) =>
     http<{ route: CommuteRoute }>(`/api/commute-routes/${id}`, {

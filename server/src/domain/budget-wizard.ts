@@ -230,7 +230,10 @@ interface VehicleFuelRow {
   assigned_miles: number;
 }
 
-async function routeDrivenWeekly(tenantId: string): Promise<{
+async function routeDrivenWeekly(
+  tenantId: string,
+  accountIds: string[] | null,
+): Promise<{
   fuelCents: number;
   tollsCents: number;
 }> {
@@ -240,6 +243,13 @@ async function routeDrivenWeekly(tenantId: string): Promise<{
   // wizard preview would mix in tenant B's vehicles and tolls.
   // fuel_prices is global (it's an EIA-driven price index) — no
   // tenant scope needed there.
+  //
+  // 0.17.20 — strict account scope (matches bills + income).
+  // When accountIds is non-null, only vehicles + commute_routes
+  // tagged to one of those accounts contribute. NULL account_id
+  // on a vehicle/route is excluded from scoped wizard runs — the
+  // user must tag the item to an account or accept that it
+  // doesn't appear on any per-account plan.
   const vehicles = await pool.query<VehicleFuelRow>(
     `SELECT v.id, v.fuel_type,
             v.mpg::float8 AS mpg,
@@ -250,10 +260,15 @@ async function routeDrivenWeekly(tenantId: string): Promise<{
               AS assigned_miles
        FROM vehicles v
   LEFT JOIN route_vehicle_assignments a ON a.vehicle_id = v.id
-  LEFT JOIN commute_routes cr ON cr.id = a.route_id AND cr.active AND cr.tenant_id = $1
-      WHERE v.active AND v.tenant_id = $1
+  LEFT JOIN commute_routes cr ON cr.id = a.route_id
+                              AND cr.active
+                              AND cr.tenant_id = $1
+                              AND ($2::uuid[] IS NULL OR cr.account_id = ANY($2::uuid[]))
+      WHERE v.active
+        AND v.tenant_id = $1
+        AND ($2::uuid[] IS NULL OR v.account_id = ANY($2::uuid[]))
    GROUP BY v.id`,
-    [tenantId],
+    [tenantId, accountIds],
   );
   const prices = await pool.query<{ fuel_type: string; price_cents_per_gallon: number }>(
     `SELECT fuel_type, price_cents_per_gallon FROM fuel_prices`,
@@ -294,8 +309,9 @@ async function routeDrivenWeekly(tenantId: string): Promise<{
      ) crossings ON crossings.route_id = cr.id
       WHERE cr.active
         AND cr.toll_per_crossing_cents IS NOT NULL
-        AND cr.tenant_id = $1`,
-    [tenantId],
+        AND cr.tenant_id = $1
+        AND ($2::uuid[] IS NULL OR cr.account_id = ANY($2::uuid[]))`,
+    [tenantId, accountIds],
   );
 
   return {
@@ -435,6 +451,7 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
   const groceriesWeekly = await weeklyGroceriesMedian(input.tenantId, accountIds);
   const { fuelCents: fuelWeekly, tollsCents: tollsWeekly } = await routeDrivenWeekly(
     input.tenantId,
+    accountIds,
   );
 
   // Per-wizard-run overrides win over the global setting. Whole-number

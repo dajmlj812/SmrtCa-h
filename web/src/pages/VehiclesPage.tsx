@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   api,
+  type Account,
   type FuelPrice,
   type Vehicle,
   type VehicleFuelType,
@@ -18,6 +19,8 @@ const FUEL_TYPES: Array<{ value: VehicleFuelType; label: string }> = [
 export function VehiclesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [prices, setPrices] = useState<FuelPrice[]>([]);
+  // 0.17.20 — accounts list for the inline account picker.
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [eiaConfigured, setEiaConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +31,14 @@ export function VehiclesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [v, p] = await Promise.all([
+      const [v, p, a] = await Promise.all([
         api.listVehicles(),
         api.listFuelPrices(),
+        api.listAccounts(),
       ]);
       setVehicles(v);
       setPrices(p.prices);
+      setAccounts(a);
       setEiaConfigured(p.eiaConfigured);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
@@ -87,6 +92,16 @@ export function VehiclesPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  }
+
+  // 0.17.20 — set the vehicle's account; null = clear.
+  async function setVehicleAccount(id: string, accountId: string | null) {
+    try {
+      await api.updateVehicle(id, { accountId });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Account update failed');
     }
   }
 
@@ -174,6 +189,7 @@ export function VehiclesPage() {
                   <th>Fuel</th>
                   <th className="num">MPG / kWh/mi</th>
                   <th className="num">Weekly miles</th>
+                  <th>Account</th>
                   <th>Active</th>
                   <th></th>
                 </tr>
@@ -189,6 +205,25 @@ export function VehiclesPage() {
                         : `${v.mpg} mpg`}
                     </td>
                     <td className="num">{v.weekly_avg_miles}</td>
+                    <td>
+                      <select
+                        value={v.account_id ?? ''}
+                        onChange={(e) =>
+                          void setVehicleAccount(
+                            v.id,
+                            e.target.value === '' ? null : e.target.value,
+                          )
+                        }
+                        style={{ fontSize: '0.9em', maxWidth: 200 }}
+                      >
+                        <option value="">— No account —</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td>{v.active ? '✓' : '—'}</td>
                     <td>
                       <button

@@ -1,14 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
-import { requireTenant } from '../auth/rbac.js';
+import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
 
 const COLUMNS = `id, name, fuel_type,
   mpg::float8 AS mpg,
   kwh_per_mile::float8 AS kwh_per_mile,
   electricity_rate_cents_per_kwh,
   weekly_avg_miles::float8 AS weekly_avg_miles,
-  active, created_at`;
+  active, account_id, created_at`;
 
 const FUEL_TYPES = ['regular', 'midgrade', 'premium', 'diesel', 'electric'] as const;
 type FuelType = (typeof FUEL_TYPES)[number];
@@ -33,6 +33,7 @@ interface VehicleBody {
   electricityRateCentsPerKwh?: unknown;
   weeklyAvgMiles?: unknown;
   active?: unknown;
+  accountId?: unknown;
 }
 
 function validateNew(body: VehicleBody): { ok: true } | { ok: false; error: string } {
@@ -82,12 +83,18 @@ export async function vehicleRoutes(app: FastifyInstance): Promise<void> {
     const body = (req.body ?? {}) as VehicleBody;
     const check = validateNew(body);
     if (!check.ok) return reply.code(400).send({ error: check.error });
+    let accountId: string | null = null;
+    if (typeof body.accountId === 'string' && isUuid(body.accountId)) {
+      const ok = await assertAccountInTenant(tenantId, body.accountId);
+      if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+      accountId = body.accountId;
+    }
     const isEv = body.fuelType === 'electric';
     const r = await query(
       `INSERT INTO vehicles
          (tenant_id, name, fuel_type, mpg, kwh_per_mile,
-          electricity_rate_cents_per_kwh, weekly_avg_miles)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+          electricity_rate_cents_per_kwh, weekly_avg_miles, account_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING ${COLUMNS}`,
       [
         tenantId,
@@ -97,6 +104,7 @@ export async function vehicleRoutes(app: FastifyInstance): Promise<void> {
         isEv ? asPositive(body.kwhPerMile) : null,
         isEv ? asNonNegativeInt(body.electricityRateCentsPerKwh) : null,
         Number(body.weeklyAvgMiles) || 0,
+        accountId,
       ],
     );
     return reply.code(201).send({ vehicle: r.rows[0] });
@@ -147,6 +155,21 @@ export async function vehicleRoutes(app: FastifyInstance): Promise<void> {
       if (body.active !== undefined) {
         params.push(Boolean(body.active));
         sets.push(`active = $${params.length}`);
+      }
+      // 0.17.20 — account_id editable; null clears it.
+      if (body.accountId !== undefined) {
+        if (body.accountId === null) {
+          params.push(null);
+          sets.push(`account_id = $${params.length}`);
+        } else {
+          if (typeof body.accountId !== 'string' || !isUuid(body.accountId)) {
+            return reply.code(400).send({ error: 'Invalid accountId' });
+          }
+          const ok = await assertAccountInTenant(tenantId, body.accountId);
+          if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+          params.push(body.accountId);
+          sets.push(`account_id = $${params.length}`);
+        }
       }
       if (sets.length === 0) {
         return reply.code(400).send({ error: 'No updates' });

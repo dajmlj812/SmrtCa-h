@@ -9,10 +9,57 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.17.0–0.17.19 shipped. 0.17.19 is a one-liner fix for
-migration 038: it joined tenant via transactions.tenant_id
-(unpopulated on this deploy) instead of accounts.tenant_id.
-039 re-runs the backfill with the right join._
+_0.17.0–0.17.20 shipped. 0.17.20 tags vehicles + commute
+routes with an account_id so the wizard's fuel/tolls
+projection only counts items belonging to the plan's
+accounts — no more same-fuel-cost-on-every-plan._
+
+---
+
+## [0.17.20] — 2026-05-24 — Account scope for vehicles + routes
+
+Pre-fix: the wizard's `routeDrivenWeekly()` aggregated fuel
+and tolls across every vehicle and commute route in the
+tenant, regardless of which plan's accounts paid for them.
+With per-account plans (0.17.16), that meant the same
+$250/week fuel cost landed on every plan's card —
+double-counted across budgets.
+
+### Schema
+
+Migration 040 adds `account_id uuid REFERENCES accounts(id) ON
+DELETE SET NULL` to both `vehicles` and `commute_routes`.
+No backfill — these tables have no transaction history to
+learn from. Existing rows stay NULL until the user tags them.
+
+### Wizard
+
+`routeDrivenWeekly()` now takes an `accountIds` filter.
+When set, the vehicle and tolls SQL both gate on `account_id
+= ANY($accountIds)`. NULL `account_id` items are excluded
+from scoped wizard runs — matching the strict semantics
+introduced for bills in 0.17.17.
+
+### Routes
+
+- `POST /api/vehicles` + `PATCH /api/vehicles/:id` accept
+  `accountId` (uuid or null to clear)
+- `POST /api/commute-routes` + `PATCH /api/commute-routes/:id`
+  accept the same
+
+### UI
+
+- New Account column on the Vehicles fleet table with an
+  inline `<select>` per row
+- The same picker on each RouteCard in the actions bar
+
+After this slice: the four account-tagging axes (transactions,
+bills, recurring_income, vehicles, commute_routes) all support
+strict per-plan scoping. The wizard's groceries/fuel/tolls/
+bills/income projections all honor the plan's account scope
+cleanly.
+
+20 budget + wizard + commute-routes tests pass.
 
 ---
 

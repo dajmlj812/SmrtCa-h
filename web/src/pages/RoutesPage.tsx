@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   api,
+  type Account,
   type CommuteRoute,
   type RouteAssignment,
   type Vehicle,
@@ -10,6 +11,8 @@ import { formatCents } from '../format';
 export function RoutesPage() {
   const [routes, setRoutes] = useState<CommuteRoute[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  // 0.17.20
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -18,13 +21,27 @@ export function RoutesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [r, v] = await Promise.all([api.listCommuteRoutes(), api.listVehicles()]);
+      const [r, v, a] = await Promise.all([
+        api.listCommuteRoutes(),
+        api.listVehicles(),
+        api.listAccounts(),
+      ]);
       setRoutes(r);
       setVehicles(v);
+      setAccounts(a);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function setRouteAccount(id: string, accountId: string | null) {
+    try {
+      await api.updateCommuteRoute(id, { accountId });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Account update failed');
     }
   }
 
@@ -92,9 +109,11 @@ export function RoutesPage() {
               key={r.id}
               route={r}
               vehicles={vehicles}
+              accounts={accounts}
               onToggle={() => void toggle(r)}
               onDelete={() => void remove(r)}
               onSaveAssignments={(a) => void saveAssignments(r, a)}
+              onSetAccount={(aId) => void setRouteAccount(r.id, aId)}
             />
           ))}
         </div>
@@ -117,17 +136,21 @@ export function RoutesPage() {
 function RouteCard({
   route,
   vehicles,
+  accounts,
   onToggle,
   onDelete,
   onSaveAssignments,
+  onSetAccount,
 }: {
   route: CommuteRoute;
   vehicles: Vehicle[];
+  accounts: Account[];
   onToggle: () => void;
   onDelete: () => void;
   onSaveAssignments: (
     a: Array<{ vehicleId: string; crossingsPerWeek: number }>,
   ) => void;
+  onSetAccount: (accountId: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Array<{ vehicleId: string; crossingsPerWeek: number }>>(
@@ -177,6 +200,21 @@ function RouteCard({
           </span>
         </div>
         <div className="route-card-actions">
+          <select
+            value={route.account_id ?? ''}
+            onChange={(e) =>
+              onSetAccount(e.target.value === '' ? null : e.target.value)
+            }
+            style={{ fontSize: '0.9em', maxWidth: 180 }}
+            title="Account this route's tolls belong to"
+          >
+            <option value="">— No account —</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
           <button className="btn-link" type="button" onClick={onToggle}>
             {route.active ? 'Disable' : 'Enable'}
           </button>

@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { pool, query, withTransaction } from '../db/pool.js';
 import { isUuid } from '../util.js';
-import { requireTenant } from '../auth/rbac.js';
+import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
 
 const ROUTE_COLUMNS = `id, name, distance_miles::float8 AS distance_miles,
-  toll_per_crossing_cents, active, created_at`;
+  toll_per_crossing_cents, active, account_id, created_at`;
 
 function asString(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -136,12 +136,18 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
     ) {
       return reply.code(400).send({ error: 'One or more vehicleIds not found' });
     }
+    let accountId: string | null = null;
+    if (typeof body.accountId === 'string' && isUuid(body.accountId)) {
+      const ok = await assertAccountInTenant(tenantId, body.accountId);
+      if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+      accountId = body.accountId;
+    }
 
     const route = await withTransaction(async (client) => {
       const ins = await client.query(
-        `INSERT INTO commute_routes (tenant_id, name, distance_miles, toll_per_crossing_cents)
-         VALUES ($1, $2, $3, $4) RETURNING ${ROUTE_COLUMNS}`,
-        [tenantId, name, distance, toll],
+        `INSERT INTO commute_routes (tenant_id, name, distance_miles, toll_per_crossing_cents, account_id)
+         VALUES ($1, $2, $3, $4, $5) RETURNING ${ROUTE_COLUMNS}`,
+        [tenantId, name, distance, toll, accountId],
       );
       const id = (ins.rows[0] as { id: string }).id;
       for (const a of assignments) {
@@ -200,6 +206,21 @@ export async function commuteRouteRoutes(app: FastifyInstance): Promise<void> {
       if (body.active !== undefined) {
         params.push(Boolean(body.active));
         sets.push(`active = $${params.length}`);
+      }
+      // 0.17.20 — account_id editable; null clears it.
+      if (body.accountId !== undefined) {
+        if (body.accountId === null) {
+          params.push(null);
+          sets.push(`account_id = $${params.length}`);
+        } else {
+          if (typeof body.accountId !== 'string' || !isUuid(body.accountId)) {
+            return reply.code(400).send({ error: 'Invalid accountId' });
+          }
+          const ok = await assertAccountInTenant(tenantId, body.accountId);
+          if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
+          params.push(body.accountId);
+          sets.push(`account_id = $${params.length}`);
+        }
       }
       if (sets.length === 0) {
         return reply.code(400).send({ error: 'No updates' });
