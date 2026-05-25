@@ -1,9 +1,11 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import { Writable } from 'node:stream';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import staticPlugin from '@fastify/static';
 import helmet from '@fastify/helmet';
+import { diagnosticsRecorder } from './domain/diagnostics-recorder.js';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -127,7 +129,16 @@ export async function buildApp(
   // over .env at boot.
   await applyBootSettings();
 
-  const app = Fastify({ logger: opts.logger ?? true });
+  // 0.18.13 — Pino destination that tees log lines into stdout (so
+  // `docker logs` keeps working as the source of truth) AND into the
+  // in-memory diagnostics recorder, where /api/health/logs reads
+  // recent warn/error/fatal entries on demand. Tests pass logger=false
+  // and skip this entirely.
+  const loggerOption: import('fastify').FastifyServerOptions['logger'] =
+    (opts.logger ?? true)
+      ? { stream: createDiagnosticsLogStream() }
+      : false;
+  const app = Fastify({ logger: loggerOption });
 
   // 0.15.1: replace Fastify's default JSON parser with one that ALSO
   // stashes the raw request body on `req.rawBody`. Required by the
@@ -453,4 +464,62 @@ export async function buildApp(
   }
 
   return app;
+}
+
+/**
+ * 0.18.13 — tee log destination.
+ *
+ * Pino emits one JSON line per log call. This stream forwards every
+ * line to stdout (so `docker logs smrtcash-app` is still the
+ * authoritative source) and parses it on the way through to capture
+ * warn/error/fatal entries in the diagnostics ring buffer. The
+ * /api/health/logs endpoint reads from that buffer on demand — the
+ * operator can spot whatever's been going wrong without SSH.
+ *
+ * Pino level numbers: trace=10, debug=20, info=30, warn=40, error=50,
+ * fatal=60. We capture everything ≥ warn.
+ */
+function createDiagnosticsLogStream(): Writable {
+  return new Writable({
+    write(chunk: Buffer | string, _encoding, callback) {
+      const line = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+      // Always emit to stdout — that's the production logging path.
+      process.stdout.write(line);
+      // Best-effort parse + capture. Any JSON failure is silently
+      // swallowed; we never want logger plumbing to fail a request.
+      try {
+        const entry = JSON.parse(line) as {
+          level?: number;
+          time?: number;
+          msg?: string;
+          err?: { code?: string; type?: string };
+          reqId?: string;
+          [key: string]: unknown;
+        };
+        const lvl = entry.level ?? 30;
+        if (lvl >= 40) {
+          const context: Record<string, unknown> = {};
+          if (entry.reqId) context.reqId = entry.reqId;
+          if (entry.err?.code) context.code = entry.err.code;
+          if (entry.err?.type) context.type = entry.err.type;
+          // Pull a few common operational fields without dragging the
+          // whole serialized req/res blob.
+          for (const k of ['userId', 'tenantId', 'eventId', 'action']) {
+            if (entry[k] !== undefined) context[k] = entry[k];
+          }
+          diagnosticsRecorder.recordLog({
+            ts: entry.time
+              ? new Date(entry.time).toISOString()
+              : new Date().toISOString(),
+            level: lvl >= 60 ? 'fatal' : lvl >= 50 ? 'error' : 'warn',
+            msg: entry.msg ?? '',
+            context: Object.keys(context).length > 0 ? context : undefined,
+          });
+        }
+      } catch {
+        /* malformed line — leave it on stdout, skip the capture */
+      }
+      callback();
+    },
+  });
 }

@@ -11,6 +11,8 @@ import {
 import {
   api,
   type CapacityProjection,
+  type HealthLogEntry,
+  type HealthSlowQuery,
   type HealthSnapshot,
   type MetricSample,
   type SaasMetrics,
@@ -361,6 +363,12 @@ export function HealthPage() {
               <Row label="Attachments dir" value={<code>{snapshot.storage.attachments_dir}</code>} />
               <Row label="Backups dir" value={<code>{snapshot.storage.backups_dir}</code>} />
             </Card>
+          </div>
+
+          {/* ── On-demand diagnostics: logs + slow queries ──── */}
+          <div className="diag-grid">
+            <RecentLogsPanel />
+            <SlowQueriesPanel />
           </div>
         </>
       )}
@@ -806,4 +814,162 @@ function HostWidget({
       </div>
     </Card>
   );
+}
+
+/**
+ * 0.18.13 — recent warn/error/fatal log entries, fetched on demand.
+ *
+ * The page-wide auto-refresh (5s by default) does NOT poll this — it
+ * would generate noise and risk capturing this very poll's log line
+ * in the buffer. The operator clicks "Refresh" when they actually
+ * want the latest. Entries are read from an in-memory ring buffer on
+ * the server (200-entry cap); they don't survive a restart.
+ */
+function RecentLogsPanel() {
+  const [entries, setEntries] = useState<HealthLogEntry[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.healthLogs(50);
+      setEntries(r.entries);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load logs');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card title="Recent warnings & errors">
+      <div className="diag-actions">
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => void refresh()}
+          disabled={loading}
+        >
+          {loading ? 'Loading…' : entries === null ? 'Load latest' : 'Refresh'}
+        </button>
+        {entries !== null && (
+          <span className="muted small">
+            {entries.length === 0
+              ? 'no warn / error / fatal entries in the buffer'
+              : `showing ${entries.length} most recent`}
+          </span>
+        )}
+      </div>
+      {error && <div className="banner error">{error}</div>}
+      {entries !== null && entries.length > 0 && (
+        <div className="diag-log-list">
+          {[...entries].reverse().map((e, i) => (
+            <div key={i} className={`diag-log-entry diag-log-${e.level}`}>
+              <div className="diag-log-row1">
+                <span className={`pill ${e.level === 'fatal' || e.level === 'error' ? 'warn' : 'caution'}`}>
+                  {e.level.toUpperCase()}
+                </span>
+                <span className="muted small">{formatLogTs(e.ts)}</span>
+              </div>
+              <div className="diag-log-msg">{e.msg || <em className="muted">(empty)</em>}</div>
+              {e.context && Object.keys(e.context).length > 0 && (
+                <div className="muted small diag-log-context">
+                  {Object.entries(e.context)
+                    .map(([k, v]) => `${k}=${String(v)}`)
+                    .join(' · ')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * 0.18.13 — recent slow queries, sorted slowest first. Threshold is
+ * server-controlled (default 100ms; set SLOW_QUERY_THRESHOLD_MS env
+ * lower for an afternoon of profiling, then revert). Same on-demand
+ * fetch model as the log viewer above.
+ */
+function SlowQueriesPanel() {
+  const [entries, setEntries] = useState<HealthSlowQuery[] | null>(null);
+  const [threshold, setThreshold] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.healthSlowQueries(50);
+      setEntries(r.entries);
+      setThreshold(r.threshold_ms);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load slow queries');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card title="Slow queries">
+      <div className="diag-actions">
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => void refresh()}
+          disabled={loading}
+        >
+          {loading ? 'Loading…' : entries === null ? 'Load latest' : 'Refresh'}
+        </button>
+        {threshold !== null && (
+          <span className="muted small">
+            threshold: ≥ {threshold} ms
+            {entries && entries.length > 0
+              ? ` · showing ${entries.length} slowest`
+              : entries
+                ? ' · nothing crossed the threshold yet'
+                : ''}
+          </span>
+        )}
+      </div>
+      {error && <div className="banner error">{error}</div>}
+      {entries !== null && entries.length > 0 && (
+        <div className="diag-query-list">
+          {entries.map((e, i) => {
+            const cls =
+              e.duration_ms >= 1000
+                ? 'warn'
+                : e.duration_ms >= 500
+                  ? 'caution'
+                  : 'ok';
+            return (
+              <div key={i} className="diag-query-entry">
+                <div className="diag-query-row1">
+                  <span className={`pill ${cls}`}>{e.duration_ms} ms</span>
+                  <span className="muted small">{formatLogTs(e.ts)}</span>
+                  {e.param_count > 0 && (
+                    <span className="muted small">
+                      · {e.param_count} param{e.param_count === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
+                <code className="diag-query-sql">{e.sql}</code>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function formatLogTs(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString([], { hour12: false });
 }

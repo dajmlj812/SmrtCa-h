@@ -3228,6 +3228,69 @@ code {
   padding-top: 12px;
 }
 
+/* 0.18.13 — on-demand diagnostics (logs + slow queries) panels. */
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.diag-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.diag-log-list,
+.diag-query-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.diag-log-entry,
+.diag-query-entry {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
+  border-left: 3px solid var(--border, #e5e7eb);
+  font-size: 13px;
+}
+.diag-log-entry.diag-log-error,
+.diag-log-entry.diag-log-fatal {
+  border-left-color: rgb(220, 38, 38);
+}
+.diag-log-entry.diag-log-warn {
+  border-left-color: rgb(234, 179, 8);
+}
+.diag-log-row1,
+.diag-query-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.diag-log-msg {
+  word-break: break-word;
+}
+.diag-log-context {
+  margin-top: 4px;
+  font-family: ui-monospace, monospace;
+}
+.diag-query-sql {
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  background: var(--card-bg, #fff);
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #e5e7eb);
+}
+
 /* Status pills used in HostWidget for disk + memory utilization. */
 .pill {
   display: inline-block;

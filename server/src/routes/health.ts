@@ -3,6 +3,7 @@ import { collectHealth } from '../domain/health.js';
 import { metricsRecorder } from '../domain/metrics-recorder.js';
 import { collectSaasMetrics } from '../domain/saas-health.js';
 import { projectCapacity } from '../domain/capacity-projector.js';
+import { diagnosticsRecorder } from '../domain/diagnostics-recorder.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
 
 /**
@@ -62,4 +63,30 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     if (!requireSuperAdmin(req, reply)) return;
     return projectCapacity();
   });
+
+  // 0.18.13 — on-demand log + slow-query feeds. Backed by in-memory
+  // ring buffers (see domain/diagnostics-recorder.ts). NOT polled
+  // by the health-page auto-refresh; the operator clicks "Refresh"
+  // when they want the latest. Querystring `limit` is honored up to
+  // the buffer cap.
+  app.get<{ Querystring: { limit?: string } }>(
+    '/api/health/logs',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+      return { entries: diagnosticsRecorder.getLogs(limit) };
+    },
+  );
+
+  app.get<{ Querystring: { limit?: string } }>(
+    '/api/health/slow-queries',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+      return {
+        threshold_ms: diagnosticsRecorder.slowQueryThresholdMs,
+        entries: diagnosticsRecorder.getSlowQueries(limit),
+      };
+    },
+  );
 }

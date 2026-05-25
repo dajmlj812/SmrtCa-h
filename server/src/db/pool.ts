@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { config } from '../config.js';
 import { metricsRecorder } from '../domain/metrics-recorder.js';
+import { diagnosticsRecorder } from '../domain/diagnostics-recorder.js';
 
 // --- Type parsers -----------------------------------------------------------
 // int8 / bigint (oid 20): money is stored as integer cents, well within the
@@ -31,7 +32,11 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   try {
     return await pool.query<T>(text, params as unknown[]);
   } finally {
-    metricsRecorder.recordQuery(Date.now() - t0);
+    const duration = Date.now() - t0;
+    metricsRecorder.recordQuery(duration);
+    // 0.18.13 — slow-query capture for /health. The recorder
+    // gates by threshold internally so we don't filter here.
+    diagnosticsRecorder.recordSlowQuery(text, params, duration);
   }
 }
 

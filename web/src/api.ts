@@ -943,6 +943,20 @@ export interface HealthSnapshot {
   };
 }
 
+export interface HealthLogEntry {
+  ts: string;
+  level: 'warn' | 'error' | 'fatal';
+  msg: string;
+  context?: Record<string, unknown>;
+}
+
+export interface HealthSlowQuery {
+  ts: string;
+  duration_ms: number;
+  sql: string;
+  param_count: number;
+}
+
 export interface CapacityProjection {
   current: {
     db_bytes: number;
@@ -2984,6 +2998,18 @@ export const api = {
   // call so the projection window keeps refreshing as the operator
   // visits the page.
   healthCapacity: () => http<CapacityProjection>('/api/health/capacity'),
+
+  // 0.18.13 — on-demand recent warn/error log entries.
+  healthLogs: (limit = 50) =>
+    http<{ entries: HealthLogEntry[] }>(
+      `/api/health/logs?limit=${limit}`,
+    ),
+
+  // 0.18.13 — on-demand recent slow queries (sorted desc by duration).
+  healthSlowQueries: (limit = 50) =>
+    http<{ threshold_ms: number; entries: HealthSlowQuery[] }>(
+      `/api/health/slow-queries?limit=${limit}`,
+    ),
 
   // ── Backups (Phase 7.6) ──────────────────────────────────
   listBackupsHistory: () =>
