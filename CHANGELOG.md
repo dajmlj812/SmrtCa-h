@@ -9,8 +9,35 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.5 puts goals on the dashboard as a "Top goals" tile and adds
-a Contribute button + audit-trail table for each savings goal._
+_0.18.6 adds a /debt-payoff page that computes snowball + avalanche
+plans for every loan and credit-card account._
+
+---
+
+## [0.18.6] — 2026-05-24 — Debt payoff plans
+
+Closes the YNAB gap on debt-payoff workflows.
+
+- **Migration 047**: `accounts.interest_rate_apr numeric(6,3)` +
+  `accounts.min_payment_cents bigint`, both nullable, both
+  CHECK-constrained.
+- **`PATCH /api/accounts/:id`** accepts the two new fields with
+  validation; **GET** returns them.
+- **`POST /api/debt/payoff`** with `{ extraCents, overrides? }`
+  body. Loads loan + credit_card accounts with a non-zero balance,
+  runs both snowball (smallest balance first) + avalanche (highest
+  APR first), returns both plans plus a per-month schedule. Caps
+  iteration at 600 months and surfaces `unpayable: true` when
+  minimums don't cover interest. Reports `missing_data` for
+  accounts lacking APR or min payment.
+- **Domain helper `computePayoffPlan`** with 4 unit tests (zero-
+  interest base case, ordering invariants, min-too-low detection,
+  snowball roll-up).
+- **New `/debt-payoff` page** (added to Planning nav group): inline
+  APR + min-payment editors that save immediately, "extra per
+  month" input, tab strip switches between avalanche and snowball,
+  milestone tiles for months / total interest / total paid, per-
+  account result table.
 
 ---
 

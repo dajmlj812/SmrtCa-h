@@ -960,6 +960,26 @@ select:focus {
   }
 }
 
+/* 0.18.6 — debt payoff tab strip */
+.tab-strip {
+  display: inline-flex;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.tab-strip .tab {
+  background: transparent;
+  border: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--muted, #6b7280);
+}
+.tab-strip .tab.active {
+  background: var(--accent, #4f8cff);
+  color: white;
+}
+
 /* 0.18.5 — goal polish */
 .progress-track-done .progress-fill {
   background: #52c41a;

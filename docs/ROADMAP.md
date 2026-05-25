@@ -28,7 +28,7 @@ application — nothing is "all or nothing."
 | **0.15.x** | **SaaS pivot — Stripe billing, gating, dunning, operator readiness** | ✅ Complete — 2026-05-24 |
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
-| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.5 shipped 2026-05-24 |
+| **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | 🔜 In progress — 0.18.0…0.18.6 shipped 2026-05-24 |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -522,11 +522,13 @@ DRAMATIZE them via UX + the marketing copy on the BITS site.
   remaining are set; progress bar turns green at 100%. Dashboard
   gains a "Top savings goals" tile (top 3, progress bar + target
   date). Transaction-tagging deferred to a future slice.
-- **0.18.6** 📋 — **Debt payoff plans** (~2–3 days). For
-  accounts of `type IN ('loan','credit_card')`, add a
-  "Payoff plan" view with snowball + avalanche calculators
-  and projected payoff date based on current min payment +
-  optional extra. Closes the YNAB gap.
+- **0.18.6** ✅ (released 2026-05-24) — **Debt payoff plans**.
+  Migration 047 adds `interest_rate_apr` + `min_payment_cents`
+  to `accounts`. New `POST /api/debt/payoff` runs snowball +
+  avalanche calculators (capped at 600 months, flags
+  unpayable). New `/debt-payoff` page with inline editors,
+  extra-payment input, tab strip between strategies, and per-
+  account result table.
 - **0.18.7** 📋 — **Branded HTML email shell + audit** (~1
   day). Every outward email already returns both `text` and
   `html` from its renderer (verification, password reset,

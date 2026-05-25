@@ -79,6 +79,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       `SELECT
         a.id, a.name, a.institution, a.type, a.last4, a.currency, a.created_at,
         a.opening_balance_cents, a.opening_balance_date,
+        a.interest_rate_apr, a.min_payment_cents,
         (${BALANCE_SELECT})::bigint           AS balance_cents,
         (${HOLDINGS_VALUE})::bigint            AS holdings_value_cents,
         COUNT(t.id)::bigint                    AS transaction_count
@@ -117,6 +118,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         `SELECT a.id, a.name, a.institution, a.type, a.last4, a.currency,
                 a.created_at,
                 a.opening_balance_cents, a.opening_balance_date,
+                a.interest_rate_apr, a.min_payment_cents,
                 (${BALANCE_SELECT})::bigint           AS balance_cents,
                 (${HOLDINGS_VALUE})::bigint            AS holdings_value_cents,
                 COUNT(t.id)::bigint                    AS transaction_count
@@ -223,6 +225,39 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         }
         updates.push(`opening_balance_date = $${params.length}`);
       }
+      // 0.18.6 — debt fields. Null clears; values are bounded by
+      // the CHECK constraints in migration 047.
+      if (body.interest_rate_apr !== undefined) {
+        if (body.interest_rate_apr === null) {
+          params.push(null);
+        } else {
+          const n = Number(body.interest_rate_apr);
+          if (!Number.isFinite(n) || n < 0 || n > 100) {
+            return reply
+              .code(400)
+              .send({ error: 'interest_rate_apr must be 0-100 or null' });
+          }
+          params.push(n);
+        }
+        updates.push(`interest_rate_apr = $${params.length}`);
+      }
+      if (body.min_payment_cents !== undefined) {
+        if (body.min_payment_cents === null) {
+          params.push(null);
+        } else {
+          const n =
+            typeof body.min_payment_cents === 'number'
+              ? body.min_payment_cents
+              : Number(body.min_payment_cents);
+          if (!Number.isInteger(n) || n <= 0) {
+            return reply
+              .code(400)
+              .send({ error: 'min_payment_cents must be a positive integer or null' });
+          }
+          params.push(n);
+        }
+        updates.push(`min_payment_cents = $${params.length}`);
+      }
 
       if (updates.length === 0) {
         return reply
@@ -238,7 +273,8 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         `UPDATE accounts SET ${updates.join(', ')}
           WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
        RETURNING id, name, institution, type, last4, currency, created_at,
-                 opening_balance_cents, opening_balance_date`,
+                 opening_balance_cents, opening_balance_date,
+                 interest_rate_apr, min_payment_cents`,
         params,
       );
       if (result.rowCount === 0) {

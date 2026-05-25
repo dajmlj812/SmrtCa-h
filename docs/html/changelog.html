@@ -161,8 +161,33 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.5 puts goals on the dashboard as a &quot;Top goals&quot; tile and adds
-a Contribute button + audit-trail table for each savings goal.</em></p>
+<p><em>0.18.6 adds a /debt-payoff page that computes snowball + avalanche
+plans for every loan and credit-card account.</em></p>
+<hr>
+<h2 id="0186-2026-05-24-debt-payoff-plans">[0.18.6] — 2026-05-24 — Debt payoff plans<a class="heading-anchor" href="#0186-2026-05-24-debt-payoff-plans">#</a></h2>
+<p>Closes the YNAB gap on debt-payoff workflows.</p>
+<ul>
+<li><strong>Migration 047</strong>: <code>accounts.interest_rate_apr numeric(6,3)</code> +
+<code>accounts.min_payment_cents bigint</code>, both nullable, both
+CHECK-constrained.</li>
+<li><strong><code>PATCH /api/accounts/:id</code></strong> accepts the two new fields with
+validation; <strong>GET</strong> returns them.</li>
+<li><strong><code>POST /api/debt/payoff</code></strong> with <code>{ extraCents, overrides? }</code>
+body. Loads loan + credit_card accounts with a non-zero balance,
+runs both snowball (smallest balance first) + avalanche (highest
+APR first), returns both plans plus a per-month schedule. Caps
+iteration at 600 months and surfaces <code>unpayable: true</code> when
+minimums don&#39;t cover interest. Reports <code>missing_data</code> for
+accounts lacking APR or min payment.</li>
+<li><strong>Domain helper <code>computePayoffPlan</code></strong> with 4 unit tests (zero-
+interest base case, ordering invariants, min-too-low detection,
+snowball roll-up).</li>
+<li><strong>New <code>/debt-payoff</code> page</strong> (added to Planning nav group): inline
+APR + min-payment editors that save immediately, &quot;extra per
+month&quot; input, tab strip switches between avalanche and snowball,
+milestone tiles for months / total interest / total paid, per-
+account result table.</li>
+</ul>
 <hr>
 <h2 id="0185-2026-05-24-goal-tracking-polish">[0.18.5] — 2026-05-24 — Goal tracking polish<a class="heading-anchor" href="#0185-2026-05-24-goal-tracking-polish">#</a></h2>
 <p>Closes Monarch&#39;s visible goal-tracking advantage. Existing
@@ -6655,7 +6680,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 02:49:38 UTC · commit 2423a05</span>
+  <span>Generated 2026-05-25 02:57:38 UTC · commit 45282bc</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

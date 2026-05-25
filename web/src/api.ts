@@ -12,6 +12,9 @@ export interface Account {
   transaction_count: number;
   opening_balance_cents: number;
   opening_balance_date: string | null;
+  /** 0.18.6: APR + min payment power the /debt-payoff page. Null when unset. */
+  interest_rate_apr: number | null;
+  min_payment_cents: number | null;
   /** 0.10.0: balance converted to the global DISPLAY_CURRENCY. */
   display_currency?: string;
   balance_display_cents?: number;
@@ -1195,6 +1198,47 @@ export interface UpdateAccountInput {
   last4?: string | null;
   opening_balance_cents?: number;
   opening_balance_date?: string | null;
+  /** 0.18.6 — debt fields. Null clears. */
+  interest_rate_apr?: number | null;
+  min_payment_cents?: number | null;
+}
+
+// 0.18.6 — debt-payoff plan calculator.
+export interface PayoffAccount {
+  id: string;
+  name: string;
+  balance_cents: number;
+  apr_percent: number;
+  min_payment_cents: number;
+}
+export interface PayoffPerAccountResult {
+  accountId: string;
+  name: string;
+  monthsToPayoff: number;
+  interestPaidCents: number;
+  totalPaidCents: number;
+}
+export interface PayoffMonthSnapshot {
+  month: number;
+  totalBalanceCents: number;
+  totalInterestThisMonth: number;
+  totalPaidThisMonth: number;
+}
+export interface PayoffPlan {
+  strategy: 'snowball' | 'avalanche';
+  monthsToPayoff: number;
+  totalInterestCents: number;
+  totalPaidCents: number;
+  perAccount: PayoffPerAccountResult[];
+  schedule: PayoffMonthSnapshot[];
+  unpayable: boolean;
+  minTooLowAccountIds: string[];
+}
+export interface PayoffResponse {
+  accounts: PayoffAccount[];
+  snowball: PayoffPlan | null;
+  avalanche: PayoffPlan | null;
+  missing_data: Array<{ id: string; name: string; missing: string[] }>;
 }
 
 export interface UpdateTransactionInput {
@@ -1232,6 +1276,17 @@ export const api = {
 
   deleteAccount: (id: string) =>
     http<void>(`/api/accounts/${id}`, { method: 'DELETE' }),
+
+  // 0.18.6 — compute snowball + avalanche payoff plans.
+  computeDebtPayoff: (input: {
+    extraCents: number;
+    overrides?: Record<string, { aprPercent?: number; minPaymentCents?: number }>;
+  }) =>
+    http<PayoffResponse>('/api/debt/payoff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
 
   listTransactions: (params: {
     accountId?: string;
