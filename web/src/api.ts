@@ -1467,6 +1467,27 @@ export interface PayoffResponse {
   missing_data: Array<{ id: string; name: string; missing: string[] }>;
 }
 
+// 0.20.0 — proactive insight cards.
+export interface InsightCard {
+  id: string;
+  kind:
+    | 'anomaly'
+    | 'budget_overrun_trend'
+    | 'goal_pace_slipping'
+    | 'unusual_recurring_charge'
+    | 'cash_flow_warning'
+    | 'fee_drag';
+  severity: 'info' | 'warn' | 'critical';
+  title: string;
+  body: string;
+  action_label: string | null;
+  action_url: string | null;
+  source_kind: string | null;
+  source_id: string | null;
+  created_at: string;
+  snoozed_until: string | null;
+}
+
 export interface UpdateTransactionInput {
   merchant?: string;
   categoryId?: string | null;
@@ -2202,6 +2223,26 @@ export const api = {
       `/api/insights/net-worth-over-time?${q.toString()}`,
     );
   },
+
+  // 0.20.0 — proactive insight cards on dashboard.
+  listInsightCards: () =>
+    http<{ cards: InsightCard[] }>('/api/insights/cards').then((r) => r.cards),
+
+  regenerateInsightCards: () =>
+    http<{ generated: number; skipped_dupes: number }>(
+      '/api/insights/cards/regenerate',
+      { method: 'POST' },
+    ),
+
+  dismissInsightCard: (id: string) =>
+    http<void>(`/api/insights/cards/${id}/dismiss`, { method: 'POST' }),
+
+  snoozeInsightCard: (id: string, untilDate: string) =>
+    http<void>(`/api/insights/cards/${id}/snooze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ untilDate }),
+    }),
 
   exportTransactionsUrl: (filters: ExportFilters = {}) => {
     const q = new URLSearchParams();

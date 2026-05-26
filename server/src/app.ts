@@ -68,6 +68,7 @@ import { anomalyRoutes } from './routes/anomalies.js';
 import { billingRoutes } from './routes/billing.js';
 import { applyBootSettings } from './domain/settings.js';
 import { startBackupScheduler } from './domain/backup-scheduler.js';
+import { startInsightsScheduler } from './domain/insights-scheduler.js';
 import { startAutoSyncScheduler } from './domain/auto-sync.js';
 import { metricsRecorder } from './domain/metrics-recorder.js';
 import { SESSION_COOKIE, loadSession } from './auth/sessions.js';
@@ -456,6 +457,9 @@ export async function buildApp(
   // Kick off the in-process backup scheduler. No-op until BACKUP_ENABLED
   // = true is set via the GUI; the loop reads settings on every tick.
   startBackupScheduler();
+  // 0.20.0 — daily insight-card scanner. Ticks every hour, gates each
+  // tenant to once-per-23h via last-card-created-at lookback.
+  startInsightsScheduler();
   // Phase 8.3 — periodic OFX-DC + Plaid sync. Same pattern: settings
   // read on every tick, no-op until AUTO_SYNC_ENABLED=true.
   startAutoSyncScheduler();

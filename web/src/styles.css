@@ -1576,6 +1576,65 @@ select:focus {
   align-items: center;
 }
 
+/* 0.20.0 — proactive insight cards on dashboard. */
+.insight-cards-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 8px;
+}
+.insight-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+.insight-card {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border-left: 3px solid var(--border, #e5e7eb);
+  background: var(--card-bg, #fff);
+}
+.insight-card-info { border-left-color: #4f8cff; }
+.insight-card-warn { border-left-color: #f59e0b; }
+.insight-card-critical { border-left-color: #ef4444; }
+.insight-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.insight-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+.insight-card-icon-info { background: #4f8cff; }
+.insight-card-icon-warn { background: #f59e0b; }
+.insight-card-icon-critical { background: #ef4444; }
+.insight-card-title { font-size: 14px; }
+.insight-card-body {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text, #1f2937);
+}
+.insight-card-actions {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+.insight-card-actions .muted {
+  color: var(--muted, #6b7280);
+}
+
 /* 0.19.4 — top-level error-boundary fallback. */
 .error-boundary-fallback {
   max-width: 560px;

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { query } from '../db/pool.js';
 import { isUuid } from '../util.js';
 import { assertAccountInTenant, requireTenant } from '../auth/rbac.js';
+import { generateAndPersist } from '../domain/insights-scheduler.js';
 
 interface InsightsQuery {
   start?: string;
@@ -209,6 +210,93 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         [months, tenantId],
       );
       return { months, rows: result.rows };
+    },
+  );
+
+  // 0.20.0 — proactive insight cards.
+  //
+  //   GET    /api/insights/cards           — open cards for tenant
+  //   POST   /api/insights/cards/regenerate — force a fresh scan
+  //   POST   /api/insights/cards/:id/dismiss
+  //   POST   /api/insights/cards/:id/snooze  body { untilDate: YYYY-MM-DD }
+
+  app.get('/api/insights/cards', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const r = await query(
+      `SELECT id, kind, severity, title, body,
+              action_label, action_url,
+              source_kind, source_id::text,
+              created_at::text,
+              snoozed_until::text
+         FROM insight_cards
+        WHERE tenant_id = $1
+          AND dismissed_at IS NULL
+          AND (snoozed_until IS NULL OR snoozed_until <= CURRENT_DATE)
+        ORDER BY
+          CASE severity
+            WHEN 'critical' THEN 0
+            WHEN 'warn' THEN 1
+            ELSE 2
+          END,
+          created_at DESC
+        LIMIT 10`,
+      [tenantId],
+    );
+    return { cards: r.rows };
+  });
+
+  app.post('/api/insights/cards/regenerate', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const result = await generateAndPersist(tenantId);
+    return result;
+  });
+
+  app.post<{ Params: { id: string } }>(
+    '/api/insights/cards/:id/dismiss',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      if (!isUuid(req.params.id)) {
+        return reply.code(400).send({ error: 'Invalid card id' });
+      }
+      const r = await query(
+        `UPDATE insight_cards
+            SET dismissed_at = now()
+          WHERE id = $1 AND tenant_id = $2 AND dismissed_at IS NULL`,
+        [req.params.id, tenantId],
+      );
+      if (r.rowCount === 0) {
+        return reply.code(404).send({ error: 'Card not found or already dismissed' });
+      }
+      return reply.code(204).send();
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { untilDate?: unknown } }>(
+    '/api/insights/cards/:id/snooze',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      if (!isUuid(req.params.id)) {
+        return reply.code(400).send({ error: 'Invalid card id' });
+      }
+      const body = req.body ?? {};
+      const until = typeof body.untilDate === 'string' ? body.untilDate : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(until)) {
+        return reply.code(400).send({ error: 'untilDate must be YYYY-MM-DD' });
+      }
+      const r = await query(
+        `UPDATE insight_cards
+            SET snoozed_until = $3::date
+          WHERE id = $1 AND tenant_id = $2 AND dismissed_at IS NULL`,
+        [req.params.id, tenantId, until],
+      );
+      if (r.rowCount === 0) {
+        return reply.code(404).send({ error: 'Card not found' });
+      }
+      return reply.code(204).send();
     },
   );
 }

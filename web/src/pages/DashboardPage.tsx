@@ -37,6 +37,7 @@ import {
   api,
   type Bill,
   type IncomeExpenseRow,
+  type InsightCard,
   type NetWorthRow,
   type SavingsGoal,
   type SpendingByCategoryRow,
@@ -75,6 +76,7 @@ interface DashboardData {
   cashFlowVolatility: number;
   cashFlowMilestones: { day_30: number; day_60: number; day_90: number };
   goals: SavingsGoal[];
+  insightCards: InsightCard[];
 }
 
 // 0.18.14 — widget registry. The dashboard is a 2D grid of these
@@ -95,12 +97,15 @@ interface WidgetDef {
 // in row units (1 row = 60px + 16px margin). Lists (goals + bills)
 // get shorter heights since they're naturally compact.
 const WIDGETS: WidgetDef[] = [
-  { id: 'cashflow-hero',  title: 'Cash-flow forecast', defaultLayout: { x: 0, y: 0,  w: 12, h: 6, minW: 6, minH: 4 } },
-  { id: 'spending-pie',   title: 'Spending this month', defaultLayout: { x: 0, y: 6,  w: 6,  h: 5, minW: 3, minH: 3 } },
-  { id: 'income-expense', title: 'Income vs. expense', defaultLayout: { x: 6, y: 6,  w: 6,  h: 5, minW: 3, minH: 3 } },
-  { id: 'net-worth',      title: 'Net worth',           defaultLayout: { x: 0, y: 11, w: 12, h: 5, minW: 4, minH: 3 } },
-  { id: 'savings-goals',  title: 'Top savings goals',   defaultLayout: { x: 0, y: 16, w: 6,  h: 4, minW: 3, minH: 3 } },
-  { id: 'upcoming-bills', title: 'Upcoming bills',      defaultLayout: { x: 6, y: 16, w: 6,  h: 4, minW: 3, minH: 3 } },
+  // 0.20.0 — proactive insight cards. Loud placement at the top
+  // of the dashboard; hides itself when there are no active cards.
+  { id: 'insight-cards', title: 'Noticed today', defaultLayout: { x: 0, y: 0, w: 12, h: 4, minW: 6, minH: 3 } },
+  { id: 'cashflow-hero',  title: 'Cash-flow forecast', defaultLayout: { x: 0, y: 4,  w: 12, h: 6, minW: 6, minH: 4 } },
+  { id: 'spending-pie',   title: 'Spending this month', defaultLayout: { x: 0, y: 10, w: 6,  h: 5, minW: 3, minH: 3 } },
+  { id: 'income-expense', title: 'Income vs. expense', defaultLayout: { x: 6, y: 10, w: 6,  h: 5, minW: 3, minH: 3 } },
+  { id: 'net-worth',      title: 'Net worth',           defaultLayout: { x: 0, y: 15, w: 12, h: 5, minW: 4, minH: 3 } },
+  { id: 'savings-goals',  title: 'Top savings goals',   defaultLayout: { x: 0, y: 20, w: 6,  h: 4, minW: 3, minH: 3 } },
+  { id: 'upcoming-bills', title: 'Upcoming bills',      defaultLayout: { x: 6, y: 20, w: 6,  h: 4, minW: 3, minH: 3 } },
 ];
 
 function defaultLayout(): Layout[] {
@@ -147,7 +152,7 @@ export function DashboardPage() {
       try {
         // Fetch all dashboard data + user prefs in parallel. Prefs is
         // a tiny query — no point sequencing it.
-        const [spending, incomeExpense, netWorth, upcoming, flow, goals, prefs] =
+        const [spending, incomeExpense, netWorth, upcoming, flow, goals, prefs, insightCards] =
           await Promise.all([
             api.spendingByCategory({}),
             api.incomeExpense({ months: 12 }),
@@ -156,6 +161,10 @@ export function DashboardPage() {
             api.cashFlow(90),
             api.listGoals(),
             api.getPreferences().catch(() => ({} as Record<string, unknown>)),
+            // 0.20.0 — proactive insight cards. Best-effort fetch;
+            // if the endpoint fails (older server, network blip) the
+            // dashboard still loads with an empty cards list.
+            api.listInsightCards().catch(() => [] as InsightCard[]),
           ]);
         setData({
           spending: spending.rows,
@@ -170,6 +179,7 @@ export function DashboardPage() {
           cashFlowVolatility: flow.daily_volatility_cents,
           cashFlowMilestones: flow.milestones,
           goals,
+          insightCards,
         });
         // Apply saved prefs if they exist + look valid (filter out any
         // widget IDs we don't know about — they're either renamed or
@@ -283,7 +293,85 @@ export function DashboardPage() {
   // Widget content registry. Each value is a function returning the
   // INNER content of the card — the WidgetFrame below adds the
   // shared chrome (title, drag handle, hide button in edit mode).
+  // 0.20.0 — handlers for the insight-cards widget. Optimistically
+  // remove a card from local state as soon as the user dismisses or
+  // snoozes; the server call backfills the persistence.
+  async function dismissCard(id: string) {
+    setData((d) => d ? { ...d, insightCards: d.insightCards.filter((c) => c.id !== id) } : d);
+    await api.dismissInsightCard(id).catch(() => {});
+  }
+  async function snoozeCard(id: string, days: number) {
+    const until = new Date(Date.now() + days * 86400_000)
+      .toISOString()
+      .slice(0, 10);
+    setData((d) => d ? { ...d, insightCards: d.insightCards.filter((c) => c.id !== id) } : d);
+    await api.snoozeInsightCard(id, until).catch(() => {});
+  }
+  async function refreshCards() {
+    try {
+      await api.regenerateInsightCards();
+      const cards = await api.listInsightCards();
+      setData((d) => d ? { ...d, insightCards: cards } : d);
+    } catch {
+      /* best-effort */
+    }
+  }
+
   const renderers: Record<string, () => ReactNode> = {
+    'insight-cards': () => (
+      data.insightCards.length === 0 ? (
+        <div className="insight-cards-empty">
+          <p className="muted small">
+            Nothing notable in the last 24 hours. Insights regenerate daily,
+            or click below to scan now.
+          </p>
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => void refreshCards()}
+          >
+            Scan for insights now
+          </button>
+        </div>
+      ) : (
+        <div className="insight-cards-list">
+          {data.insightCards.map((card) => (
+            <article key={card.id} className={`insight-card insight-card-${card.severity}`}>
+              <div className="insight-card-head">
+                <span className={`insight-card-icon insight-card-icon-${card.severity}`} aria-hidden>
+                  {card.severity === 'critical' ? '!' : card.severity === 'warn' ? '⚠' : 'i'}
+                </span>
+                <strong className="insight-card-title">{card.title}</strong>
+              </div>
+              <p className="insight-card-body">{card.body}</p>
+              <div className="insight-card-actions">
+                {card.action_url && (
+                  <Link to={card.action_url} className="btn-link">
+                    {card.action_label ?? 'Open'}
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  className="btn-link muted"
+                  onClick={() => void snoozeCard(card.id, 7)}
+                  title="Hide this for 7 days"
+                >
+                  Snooze 7d
+                </button>
+                <button
+                  type="button"
+                  className="btn-link muted"
+                  onClick={() => void dismissCard(card.id)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )
+    ),
+
     'cashflow-hero': () => (
       <>
         <div className="cashflow-hero-header">
