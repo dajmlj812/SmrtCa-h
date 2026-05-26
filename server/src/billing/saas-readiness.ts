@@ -114,26 +114,46 @@ export async function runReadiness(): Promise<ReadinessReport> {
       : 'Create a webhook endpoint in the Stripe dashboard pointing at /api/billing/webhook with 5 events (customer.subscription.{created,updated,deleted} + invoice.payment_{succeeded,failed}), then copy the whsec_… signing secret into /settings.',
   });
 
-  // ── Mode vs PUBLIC_BASE_URL consistency ──────────────────
+  // ── PUBLIC_BASE_URL sanity ───────────────────────────────
+  // Earlier this also tried to flag mode/URL mismatch (test key with
+  // prod URL or vice versa). There's no reliable way to distinguish
+  // a prod URL from a test URL by string match alone — e.g.
+  // `smrtcash-test.builditsmrt.com` looks indistinguishable from a
+  // prod subdomain. The mode badge at the top of the panel already
+  // tells the operator what mode they're in; let them decide if
+  // that's right for the env. We only catch the unambiguous cases:
+  //   • live key with localhost/127.0.0.1 → fail (clear misconfig)
+  //   • live key with http:// → fail (Stripe redirects users to an
+  //     insecure URL)
   const baseUrl = (await getEffectiveValue('PUBLIC_BASE_URL')).trim();
-  const isHttpsProd = baseUrl.startsWith('https://') && !/localhost|127\.0\.0\.1|\.test\./i.test(baseUrl);
+  const isLocalhost = /(?:^|\/\/)localhost|127\.0\.0\.1/i.test(baseUrl);
+  const isInsecure = baseUrl.startsWith('http://');
+  if (isLive && isLocalhost) {
+    checks.push({
+      id: 'stripe.live_with_localhost',
+      label: 'Live key paired with non-public URL',
+      status: 'fail',
+      detail: `Live key in use, but PUBLIC_BASE_URL is "${baseUrl}"`,
+      fix: 'A sk_live_ key paired with localhost will produce Stripe redirect URLs real customers can\'t reach. Set PUBLIC_BASE_URL to the public production hostname.',
+    });
+  }
+  if (isLive && isInsecure) {
+    checks.push({
+      id: 'stripe.live_with_http',
+      label: 'Live key paired with insecure URL',
+      status: 'fail',
+      detail: `PUBLIC_BASE_URL uses http:// — must be https:// in production`,
+      fix: 'Configure TLS on the prod host (or via the reverse proxy) and set PUBLIC_BASE_URL to start with https://.',
+    });
+  }
   checks.push({
-    id: 'stripe.mode_vs_base_url',
-    label: 'Key mode matches deployment',
-    status: !hasSecret
-      ? 'warn'
-      : isLive && !isHttpsProd
-      ? 'warn'
-      : isTest && isHttpsProd
-      ? 'fail'
-      : 'pass',
-    detail: `Key mode: ${mode}. Base URL: ${baseUrl || '(unset)'}`,
-    fix:
-      isLive && !isHttpsProd
-        ? 'Live key set but PUBLIC_BASE_URL looks like a dev/test target — Stripe will redirect real customers somewhere they cannot use.'
-        : isTest && isHttpsProd
-        ? 'PROD URL with a TEST key — real customers will hit Stripe test mode and no money will move. Swap to sk_live_ before announcing.'
-        : undefined,
+    id: 'stripe.base_url',
+    label: 'PUBLIC_BASE_URL configured',
+    status: baseUrl ? 'pass' : 'fail',
+    detail: baseUrl || '(unset)',
+    fix: baseUrl
+      ? undefined
+      : 'Set PUBLIC_BASE_URL in /settings to the customer-facing URL (e.g. https://smrtcash.example.com). Used by email links + Stripe redirect URLs.',
   });
 
   // ── Stripe API calls (only run when configured) ──────────
