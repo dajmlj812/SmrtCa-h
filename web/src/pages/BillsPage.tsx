@@ -12,6 +12,7 @@ import {
 import { formatCents, formatDate } from '../format';
 import { FilterableTable } from '../components/FilterableTable';
 import { CancelInfoModal } from '../components/CancelInfoModal';
+import { NegotiateInfoModal } from '../components/NegotiateInfoModal';
 import { ScheduleChangeModal } from '../components/ScheduleChangeModal';
 
 const BILL_TABLE_COLUMNS: ReportColumn[] = [
@@ -76,6 +77,7 @@ export function BillsPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   // 0.18.1 — cancel-info modal target.
   const [cancelingBill, setCancelingBill] = useState<Bill | null>(null);
+  const [negotiatingBill, setNegotiatingBill] = useState<Bill | null>(null);
   // 0.18.13 — schedule-changes modal target. Can be a Bill or a
   // RecurringIncome; we discriminate with the `kind` field.
   const [scheduleTarget, setScheduleTarget] = useState<
@@ -427,6 +429,20 @@ export function BillsPage() {
                   <button
                     className="btn-link"
                     type="button"
+                    onClick={() => setNegotiatingBill(r)}
+                    title="How to negotiate this bill (retention discount, lower tier, dispute)"
+                  >
+                    Negotiate
+                    {(r.negotiate_url || r.negotiate_steps || r.negotiate_email_template) && (
+                      <span
+                        className="badge-dot"
+                        aria-label="negotiation info saved"
+                      />
+                    )}
+                  </button>
+                  <button
+                    className="btn-link"
+                    type="button"
                     onClick={() => void duplicateBill(r.id)}
                     title='Clone for a second person on the same account'
                   >
@@ -542,6 +558,18 @@ export function BillsPage() {
           onClose={() => setCancelingBill(null)}
           onSaved={(updated) => {
             setCancelingBill(null);
+            setBills((prev) =>
+              prev.map((b) => (b.id === updated.id ? updated : b)),
+            );
+          }}
+        />
+      )}
+      {negotiatingBill && (
+        <NegotiateInfoModal
+          bill={negotiatingBill}
+          onClose={() => setNegotiatingBill(null)}
+          onSaved={(updated) => {
+            setNegotiatingBill(null);
             setBills((prev) =>
               prev.map((b) => (b.id === updated.id ? updated : b)),
             );

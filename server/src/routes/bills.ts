@@ -53,6 +53,7 @@ const BILL_COLUMNS = `id, name, amount_cents, frequency, next_due_date,
   category_id, account_id, active, review_status, review_note,
   last_reviewed_at,
   cancel_url, cancel_email_template, cancel_steps, cancel_notes,
+  negotiate_url, negotiate_email_template, negotiate_steps, negotiate_notes,
   created_at`;
 const REVIEW_STATUSES = ['active', 'review', 'cancel', 'alter', 'keep'] as const;
 type ReviewStatus = (typeof REVIEW_STATUSES)[number];
@@ -219,6 +220,11 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         ['cancelEmailTemplate', 'cancel_email_template'],
         ['cancelSteps', 'cancel_steps'],
         ['cancelNotes', 'cancel_notes'],
+        // 0.19.1 — negotiation fields, same shape + handling.
+        ['negotiateUrl', 'negotiate_url'],
+        ['negotiateEmailTemplate', 'negotiate_email_template'],
+        ['negotiateSteps', 'negotiate_steps'],
+        ['negotiateNotes', 'negotiate_notes'],
       ] as const) {
         if (body[key] !== undefined) {
           const v = body[key];

@@ -736,7 +736,31 @@ export interface Bill {
   cancel_email_template: string | null;
   cancel_steps: string | null;
   cancel_notes: string | null;
+  // 0.19.1 — bill negotiation override fields (auto-fill from
+  // server-side library, or user-edited per-bill).
+  negotiate_url: string | null;
+  negotiate_email_template: string | null;
+  negotiate_steps: string | null;
+  negotiate_notes: string | null;
   created_at: string;
+}
+
+// 0.19.1 — bill negotiation library entry (mirror of
+// server/src/domain/negotiation-library.ts).
+export interface NegotiationEntry {
+  merchant: string;
+  category:
+    | 'internet'
+    | 'cell'
+    | 'electric'
+    | 'gas'
+    | 'insurance'
+    | 'cable_tv'
+    | 'other';
+  negotiateUrl: string | null;
+  emailTemplate: string | null;
+  steps: string | null;
+  notes: string | null;
 }
 
 export interface CancellationEntry {
@@ -2275,6 +2299,11 @@ export const api = {
       cancelEmailTemplate?: string | null;
       cancelSteps?: string | null;
       cancelNotes?: string | null;
+      // 0.19.1 — negotiation fields, same semantics as cancel*.
+      negotiateUrl?: string | null;
+      negotiateEmailTemplate?: string | null;
+      negotiateSteps?: string | null;
+      negotiateNotes?: string | null;
     },
   ) =>
     http<{ bill: Bill }>(`/api/bills/${id}`, {
@@ -2289,6 +2318,16 @@ export const api = {
       entry: CancellationEntry | null;
       generic_email_template: string;
     }>(`/api/cancellation/lookup?name=${encodeURIComponent(name)}`),
+
+  // 0.19.1 — bill negotiation library lookup.
+  lookupNegotiation: (name: string) =>
+    http<{
+      matched: boolean;
+      entry: NegotiationEntry | null;
+      generic_retention_email: string;
+      generic_bill_dispute_email: string;
+      generic_insurance_audit_email: string;
+    }>(`/api/negotiation/lookup?name=${encodeURIComponent(name)}`),
 
   deleteBill: (id: string) =>
     http<void>(`/api/bills/${id}`, { method: 'DELETE' }),
