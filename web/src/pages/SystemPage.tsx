@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { api, type SystemSubscriptionRow } from '../api';
+import { api, type SaasReadinessReport, type SystemSubscriptionRow } from '../api';
 import { AuthProvidersSection } from '../components/AuthProvidersSection';
 import { ExchangeRatesSection } from '../components/ExchangeRatesSection';
 import { AutoSyncSection } from '../components/AutoSyncSection';
@@ -50,10 +50,11 @@ interface AuditEntry {
 export function SystemPage({
   tab,
 }: {
-  tab: 'overview' | 'audit' | 'subscriptions';
+  tab: 'overview' | 'audit' | 'subscriptions' | 'saas-readiness';
 }) {
   if (tab === 'audit') return <AuditTab />;
   if (tab === 'subscriptions') return <SubscriptionsTab />;
+  if (tab === 'saas-readiness') return <SaasReadinessTab />;
   return <OverviewTab />;
 }
 
@@ -1019,6 +1020,101 @@ function RestartCard() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// 0.22.1 — SaaS readiness verifier. Runs the read-only checks
+// against env + DB + Stripe API on demand (not auto-refresh) so
+// the Stripe API quota is preserved. Renders each check as a
+// row with a status icon + detail + an optional "how to fix"
+// callout below failures.
+function SaasReadinessTab() {
+  const [report, setReport] = useState<SaasReadinessReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.systemSaasReadiness();
+      setReport(r);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Run once on mount so the panel always shows current state.
+  useEffect(() => {
+    void run();
+  }, []);
+
+  return (
+    <div className="page-content">
+      <header className="page-header">
+        <div>
+          <h1>SaaS readiness</h1>
+          <p className="muted small">
+            Verifies the prod Stripe wiring + adjacent settings. Catches the
+            class of bugs we lived through during cutover (wrong key prefix,
+            missing webhook endpoint, unresolved lookup_keys, etc.).
+          </p>
+        </div>
+        <button
+          className="btn"
+          type="button"
+          disabled={loading}
+          onClick={() => void run()}
+        >
+          {loading ? 'Checking…' : 'Re-run checks'}
+        </button>
+      </header>
+
+      {error && <div className="card danger">{error}</div>}
+
+      {report && (
+        <>
+          <div className="saas-readiness-summary">
+            <span className={`badge ${report.mode === 'live' ? 'success' : report.mode === 'test' ? 'info' : 'muted'}`}>
+              {report.mode} mode
+            </span>
+            <span className="muted small">
+              Checked {new Date(report.checkedAt).toLocaleString()}
+            </span>
+            <div className="saas-readiness-tally">
+              <span className="readiness-pass">{report.summary.pass} pass</span>
+              {report.summary.warn > 0 && (
+                <span className="readiness-warn">· {report.summary.warn} warn</span>
+              )}
+              {report.summary.fail > 0 && (
+                <span className="readiness-fail">· {report.summary.fail} fail</span>
+              )}
+            </div>
+          </div>
+
+          <ul className="saas-readiness-list">
+            {report.checks.map((c) => (
+              <li key={c.id} className={`readiness-row readiness-${c.status}`}>
+                <div className="readiness-row-head">
+                  <span className={`readiness-icon readiness-icon-${c.status}`} aria-hidden>
+                    {c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : '✕'}
+                  </span>
+                  <span className="readiness-label">{c.label}</span>
+                </div>
+                <div className="readiness-detail muted small">{c.detail}</div>
+                {c.fix && (
+                  <div className="readiness-fix">
+                    <strong>How to fix:</strong> {c.fix}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

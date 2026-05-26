@@ -7,6 +7,7 @@ import { listAudit, recordAudit } from '../domain/audit.js';
 import { hashPassword, validatePassword, PasswordPolicyError } from '../auth/passwords.js';
 import { requireSuperAdmin } from '../auth/rbac.js';
 import { getStripe, isStripeConfigured } from '../billing/stripe.js';
+import { runReadiness } from '../billing/saas-readiness.js';
 import { handleSubscriptionUpsert } from '../billing/webhook-handlers.js';
 import { PLAN_FEATURES, type Plan } from '../auth/entitlements.js';
 import { rotateTenantKey } from '../attachments/tenant-keys.js';
@@ -635,6 +636,16 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // 0.22.1 — Live-mode Stripe configuration verifier. Runs read-only
+  // checks against env + DB settings + Stripe API and returns a
+  // pass/warn/fail per check. The /system/saas-readiness React panel
+  // calls this on demand (not on a timer) so the cost stays bounded.
+  app.get('/api/system/saas-readiness', async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+    const report = await runReadiness();
+    return report;
+  });
 }
 
 // 0.18.8 — base URL resolution moved to domain/base-url.ts;

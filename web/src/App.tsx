@@ -234,6 +234,7 @@ function SuperAdminApp({
             Overview
           </NavLink>
           <NavLink to="/system/subscriptions">Subscriptions</NavLink>
+          <NavLink to="/system/saas-readiness">SaaS readiness</NavLink>
           <NavLink to="/system/audit">Audit log</NavLink>
           <NavLink to="/health">Health</NavLink>
           <NavLink to="/backups">Backups</NavLink>
@@ -271,6 +272,10 @@ function SuperAdminApp({
           <Route
             path="/system/subscriptions"
             element={<SystemPage tab="subscriptions" />}
+          />
+          <Route
+            path="/system/saas-readiness"
+            element={<SystemPage tab="saas-readiness" />}
           />
           <Route path="/system/audit" element={<SystemPage tab="audit" />} />
           <Route path="/health" element={<HealthPage />} />

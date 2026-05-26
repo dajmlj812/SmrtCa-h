@@ -4189,6 +4189,88 @@ code {
   line-height: 1.5;
 }
 
+/* 0.22.1 — SaaS readiness verifier panel ─────────────────────────── */
+.saas-readiness-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 16px;
+  padding: 10px 14px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+}
+.saas-readiness-tally {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.readiness-pass { color: #047857; }
+.readiness-warn { color: #b45309; }
+.readiness-fail { color: #b91c1c; }
+
+.saas-readiness-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.readiness-row {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.readiness-row.readiness-pass {
+  border-left: 3px solid #10b981;
+}
+.readiness-row.readiness-warn {
+  border-left: 3px solid #f59e0b;
+}
+.readiness-row.readiness-fail {
+  border-left: 3px solid #ef4444;
+}
+.readiness-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+.readiness-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+}
+.readiness-icon-pass { background: #10b981; }
+.readiness-icon-warn { background: #f59e0b; }
+.readiness-icon-fail { background: #ef4444; }
+.readiness-detail {
+  margin-top: 4px;
+  margin-left: 30px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.readiness-fix {
+  margin-top: 8px;
+  margin-left: 30px;
+  padding: 8px 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 2px solid rgba(245, 158, 11, 0.4);
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* Footer-of-form links from LoginPage, SignupPage, ForgotPasswordPage. */
 .auth-legal-links {
   margin-top: 16px;

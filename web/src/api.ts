@@ -1161,6 +1161,22 @@ export interface TenantSummary {
  * the tenant has no row in `subscriptions` (a fresh signup with no
  * plan picked yet, for example).
  */
+// 0.22.1 — SaaS readiness verifier report shape (mirror of
+// server/src/billing/saas-readiness.ts).
+export interface SaasReadinessCheck {
+  id: string;
+  label: string;
+  status: 'pass' | 'fail' | 'warn';
+  detail: string;
+  fix?: string;
+}
+export interface SaasReadinessReport {
+  checkedAt: string;
+  mode: 'live' | 'test' | 'unknown';
+  checks: SaasReadinessCheck[];
+  summary: { pass: number; warn: number; fail: number };
+}
+
 export interface SystemSubscriptionRow {
   tenant_id: string;
   tenant_name: string;
@@ -1955,6 +1971,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }),
+
+  // 0.22.1 — Stripe live-mode readiness verifier.
+  systemSaasReadiness: () =>
+    http<SaasReadinessReport>('/api/system/saas-readiness'),
 
   // 0.16.1 — super-admin subscriptions console.
   systemListSubscriptions: () =>
