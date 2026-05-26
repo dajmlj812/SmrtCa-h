@@ -701,7 +701,7 @@ impact-per-day so the early wins compound.
 
 ---
 
-## 0.20.x — Agentic AI moat 📋
+## 0.20.x — Agentic AI moat ✅
 
 The single biggest unexploited lever in this space. SmrtCash
 already has 17 audit-logged tool calls in the assistant; no
@@ -716,7 +716,7 @@ the assistant does on your behalf.
 
 ### Planned slices (ordered by impact-per-day)
 
-- **0.20.0** 📋 — **Proactive insight cards on the dashboard**
+- **0.20.0** ✅ — **Proactive insight cards on the dashboard**
   (~2–3 days). Every morning the assistant scans the prior
   24h + 30-day trends and surfaces 0–3 "noticed this" cards on
   the dashboard: an anomaly above the existing scanner
@@ -728,7 +728,7 @@ the assistant does on your behalf.
   goal pace 0.18.5) — this slice wraps them in AI-curated copy
   and dashboard placement. **Changes the perceptual feel of the
   product more than any other ~3-day slice.**
-- **0.20.1** 📋 — **Multi-step staged actions in the assistant**
+- **0.20.1** ✅ — **Multi-step staged actions in the assistant**
   (~2–3 days). Today the assistant fires one tool call at a
   time and changes are immediate. This slice adds a "stage,
   preview, commit" wrapper: the assistant proposes a diff
@@ -738,7 +738,7 @@ the assistant does on your behalf.
   single "undo this batch" button reverts the whole thing.
   Unlocks user trust for complex requests like "reorganize my
   budgets along Ramsey 50/30/20."
-- **0.20.2** 📋 — **Voice-first PWA assistant** (~3–5 days).
+- **0.20.2** ✅ — **Voice-first PWA assistant** (~3–5 days). Shipped MVP using Web Speech API (Safari on-device, Chrome/Edge cloud-routed). Whisper.cpp WASM upgrade is a documented follow-up for strict on-device privacy across all browsers.
   Open the assistant on mobile, tap a mic icon, say "Log a $87
   Costco run, split 60/40 grocery/household." Whisper.cpp WASM
   for on-device speech-to-text (no audio leaves the phone),
