@@ -416,6 +416,8 @@ export const ASSET_TYPES: AssetType[] = [
   'other',
 ];
 
+export type AssetClass = 'stocks' | 'bonds' | 'cash' | 'alts' | 'real_estate';
+
 export interface Holding {
   id: string;
   account_id: string;
@@ -428,7 +430,66 @@ export interface Holding {
   last_price_date: string | null;
   market_value_cents: number;
   unrealized_gain_cents: number;
+  /** 0.19.3 — annual expense ratio % (e.g. 0.040 = 0.040%/yr). NULL = unknown. */
+  expense_ratio: number | null;
+  /** 0.19.3 — asset class tag for the allocation pie. NULL falls back to a derived class. */
+  asset_class: AssetClass | null;
   created_at: string;
+}
+
+// 0.19.3 — investment analysis response shapes (mirror of
+// server/src/domain/investment-analysis.ts).
+export interface InvestmentFeeAnalysis {
+  total_value_cents: number;
+  annual_fee_cents: number;
+  weighted_avg_expense_ratio_pct: number;
+  thirty_year_opportunity_cost_cents: number;
+  top_fee_drags: Array<{
+    holding_id: string;
+    symbol: string | null;
+    name: string;
+    value_cents: number;
+    expense_ratio_pct: number;
+    annual_fee_cents: number;
+  }>;
+  unknown_ratio_count: number;
+  unknown_ratio_value_cents: number;
+}
+
+export interface AllocationBucket {
+  asset_class: AssetClass;
+  value_cents: number;
+  pct: number;
+  target_pct: number | null;
+  deviation_pp: number | null;
+}
+
+export interface InvestmentAllocationAnalysis {
+  total_value_cents: number;
+  buckets: AllocationBucket[];
+  derived_class_count: number;
+}
+
+export interface InvestmentAnalysis {
+  fees: InvestmentFeeAnalysis;
+  allocation: InvestmentAllocationAnalysis;
+  holding_count: number;
+}
+
+export interface MonteCarloPoint {
+  year: number;
+  p10_nominal_cents: number;
+  p50_nominal_cents: number;
+  p90_nominal_cents: number;
+  p10_real_cents: number;
+  p50_real_cents: number;
+  p90_real_cents: number;
+}
+
+export interface MonteCarloResult {
+  trials: number;
+  points: MonteCarloPoint[];
+  prob_meet_target?: number;
 }
 
 export interface CryptoRefreshResult {
@@ -2654,6 +2715,9 @@ export const api = {
       costBasisCents: number;
       lastPriceCents: number;
       lastPriceDate: string | null;
+      // 0.19.3 — investment-analysis fields.
+      expenseRatio: number | null;
+      assetClass: AssetClass | null;
     }>,
   ) =>
     http<{ holding: Holding }>(`/api/holdings/${id}`, {
@@ -2664,6 +2728,30 @@ export const api = {
 
   deleteHolding: (id: string) =>
     http<void>(`/api/holdings/${id}`, { method: 'DELETE' }),
+
+  // 0.19.3 — investment analysis endpoints.
+  getInvestmentAnalysis: (
+    targets?: Partial<Record<AssetClass, number>>,
+  ) => {
+    let q = '';
+    if (targets) {
+      const parts = Object.entries(targets)
+        .filter(([, v]) => typeof v === 'number')
+        .map(([k, v]) => `${k}:${v}`);
+      if (parts.length > 0) q = `?targets=${encodeURIComponent(parts.join(','))}`;
+    }
+    return http<InvestmentAnalysis>(`/api/investments/analysis${q}`);
+  },
+
+  runMonteCarlo: (
+    projectionId: string,
+    body: { stddevPct?: number; trials?: number } = {},
+  ) =>
+    http<MonteCarloResult>(`/api/projections/${projectionId}/monte-carlo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 
   refreshCryptoPrices: () =>
     http<CryptoRefreshResult>('/api/holdings/refresh-prices/crypto', {

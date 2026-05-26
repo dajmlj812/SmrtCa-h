@@ -29,6 +29,7 @@ import { billRoutes } from './routes/bills.js';
 import { scheduleChangeRoutes } from './routes/schedule-changes.js';
 import { cancellationRoutes } from './routes/cancellation.js';
 import { negotiationRoutes } from './routes/negotiation.js';
+import { investmentRoutes } from './routes/investments.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { debtPayoffRoutes } from './routes/debt-payoff.js';
 import { recurringRoutes } from './routes/recurring.js';
@@ -399,6 +400,7 @@ export async function buildApp(
   await app.register(scheduleChangeRoutes);
   await app.register(cancellationRoutes);
   await app.register(negotiationRoutes);
+  await app.register(investmentRoutes);
   await app.register(apiKeyRoutes);
   await app.register(debtPayoffRoutes);
   await app.register(recurringRoutes);

@@ -35,6 +35,7 @@ import { InviteAcceptPage } from './pages/InviteAcceptPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { SystemPage } from './pages/SystemPage';
 import { RetirementPage } from './pages/RetirementPage';
+import { InvestmentsPage } from './pages/InvestmentsPage';
 import { DebtPayoffPage } from './pages/DebtPayoffPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { AssistantPage } from './pages/AssistantPage';
@@ -364,6 +365,7 @@ function AuthenticatedApp({
             <NavLink to="/bills">Bills</NavLink>
             <NavLink to="/subscriptions">Subscriptions</NavLink>
             <NavLink to="/retirement">Retirement</NavLink>
+            <NavLink to="/investments">Investments</NavLink>
             <NavLink to="/debt-payoff">Debt payoff</NavLink>
           </div>
           <div className="nav-group">
@@ -420,6 +422,7 @@ function AuthenticatedApp({
           <Route path="/budgets" element={<BudgetsPage />} />
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/retirement" element={<RetirementPage />} />
+          <Route path="/investments" element={<InvestmentsPage />} />
           <Route path="/debt-payoff" element={<DebtPayoffPage />} />
           <Route path="/bills" element={<BillsPage />} />
           <Route path="/subscriptions" element={<SubscriptionsPage />} />

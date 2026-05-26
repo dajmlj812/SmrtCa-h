@@ -6,11 +6,17 @@ import { FEATURES, requireFeature } from '../auth/entitlements.js';
 
 const COLUMNS = `id, account_id, symbol, name, asset_type,
   quantity::float8 AS quantity,
-  cost_basis_cents, last_price_cents, last_price_date, created_at`;
+  cost_basis_cents, last_price_cents, last_price_date,
+  expense_ratio::float8 AS expense_ratio,
+  asset_class,
+  created_at`;
 
 const COLUMNS_H = `h.id, h.account_id, h.symbol, h.name, h.asset_type,
   h.quantity::float8 AS quantity,
-  h.cost_basis_cents, h.last_price_cents, h.last_price_date, h.created_at`;
+  h.cost_basis_cents, h.last_price_cents, h.last_price_date,
+  h.expense_ratio::float8 AS expense_ratio,
+  h.asset_class,
+  h.created_at`;
 
 const VALID_ASSET_TYPES = new Set([
   'stock', 'etf', 'mutual_fund', 'bond',
@@ -236,6 +242,38 @@ export async function holdingRoutes(app: FastifyInstance): Promise<void> {
         }
         params.push(t);
         sets.push(`asset_type = $${params.length}`);
+      }
+      // 0.19.3 — investment-analysis fields.
+      if (body.expenseRatio !== undefined) {
+        if (body.expenseRatio === null) {
+          params.push(null);
+          sets.push(`expense_ratio = $${params.length}`);
+        } else {
+          const n = Number(body.expenseRatio);
+          if (!Number.isFinite(n) || n < 0 || n > 10) {
+            return reply
+              .code(400)
+              .send({ error: 'expenseRatio must be a number 0-10 (% per year) or null' });
+          }
+          params.push(n);
+          sets.push(`expense_ratio = $${params.length}`);
+        }
+      }
+      if (body.assetClass !== undefined) {
+        if (body.assetClass === null) {
+          params.push(null);
+          sets.push(`asset_class = $${params.length}`);
+        } else if (
+          typeof body.assetClass === 'string' &&
+          ['stocks', 'bonds', 'cash', 'alts', 'real_estate'].includes(body.assetClass)
+        ) {
+          params.push(body.assetClass);
+          sets.push(`asset_class = $${params.length}`);
+        } else {
+          return reply.code(400).send({
+            error: 'assetClass must be one of stocks/bonds/cash/alts/real_estate or null',
+          });
+        }
       }
       if (sets.length === 0) {
         return reply.code(400).send({ error: 'No updates' });

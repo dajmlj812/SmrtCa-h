@@ -67,6 +67,41 @@ export function HoldingsPanel({ accountId, onChanged }: Props) {
     }
   }
 
+  // 0.19.3 — investment-analysis fields. Inline editors on the
+  // holdings table so users can fill in expense_ratio + asset_class
+  // without a separate modal.
+  async function changeAssetClass(h: Holding, assetClass: string | null) {
+    try {
+      await api.updateHolding(h.id, {
+        assetClass:
+          assetClass === null
+            ? null
+            : (assetClass as 'stocks' | 'bonds' | 'cash' | 'alts' | 'real_estate'),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed');
+    }
+  }
+
+  async function changeExpenseRatio(h: Holding, raw: string) {
+    const trimmed = raw.trim();
+    const next = trimmed === '' ? null : Number(trimmed);
+    const current = h.expense_ratio ?? null;
+    // No-op when nothing changed (avoids hitting the API on every blur).
+    if (next === current) return;
+    if (next !== null && (!Number.isFinite(next) || next < 0 || next > 10)) {
+      setError('Expense ratio must be 0-10 (% per year)');
+      return;
+    }
+    try {
+      await api.updateHolding(h.id, { expenseRatio: next });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed');
+    }
+  }
+
   async function refreshCrypto() {
     try {
       setError(null);
@@ -156,6 +191,8 @@ export function HoldingsPanel({ accountId, onChanged }: Props) {
                   <th className="num">Last price</th>
                   <th className="num">Market value</th>
                   <th className="num">Unrealized</th>
+                  <th>Class</th>
+                  <th className="num">Expense %</th>
                   <th></th>
                 </tr>
               </thead>
@@ -191,6 +228,38 @@ export function HoldingsPanel({ accountId, onChanged }: Props) {
                     <td className="num">{formatCents(h.market_value_cents)}</td>
                     <td className={`num ${h.unrealized_gain_cents >= 0 ? 'pos' : 'neg'}`}>
                       {formatCents(h.unrealized_gain_cents)}
+                    </td>
+                    <td>
+                      <select
+                        value={h.asset_class ?? ''}
+                        onChange={(e) =>
+                          void changeAssetClass(h, e.target.value || null)
+                        }
+                        style={{ fontSize: 13 }}
+                        title="Asset class for portfolio allocation analysis (NULL falls back to a class derived from Type)"
+                      >
+                        <option value="">— derived —</option>
+                        <option value="stocks">stocks</option>
+                        <option value="bonds">bonds</option>
+                        <option value="cash">cash</option>
+                        <option value="alts">alts</option>
+                        <option value="real_estate">real_estate</option>
+                      </select>
+                    </td>
+                    <td className="num">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        max="10"
+                        defaultValue={h.expense_ratio ?? ''}
+                        placeholder="—"
+                        title="Annual expense ratio % (e.g. 0.040 for a 4bp ETF). Used by the Investments fee analyzer."
+                        style={{ width: 70, textAlign: 'right', fontSize: 13 }}
+                        onBlur={(e) =>
+                          void changeExpenseRatio(h, e.target.value)
+                        }
+                      />
                     </td>
                     <td>
                       <button

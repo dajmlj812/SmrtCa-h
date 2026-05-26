@@ -1575,6 +1575,46 @@ select:focus {
   gap: 8px;
   align-items: center;
 }
+
+/* 0.19.3 — Investments analysis page. */
+.investments-page .card { margin-bottom: 16px; }
+.investments-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+.investments-stat {
+  padding: 10px 12px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+}
+.investments-stat strong {
+  display: block;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.investments-stat-warn strong { color: #b45309; }
+.investments-allocation {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .investments-allocation { grid-template-columns: 1fr; }
+}
+.investments-pie { min-width: 0; }
+.allocation-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
 tr.selected {
   background: #f1f5ff;
 }
