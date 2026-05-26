@@ -230,6 +230,71 @@ Open `/health` (super-admin) once a day during early launch:
 
 ---
 
+## Backups failing with EACCES on `/data/backups`
+
+### Symptom
+`POST /api/backups/run` (or the scheduled tick) returns / logs:
+```
+EACCES: permission denied, mkdir '/data/backups/2026-MM-DD_HH-MM-SS'
+```
+
+### Root cause
+The app container runs as `node` (UID 1000) with `cap_drop: ALL`. The
+`/data/backups` directory is a docker volume mount; if the volume was
+just created (fresh stack, or after `docker compose down -v`) the host
+path is owned by `root:root` and the container has no way to chown it
+from inside — the dropped capabilities prevent it.
+
+This has bitten us twice (prod cutover + a test redeploy). Boot-time
+detection now logs a bordered banner to stderr when this happens
+(`server/src/domain/backup-scheduler.ts` `checkBackupDirWritable`), so
+`docker compose logs app` shows the fix in plain English.
+
+### Fix
+On the **docker host** (not inside the container):
+
+```bash
+# Resolve the volume's host path
+HOST_DIR=$(docker volume inspect smrtcash_smrtcash-backups \
+  --format "{{.Mountpoint}}")
+
+# Chown to UID 1000 (the container's node user — different /etc/passwd
+# name but same UID as the host's `ubuntu` on most distros).
+chown -R 1000:1000 "$HOST_DIR"
+
+# Verify
+ls -la "$HOST_DIR"
+```
+
+### Verify the fix
+```bash
+# Trigger one backup; should write a fresh timestamped dir and return success.
+docker exec smrtcash-app node -e "
+import('./dist/domain/backup-runner.js').then(async (m) => {
+  const r = await m.runBackup({ kind: 'manual' });
+  console.log(JSON.stringify(r, null, 2));
+}).catch(e => { console.error('FAIL:', e.message); process.exit(1); });
+"
+```
+
+Successful runs show `"status":"success"` and a non-zero `db_bytes`.
+After the chown, the boot-time check on the next container restart
+also goes quiet (success path is silent — only failures log).
+
+### When this recurs
+- After any `docker compose down -v` (volumes are destroyed + recreated)
+- After a fresh stack provision on a new host
+- After deleting + recreating a specific volume (`docker volume rm`)
+- **Not** after plain `docker compose down` (volumes survive)
+- **Not** after `docker compose up -d --build app` (no volume churn)
+
+If the boot banner fires unexpectedly without a known volume reset,
+check `docker volume ls` for stray sibling volumes (e.g.
+`smrtcah_smrtcash-backups` from the `$h` path-name footgun — see
+local-dev memory).
+
+---
+
 ## Useful one-liners
 
 ```bash
