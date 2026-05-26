@@ -97,23 +97,35 @@ export async function generateAndPersist(
   let skipped = 0;
   for (const c of proposed) {
     try {
-      const r = await query(
-        `INSERT INTO insight_cards
-           (tenant_id, kind, severity, title, body, action_label, action_url, source_kind, source_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT DO NOTHING`,
-        [
-          tenantId,
-          c.kind,
-          c.severity,
-          c.title,
-          c.body,
-          c.action_label ?? null,
-          c.action_url ?? null,
-          c.source_kind ?? null,
-          c.source_id ?? null,
-        ],
-      );
+      // ON CONFLICT target must spell out the partial-index
+      // predicate exactly — Postgres won't match a bare
+      // `ON CONFLICT DO NOTHING` against a partial unique index.
+      // For cards without a source_id (which fall outside the
+      // partial index's WHERE clause), we skip the dedupe path
+      // entirely and just insert; those kinds always go through
+      // the in-generator volume cap.
+      const sql =
+        c.source_id !== undefined && c.source_id !== null
+          ? `INSERT INTO insight_cards
+               (tenant_id, kind, severity, title, body, action_label, action_url, source_kind, source_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT (tenant_id, kind, source_id)
+               WHERE dismissed_at IS NULL AND source_id IS NOT NULL
+             DO NOTHING`
+          : `INSERT INTO insight_cards
+               (tenant_id, kind, severity, title, body, action_label, action_url, source_kind, source_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`;
+      const r = await query(sql, [
+        tenantId,
+        c.kind,
+        c.severity,
+        c.title,
+        c.body,
+        c.action_label ?? null,
+        c.action_url ?? null,
+        c.source_kind ?? null,
+        c.source_id ?? null,
+      ]);
       if (r.rowCount && r.rowCount > 0) generated++;
       else skipped++;
     } catch (err) {
