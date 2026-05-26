@@ -95,6 +95,20 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // 0.19.4 — slow-route capture. Same shape as slow-queries; the
+  // /health page surfaces both panels side-by-side.
+  app.get<{ Querystring: { limit?: string } }>(
+    '/api/health/slow-routes',
+    async (req, reply) => {
+      if (!requireSuperAdmin(req, reply)) return;
+      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+      return {
+        threshold_ms: diagnosticsRecorder.slowRouteThresholdMs,
+        entries: diagnosticsRecorder.getSlowRoutes(limit),
+      };
+    },
+  );
+
   // 0.18.13 — performance recommendations (dynamic).
   //
   // GET returns the latest scheduled-analysis result + scheduler

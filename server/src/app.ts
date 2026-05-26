@@ -5,7 +5,11 @@ import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import staticPlugin from '@fastify/static';
 import helmet from '@fastify/helmet';
-import { diagnosticsRecorder } from './domain/diagnostics-recorder.js';
+import {
+  diagnosticsRecorder,
+  SLOW_ROUTE_THRESHOLD_MS,
+} from './domain/diagnostics-recorder.js';
+import { configureErrorSinkFromEnv, errorSink } from './domain/error-sink.js';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +34,7 @@ import { scheduleChangeRoutes } from './routes/schedule-changes.js';
 import { cancellationRoutes } from './routes/cancellation.js';
 import { negotiationRoutes } from './routes/negotiation.js';
 import { investmentRoutes } from './routes/investments.js';
+import { errorReportRoutes } from './routes/errors.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { debtPayoffRoutes } from './routes/debt-payoff.js';
 import { recurringRoutes } from './routes/recurring.js';
@@ -342,6 +347,9 @@ export async function buildApp(
 
   app.setErrorHandler(
     (err: Error & { statusCode?: number; code?: string }, req, reply) => {
+      // 0.19.4 — capture into the external error sink for any 5xx.
+      // Parser/validation errors below get a 400 + warning log; we
+      // don't forward those to Sentry (they're caller bugs, not ours).
       if (err instanceof ImportError) {
         return reply.code(400).send({ error: err.message });
       }
@@ -365,6 +373,17 @@ export async function buildApp(
       }
       app.log.error(err);
       const status = err.statusCode ?? 500;
+      // 0.19.4 — forward 5xx to the external sink. 4xx are caller
+      // bugs (bad input, missing auth) — not worth paging on.
+      if (status >= 500) {
+        errorSink().capture(err, {
+          source: 'server',
+          route: req.url,
+          reqId: req.id,
+          tenantId: req.user?.tenantId ?? undefined,
+          userId: req.user?.id,
+        });
+      }
       // For 5xx, hide the message — internal errors shouldn't leak
       // stack-trace adjacent context. For 4xx that the route itself
       // threw with a statusCode, the message is intentional (auth
@@ -401,6 +420,7 @@ export async function buildApp(
   await app.register(cancellationRoutes);
   await app.register(negotiationRoutes);
   await app.register(investmentRoutes);
+  await app.register(errorReportRoutes);
   await app.register(apiKeyRoutes);
   await app.register(debtPayoffRoutes);
   await app.register(recurringRoutes);
@@ -443,8 +463,43 @@ export async function buildApp(
   // Start the rolling-metrics recorder and instrument every HTTP
   // response. The /api/health/timeseries endpoint reads its buffer.
   metricsRecorder.start();
+  // 0.19.4 — error sink: pick Sentry vs Noop based on SENTRY_DSN env.
+  configureErrorSinkFromEnv();
+
   app.addHook('onResponse', (req, reply, done) => {
     metricsRecorder.incRequest(reply.statusCode);
+    // 0.19.4 — structured per-request log line. Fastify already emits
+    // its own "request completed"; this one carries the additional
+    // identity context (tenant_id, user_id) that we want for log
+    // aggregation. Single grep-able line per request.
+    const ms = reply.elapsedTime ?? 0;
+    const route = req.routeOptions?.url ?? req.url;
+    const ctx = {
+      req_id: req.id,
+      method: req.method,
+      route,
+      status: reply.statusCode,
+      ms: Math.round(ms),
+      tenant_id: req.user?.tenantId ?? null,
+      user_id: req.user?.id ?? null,
+    };
+    if (reply.statusCode >= 500) {
+      req.log.error(ctx, 'request completed');
+    } else {
+      req.log.info(ctx, 'request completed');
+    }
+    // 0.19.4 — slow-route capture. Default threshold 1000ms; runtime
+    // override via SLOW_ROUTE_THRESHOLD_MS so operators can dial it
+    // up during an investigation without a deploy.
+    if (ms >= SLOW_ROUTE_THRESHOLD_MS) {
+      diagnosticsRecorder.recordSlowRoute({
+        route,
+        method: req.method,
+        status: reply.statusCode,
+        duration_ms: Math.round(ms),
+        tenant_id: req.user?.tenantId ?? null,
+      });
+    }
     done();
   });
 

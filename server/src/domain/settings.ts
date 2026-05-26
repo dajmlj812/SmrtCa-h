@@ -166,6 +166,15 @@ export const KNOWN_SETTINGS = [
   // /health Slow queries panel. Default 100. Lower for an afternoon
   // of perf profiling, then revert.
   { key: 'SLOW_QUERY_THRESHOLD_MS', isSecret: false, restartRequired: true, superOnly: true, label: 'Slow query threshold (ms; default 100)' },
+  // 0.19.4 — slow-route threshold. Same shape: any HTTP request
+  // whose handler took longer than this gets captured into the
+  // /health Slow routes panel. Default 1000.
+  { key: 'SLOW_ROUTE_THRESHOLD_MS', isSecret: false, restartRequired: true, superOnly: true, label: 'Slow route threshold (ms; default 1000)' },
+  // 0.19.4 — Sentry DSN for external error tracking. Empty = no
+  // forwarding. URL of the form https://<key>@<host>/<projectId>.
+  // Configures both server-side exceptions + client-side errors
+  // (POSTed by the React error boundary to /api/errors).
+  { key: 'SENTRY_DSN', isSecret: true, restartRequired: true, superOnly: true, label: 'Sentry DSN (optional external error tracking)' },
 ] as const;
 
 /**
@@ -382,6 +391,9 @@ export function applyToConfig(key: SettingKey, value: string): void {
     case 'PG_POOL_MAX':
     case 'OCR_TIMEOUT_MS':
     case 'SLOW_QUERY_THRESHOLD_MS':
+    // 0.19.4 — same boot-time pattern.
+    case 'SLOW_ROUTE_THRESHOLD_MS':
+    case 'SENTRY_DSN':
       process.env[key] = value;
       break;
   }

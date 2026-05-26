@@ -81,6 +81,10 @@ services:
       PG_POOL_MAX: ${PG_POOL_MAX:-}
       OCR_TIMEOUT_MS: ${OCR_TIMEOUT_MS:-}
       SLOW_QUERY_THRESHOLD_MS: ${SLOW_QUERY_THRESHOLD_MS:-}
+      # 0.19.4 — observability knobs (entrypoint loads from app_settings
+      # too, so an empty value here is fine).
+      SLOW_ROUTE_THRESHOLD_MS: ${SLOW_ROUTE_THRESHOLD_MS:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - "${APP_PORT:-4000}:4000"
     volumes:

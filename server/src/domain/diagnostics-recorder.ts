@@ -22,6 +22,20 @@
 
 const MAX_LOG_ENTRIES = 200;
 const MAX_SLOW_QUERIES = 200;
+const MAX_SLOW_ROUTES = 200;
+
+/**
+ * 0.19.4 — slow-route threshold. Any HTTP request whose handler took
+ * longer than this gets captured into the in-memory ring buffer for
+ * /health to surface. Same env-fallback pattern as
+ * SLOW_QUERY_THRESHOLD_MS.
+ */
+export const SLOW_ROUTE_THRESHOLD_MS = (() => {
+  const raw = process.env.SLOW_ROUTE_THRESHOLD_MS;
+  if (!raw) return 1000;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 1000;
+})();
 
 /**
  * Slow-query threshold (ms). Anything over this is captured.
@@ -56,9 +70,21 @@ export interface SlowQueryEntry {
   param_count: number;
 }
 
+/** 0.19.4 — slow-route capture: anything over SLOW_ROUTE_THRESHOLD_MS. */
+export interface SlowRouteEntry {
+  ts: string;
+  duration_ms: number;
+  route: string;
+  method: string;
+  status: number;
+  /** Tenant id from the auth session, when available. Helps operators trace which tenant hit the slow path. */
+  tenant_id: string | null;
+}
+
 class DiagnosticsRecorder {
   private logs: LogEntry[] = [];
   private slow: SlowQueryEntry[] = [];
+  private slowRoutes: SlowRouteEntry[] = [];
 
   recordLog(entry: LogEntry): void {
     this.logs.push(entry);
@@ -93,10 +119,30 @@ class DiagnosticsRecorder {
       .slice(0, limit);
   }
 
+  /** 0.19.4 — record a slow HTTP handler. Caller pre-checks the threshold. */
+  recordSlowRoute(entry: Omit<SlowRouteEntry, 'ts'>): void {
+    this.slowRoutes.push({ ts: new Date().toISOString(), ...entry });
+    if (this.slowRoutes.length > MAX_SLOW_ROUTES) {
+      this.slowRoutes.splice(0, this.slowRoutes.length - MAX_SLOW_ROUTES);
+    }
+  }
+
+  /** Slowest N routes from the buffer, sorted desc by duration. */
+  getSlowRoutes(limit = 50): SlowRouteEntry[] {
+    return [...this.slowRoutes]
+      .sort((a, b) => b.duration_ms - a.duration_ms)
+      .slice(0, limit);
+  }
+
   /** For tests. */
   reset(): void {
     this.logs = [];
     this.slow = [];
+    this.slowRoutes = [];
+  }
+
+  get slowRouteThresholdMs(): number {
+    return SLOW_ROUTE_THRESHOLD_MS;
   }
 
   get slowQueryThresholdMs(): number {

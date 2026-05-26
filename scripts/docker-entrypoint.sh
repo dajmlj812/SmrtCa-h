@@ -56,6 +56,9 @@ load_setting HEAP_MAX_MB
 load_setting PG_POOL_MAX
 load_setting OCR_TIMEOUT_MS
 load_setting SLOW_QUERY_THRESHOLD_MS
+# 0.19.4 — observability knobs.
+load_setting SLOW_ROUTE_THRESHOLD_MS
+load_setting SENTRY_DSN
 
 # Translate HEAP_MAX_MB → --max-old-space-size=$N. Only do this when:
 #   (a) HEAP_MAX_MB is set, AND
