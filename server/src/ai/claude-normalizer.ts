@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { UNCATEGORIZED } from '../domain/categories.js';
+import { AIProviderNotConfiguredError } from './errors.js';
 import {
   buildNormalizerSystemPrompt,
   buildResponseSchema,
@@ -45,9 +46,7 @@ export class ClaudeNormalizer implements TransactionNormalizer {
 
   constructor(opts: ClaudeNormalizerOptions) {
     if (!opts.client && !opts.apiKey) {
-      throw new Error(
-        'ANTHROPIC_API_KEY is required when AI_PROVIDER=claude',
-      );
+      throw new AIProviderNotConfiguredError('claude', 'ANTHROPIC_API_KEY');
     }
     this.client = opts.client ?? new Anthropic({ apiKey: opts.apiKey });
     this.model = opts.model || DEFAULT_MODEL;

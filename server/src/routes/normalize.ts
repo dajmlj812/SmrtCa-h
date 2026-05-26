@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { getProviderId } from '../ai/factory.js';
+import { AIProviderNotConfiguredError } from '../ai/errors.js';
 import {
   countByNormalizationStatus,
   countPendingTransactions,
@@ -132,12 +133,26 @@ export async function normalizeRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: quota.denial!.error });
     }
 
-    const summary = await normalizePending({
-      tenantId,
-      ...(accountId ? { accountId } : {}),
-      ...(limit !== undefined ? { limit } : {}),
-      mode,
-    });
-    return { summary };
+    // 0.19.1.x — AI-provider misconfig (missing API key, etc.) is an
+    // operator condition the tenant user can't fix. Surface it as a
+    // 503 with a clear message rather than a raw 500.
+    try {
+      const summary = await normalizePending({
+        tenantId,
+        ...(accountId ? { accountId } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        mode,
+      });
+      return { summary };
+    } catch (err) {
+      if (err instanceof AIProviderNotConfiguredError) {
+        return reply.code(503).send({
+          error: err.message,
+          code: err.code,
+          missingSetting: err.missingSetting,
+        });
+      }
+      throw err;
+    }
   });
 }
