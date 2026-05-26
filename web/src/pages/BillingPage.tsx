@@ -243,11 +243,16 @@ export function BillingPage() {
           </div>
         </section>
       ) : (
-        <section className="card">
-          <h2>Pick a plan to get started</h2>
-          <p className="muted">
-            All plans include a 14-day free trial. No card required upfront.
+        <section className="card billing-hero">
+          <h2>AI that does the work. Encryption your provider can't see into.</h2>
+          <p className="billing-hero-sub">
+            Pick a plan to start your 14-day free trial. No card required upfront.
           </p>
+          <ul className="billing-hero-points muted small">
+            <li>Per-tenant encryption — your data is unreadable to us, not just access-controlled.</li>
+            <li>Agentic AI that proposes, stages, and applies changes (not just answers).</li>
+            <li>Annual plans save up to 41% over month-to-month.</li>
+          </ul>
         </section>
       )}
 
@@ -334,6 +339,10 @@ export function BillingPage() {
       {/* Plan comparison + change-plan buttons */}
       <section className="card">
         <h3>{status?.plan ? 'Change plan' : 'Available plans'}</h3>
+        <p className="muted small plan-grid-framing">
+          Annual billing saves up to 41% vs paying monthly. Switch plans or
+          cancel anytime from the billing portal.
+        </p>
         <div className="plan-grid">
           {(['starter', 'plus', 'family'] as const).map((p) => {
             const current = status?.plan === p;

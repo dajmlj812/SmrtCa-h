@@ -3593,6 +3593,28 @@ code {
 .meter-fill.danger { background: #ef4444; }
 
 /* Plan comparison grid */
+/* 0.22.2 — fresh-tenant value-prop hero on /billing. */
+.billing-hero h2 {
+  margin: 0 0 8px 0;
+  font-size: 22px;
+  line-height: 1.25;
+}
+.billing-hero-sub {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--muted, #6b7280);
+}
+.billing-hero-points {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.plan-grid-framing {
+  margin: 0 0 12px 0;
+}
+
 .plan-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
