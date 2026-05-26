@@ -488,6 +488,83 @@ const markBillPaid: AssistantTool = {
   },
 };
 
+const createSavingsGoal: AssistantTool = {
+  name: 'create_savings_goal',
+  description:
+    'Create a new savings goal for the user. Use this when the user wants to track a new savings target (down payment, vacation fund) OR a debt-payoff target (treat the debt amount as the target, current=0, contributions accumulate as payments). Returns the new goal id, which the assistant can immediately reference in follow-up tool calls (e.g. update_savings_goal to add an initial contribution).',
+  kind: 'write',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Display name; 1–80 chars.' },
+      targetAmountCents: {
+        type: 'integer',
+        description: 'Target balance to reach, in cents. Must be > 0.',
+      },
+      currentAmountCents: {
+        type: 'integer',
+        description: 'Optional starting balance, default 0.',
+      },
+      targetDate: {
+        type: 'string',
+        description:
+          'Optional target date in YYYY-MM-DD format. Use this when the user has a specific deadline (e.g. pay off CC in 36 months).',
+      },
+    },
+    required: ['name', 'targetAmountCents'],
+  },
+  async execute(ctx, input) {
+    const i = input as {
+      name?: string;
+      targetAmountCents?: number;
+      currentAmountCents?: number;
+      targetDate?: string;
+    };
+    const name = (i.name ?? '').trim();
+    if (name === '' || name.length > 80) {
+      throw new Error('name must be 1–80 characters');
+    }
+    if (typeof i.targetAmountCents !== 'number' || i.targetAmountCents <= 0) {
+      throw new Error('targetAmountCents must be a positive integer');
+    }
+    const current = typeof i.currentAmountCents === 'number' ? i.currentAmountCents : 0;
+    if (current < 0) throw new Error('currentAmountCents must be ≥ 0');
+    const targetDate =
+      typeof i.targetDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.targetDate)
+        ? i.targetDate
+        : null;
+    const r = await pool.query<{
+      id: string;
+      name: string;
+      target_amount_cents: number;
+      current_amount_cents: number;
+      target_date: string | null;
+    }>(
+      `INSERT INTO savings_goals
+         (tenant_id, name, target_amount_cents, current_amount_cents, target_date)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, target_amount_cents, current_amount_cents, target_date::text`,
+      [ctx.tenantId, name, i.targetAmountCents, current, targetDate],
+    );
+    const goal = r.rows[0]!;
+    await recordAudit({
+      tenantId: ctx.tenantId,
+      actorUserId: ctx.userId,
+      actorKind: 'tenant_user',
+      action: 'assistant.create_savings_goal',
+      targetKind: 'savings_goal',
+      targetId: goal.id,
+      details: {
+        name,
+        targetAmountCents: i.targetAmountCents,
+        currentAmountCents: current,
+        targetDate,
+      },
+    });
+    return goal;
+  },
+};
+
 const updateSavingsGoal: AssistantTool = {
   name: 'update_savings_goal',
   description:
@@ -772,6 +849,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   bulkRecategorize,
   createBudget,
   markBillPaid,
+  createSavingsGoal,
   updateSavingsGoal,
   splitTransaction,
 ];

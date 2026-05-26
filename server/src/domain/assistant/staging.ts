@@ -253,6 +253,19 @@ async function captureInverse(
         payload: { rows: r.rows },
       };
     }
+    case 'create_savings_goal': {
+      // Before-state: no goal existed. Inverse = delete the goal
+      // we're about to create. Resolved to id at undo time via the
+      // matching (tenant, name, target_amount) tuple — same shape
+      // as the create_budget inverse.
+      return {
+        kind: 'delete_created_savings_goal',
+        payload: {
+          name: action.input.name,
+          targetAmountCents: action.input.targetAmountCents,
+        },
+      };
+    }
     case 'create_budget': {
       // Before-state: no budget existed. Inverse = delete the budget
       // we're about to create. We can't know the id yet, so capture
@@ -357,6 +370,26 @@ async function applyInverse(
       );
       return;
     }
+    case 'delete_created_savings_goal': {
+      const p = inv.payload as { name: string; targetAmountCents: number };
+      // Delete the most-recently-created matching goal in this
+      // tenant. Same fingerprinting strategy as create_budget.
+      await client.query(
+        `DELETE FROM savings_goals
+          WHERE tenant_id = $1
+            AND name = $2
+            AND target_amount_cents = $3
+            AND id = (
+              SELECT id FROM savings_goals
+               WHERE tenant_id = $1
+                 AND name = $2
+                 AND target_amount_cents = $3
+               ORDER BY created_at DESC LIMIT 1
+            )`,
+        [ctx.tenantId, p.name, p.targetAmountCents],
+      );
+      return;
+    }
     case 'restore_savings_goal': {
       const p = inv.payload as {
         goalId: string;
@@ -398,6 +431,11 @@ export function describeAction(action: StagedAction): string {
     }
     case 'create_budget':
       return `Create budget for ${action.input.categoryName ?? 'a category'} at $${(Number(action.input.amountCents ?? 0) / 100).toFixed(2)}`;
+    case 'create_savings_goal': {
+      const target = (Number(action.input.targetAmountCents ?? 0) / 100).toFixed(2);
+      const date = action.input.targetDate ? ` by ${action.input.targetDate}` : '';
+      return `Create savings goal "${action.input.name}" for $${target}${date}`;
+    }
     case 'update_savings_goal':
       return `Update savings goal "${action.input.name ?? action.input.goalId}"`;
     case 'mark_bill_paid':
