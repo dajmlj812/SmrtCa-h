@@ -1,4 +1,4 @@
-import { getStripe, isStripeConfigured } from './stripe.js';
+import Stripe from 'stripe';
 import { ALL_LOOKUP_KEYS } from './plans.js';
 import { getEffectiveValue } from '../domain/settings.js';
 
@@ -49,7 +49,13 @@ export async function runReadiness(): Promise<ReadinessReport> {
   const checkedAt = new Date().toISOString();
 
   // ── Secret key shape ─────────────────────────────────────
-  const secretKey = (process.env.STRIPE_SECRET_KEY ?? '').trim();
+  // Source of truth is the app_settings table — same as how every
+  // other consumer reads these values. Previously we read process.env
+  // directly; that depended on applyBootSettings having mirrored DB →
+  // env, and broke when this function was invoked from a fresh node
+  // process (where the mirror hasn't run yet).
+  const secretKeyRaw = await getEffectiveValue('STRIPE_SECRET_KEY');
+  const secretKey = secretKeyRaw.trim();
   const hasSecret = secretKey !== '';
   const isLive = secretKey.startsWith('sk_live_');
   const isTest = secretKey.startsWith('sk_test_');
@@ -78,8 +84,8 @@ export async function runReadiness(): Promise<ReadinessReport> {
   }
 
   // Check for accidental whitespace inside the key (common copy-paste
-  // bug; the trim above on the variable is only for the prefix test).
-  if (hasSecret && /\s/.test(process.env.STRIPE_SECRET_KEY ?? '')) {
+  // bug). Compare the raw vs trimmed length to detect.
+  if (hasSecret && /\s/.test(secretKeyRaw)) {
     checks.push({
       id: 'stripe.secret_key.whitespace',
       label: 'Stripe secret key has no whitespace',
@@ -90,7 +96,8 @@ export async function runReadiness(): Promise<ReadinessReport> {
   }
 
   // ── Webhook secret shape ─────────────────────────────────
-  const webhookSecret = (process.env.STRIPE_WEBHOOK_SECRET ?? '').trim();
+  const webhookSecretRaw = await getEffectiveValue('STRIPE_WEBHOOK_SECRET');
+  const webhookSecret = webhookSecretRaw.trim();
   const hasWebhook = webhookSecret !== '';
   const webhookValid = webhookSecret.startsWith('whsec_');
   checks.push({
@@ -130,7 +137,7 @@ export async function runReadiness(): Promise<ReadinessReport> {
   });
 
   // ── Stripe API calls (only run when configured) ──────────
-  if (!isStripeConfigured()) {
+  if (!hasSecret) {
     checks.push({
       id: 'stripe.api',
       label: 'Stripe API reachable',
@@ -141,7 +148,12 @@ export async function runReadiness(): Promise<ReadinessReport> {
     return finalize(checks, mode, checkedAt);
   }
 
-  const stripe = getStripe();
+  // Instantiate a Stripe client locally with the value we just read
+  // from the DB. We don't reuse getStripe() because that one caches
+  // by process.env state; using a fresh client guarantees the check
+  // verifies the *currently configured* key, not whatever was set
+  // at boot.
+  const stripe = new Stripe(secretKey);
 
   // Lookup-key resolution — every price the app expects must exist
   // in this Stripe account.
