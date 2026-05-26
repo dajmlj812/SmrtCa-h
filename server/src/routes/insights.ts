@@ -173,17 +173,32 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
              JOIN accounts a ON a.id = h.account_id
             WHERE a.tenant_id = $2
          )
+         -- 0.19.x — same liability-sign normalization as the
+         -- reports query: credit_card / loan / manual_liability
+         -- always SUBTRACT from net worth regardless of how
+         -- transactions are signed at import time.
          SELECT to_char(me.month_start, 'YYYY-MM') AS month,
                 (COALESCE(SUM(
-                  a.opening_balance_cents +
-                  COALESCE((
-                    SELECT SUM(t.amount_cents)
-                      FROM transactions t
-                     WHERE t.account_id = a.id
-                       AND (a.opening_balance_date IS NULL
-                            OR t.txn_date >= a.opening_balance_date)
-                       AND t.txn_date <= me.month_end
-                  ), 0)
+                  CASE WHEN a.type IN ('credit_card', 'loan', 'manual_liability')
+                    THEN -ABS(a.opening_balance_cents +
+                      COALESCE((
+                        SELECT SUM(t.amount_cents)
+                          FROM transactions t
+                         WHERE t.account_id = a.id
+                           AND (a.opening_balance_date IS NULL
+                                OR t.txn_date >= a.opening_balance_date)
+                           AND t.txn_date <= me.month_end
+                      ), 0))
+                    ELSE a.opening_balance_cents +
+                      COALESCE((
+                        SELECT SUM(t.amount_cents)
+                          FROM transactions t
+                         WHERE t.account_id = a.id
+                           AND (a.opening_balance_date IS NULL
+                                OR t.txn_date >= a.opening_balance_date)
+                           AND t.txn_date <= me.month_end
+                      ), 0)
+                  END
                 ), 0)
                 + (SELECT total FROM holdings_value))::bigint AS net_worth_cents
            FROM month_ends me

@@ -578,6 +578,20 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         365,
       );
 
+      // 0.19.x — cash flow forecast starting balance.
+      //
+      // The starting point for a *cash* flow forecast must be CASH,
+      // not net worth. A credit card with -$3000 in debt isn't $3000
+      // of opportunity cost against your future spending; it's a
+      // liability you'll pay from cash on a future bill cycle. Same
+      // logic for loans / mortgages / manual_liability — including
+      // them here would make "how much cash will I have in 60 days"
+      // come out wrong.
+      //
+      // Include: checking, savings, cash, investment, manual_asset, other.
+      // Exclude: credit_card, loan, manual_liability (these are
+      //          liabilities; their balance represents debt, not
+      //          spendable cash).
       const nw = await query<{ total: number }>(
         `SELECT COALESCE(SUM(
             a.opening_balance_cents +
@@ -593,7 +607,8 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
                 OR t.txn_date >= a.opening_balance_date)
       GROUP BY t.account_id
       ) t ON t.account_id = a.id
-          WHERE a.tenant_id = $1`,
+          WHERE a.tenant_id = $1
+            AND a.type NOT IN ('credit_card', 'loan', 'manual_liability')`,
         [tenantId],
       );
       let balance = Number(nw.rows[0]!.total);

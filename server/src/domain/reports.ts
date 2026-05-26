@@ -356,19 +356,36 @@ const netWorthByMonth: ReportDefinition = {
          )::date AS m
        ),
        openings AS (
-         SELECT id, opening_balance_cents, opening_balance_date
+         SELECT id, type, opening_balance_cents, opening_balance_date
            FROM accounts
           WHERE tenant_id = $2
        )
+       -- 0.19.x — normalize liability sign. A credit_card / loan /
+       -- manual_liability account holds a debt, so its contribution
+       -- to net worth must always SUBTRACT, regardless of how the
+       -- importer chose to sign the transactions. -ABS() makes this
+       -- robust to either convention (charges-as-negative from
+       -- Plaid-style, or charges-as-positive from some CSV formats).
        SELECT to_char(m.m, 'YYYY-MM') AS month,
-              COALESCE(SUM(o.opening_balance_cents +
-                COALESCE((
-                  SELECT SUM(t.amount_cents)
-                    FROM transactions t
-                   WHERE t.account_id = o.id
-                     AND (o.opening_balance_date IS NULL OR t.txn_date >= o.opening_balance_date)
-                     AND t.txn_date < (m.m + interval '1 month')::date
-                ), 0)
+              COALESCE(SUM(
+                CASE WHEN o.type IN ('credit_card', 'loan', 'manual_liability')
+                  THEN -ABS(o.opening_balance_cents +
+                    COALESCE((
+                      SELECT SUM(t.amount_cents)
+                        FROM transactions t
+                       WHERE t.account_id = o.id
+                         AND (o.opening_balance_date IS NULL OR t.txn_date >= o.opening_balance_date)
+                         AND t.txn_date < (m.m + interval '1 month')::date
+                    ), 0))
+                  ELSE o.opening_balance_cents +
+                    COALESCE((
+                      SELECT SUM(t.amount_cents)
+                        FROM transactions t
+                       WHERE t.account_id = o.id
+                         AND (o.opening_balance_date IS NULL OR t.txn_date >= o.opening_balance_date)
+                         AND t.txn_date < (m.m + interval '1 month')::date
+                    ), 0)
+                END
               ), 0)::bigint AS net_worth_cents
          FROM months m
          CROSS JOIN openings o
