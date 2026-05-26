@@ -5,6 +5,7 @@ import { accountTypeLabel, formatCents, formatDate } from '../format';
 import { TransactionTable } from '../components/TransactionTable';
 import { AttachmentsModal } from '../components/AttachmentsModal';
 import { HoldingsPanel } from '../components/HoldingsPanel';
+import { ReconcileModal } from '../components/ReconcileModal';
 
 export function AccountDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,7 @@ export function AccountDetailPage() {
     null,
   );
   const [editingBalance, setEditingBalance] = useState(false);
+  const [showReconcile, setShowReconcile] = useState(false);
 
   async function load(searchTerm: string) {
     if (!id) return;
@@ -65,7 +67,7 @@ export function AccountDetailPage() {
 
   async function onTxnUpdate(
     txnId: string,
-    updates: { categoryId: string | null },
+    updates: { categoryId?: string | null; clearedAt?: string | null },
   ) {
     try {
       const updated = await api.updateTransaction(txnId, updates);
@@ -79,6 +81,7 @@ export function AccountDetailPage() {
                   categories.find((c) => c.id === updated.category_id)?.name ??
                   null,
                 normalization_status: updated.normalization_status,
+                cleared_at: updated.cleared_at,
               }
             : t,
         ),
@@ -106,9 +109,18 @@ export function AccountDetailPage() {
                 {account.last4 ? ` ····${account.last4}` : ''}
               </div>
             </div>
-            <button className="btn danger" onClick={remove}>
-              Delete
-            </button>
+            <div className="page-header-actions">
+              <button
+                className="btn secondary"
+                onClick={() => setShowReconcile(true)}
+                title="Match this account to a bank statement"
+              >
+                Reconcile
+              </button>
+              <button className="btn danger" onClick={remove}>
+                Delete
+              </button>
+            </div>
           </div>
 
           <div className="card" style={{ marginBottom: 24 }}>
@@ -210,6 +222,28 @@ export function AccountDetailPage() {
               ),
             )
           }
+        />
+      )}
+
+      {showReconcile && account && (
+        <ReconcileModal
+          accountId={account.id}
+          accountName={account.name}
+          onClose={() => setShowReconcile(false)}
+          onCommitted={(reconciled) => {
+            setShowReconcile(false);
+            // Re-fetch so the cleared checkboxes and balances reflect
+            // the bulk commit. Cheap enough; the alternative would be
+            // to surgically patch state which gets tricky when the
+            // committed set might exceed what's currently visible.
+            void load(search);
+            // Surface confirmation via the existing error/banner slot.
+            // Note: a non-error banner would be cleaner; reusing the
+            // error state for the message is the pragmatic option
+            // until we add a generic toast.
+            setError(`Reconciled ${reconciled} transactions.`);
+            setTimeout(() => setError(null), 4000);
+          }}
         />
       )}
     </div>

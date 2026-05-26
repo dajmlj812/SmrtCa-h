@@ -3,6 +3,7 @@ import { query } from '../db/pool.js';
 import { ACCOUNT_TYPES, type AccountType } from '../import/types.js';
 import { isUuid } from '../util.js';
 import {
+  assertAccountWriteAccess,
   loadUserContext,
   requireTenant,
   scopedAccountIds,
@@ -302,4 +303,137 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(204).send();
     },
   );
+
+  // 0.19.2 — cleared/uncleared reconciliation endpoints.
+  //
+  // GET /api/accounts/:id/cleared-balance?asOf=YYYY-MM-DD
+  //   Returns the balance computed from CLEARED transactions only
+  //   through asOf (inclusive). Used by the Reconcile workflow to
+  //   show "your current cleared balance" so the user can compare
+  //   against the statement.
+  app.get<{
+    Params: { id: string };
+    Querystring: { asOf?: string };
+  }>('/api/accounts/:id/cleared-balance', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    if (!isUuid(req.params.id)) {
+      return reply.code(400).send({ error: 'Invalid account id' });
+    }
+    const asOf = (req.query.asOf ?? '').trim();
+    if (asOf && !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
+      return reply.code(400).send({ error: 'asOf must be YYYY-MM-DD' });
+    }
+    const r = await query<{
+      cleared_balance_cents: string;
+      uncleared_count: string;
+      uncleared_sum_cents: string;
+    }>(
+      `SELECT
+         COALESCE(a.opening_balance_cents, 0)
+           + COALESCE(SUM(t.amount_cents) FILTER (
+               WHERE t.cleared_at IS NOT NULL
+                 AND ($2::date IS NULL OR t.cleared_at::date <= $2::date)
+                 AND (a.opening_balance_date IS NULL OR t.txn_date >= a.opening_balance_date)
+             ), 0)::bigint AS cleared_balance_cents,
+         COUNT(*) FILTER (
+           WHERE t.cleared_at IS NULL
+             AND ($2::date IS NULL OR t.txn_date <= $2::date)
+             AND (a.opening_balance_date IS NULL OR t.txn_date >= a.opening_balance_date)
+         )::bigint AS uncleared_count,
+         COALESCE(SUM(t.amount_cents) FILTER (
+           WHERE t.cleared_at IS NULL
+             AND ($2::date IS NULL OR t.txn_date <= $2::date)
+             AND (a.opening_balance_date IS NULL OR t.txn_date >= a.opening_balance_date)
+         ), 0)::bigint AS uncleared_sum_cents
+       FROM accounts a
+       LEFT JOIN transactions t ON t.account_id = a.id
+      WHERE a.id = $1 AND a.tenant_id = $3
+      GROUP BY a.opening_balance_cents`,
+      [req.params.id, asOf || null, tenantId],
+    );
+    if (r.rowCount === 0) {
+      return reply.code(404).send({ error: 'Account not found' });
+    }
+    const row = r.rows[0]!;
+    return {
+      account_id: req.params.id,
+      as_of: asOf || new Date().toISOString().slice(0, 10),
+      cleared_balance_cents: Number(row.cleared_balance_cents),
+      uncleared_count: Number(row.uncleared_count),
+      uncleared_sum_cents: Number(row.uncleared_sum_cents),
+    };
+  });
+
+  // POST /api/accounts/:id/reconcile
+  //   Body: { statementDate: 'YYYY-MM-DD', transactionIds: string[] }
+  //   Bulk-sets cleared_at on the listed transactions. Refuses if any
+  //   id doesn't belong to this account + tenant — partial success is
+  //   the wrong UX for a reconciliation commit.
+  app.post<{
+    Params: { id: string };
+    Body: { statementDate?: unknown; transactionIds?: unknown };
+  }>('/api/accounts/:id/reconcile', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    if (!isUuid(req.params.id)) {
+      return reply.code(400).send({ error: 'Invalid account id' });
+    }
+    const body = req.body ?? {};
+    if (
+      typeof body.statementDate !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(body.statementDate)
+    ) {
+      return reply
+        .code(400)
+        .send({ error: 'statementDate must be YYYY-MM-DD' });
+    }
+    if (!Array.isArray(body.transactionIds) || body.transactionIds.length === 0) {
+      return reply
+        .code(400)
+        .send({ error: 'transactionIds must be a non-empty array' });
+    }
+    const ids = (body.transactionIds as unknown[]).filter(
+      (x): x is string => typeof x === 'string' && isUuid(x),
+    );
+    if (ids.length !== body.transactionIds.length) {
+      return reply
+        .code(400)
+        .send({ error: 'transactionIds contains non-UUID values' });
+    }
+    // Per-account write gate (mirrors transaction PATCH).
+    const ctx = await loadUserContext(req.user!.id, tenantId);
+    const denied = await assertAccountWriteAccess(ctx, req.params.id);
+    if (denied) {
+      return reply.code(denied.status).send({ error: denied.error });
+    }
+    // Verify every ID belongs to this account + tenant. A single
+    // foreign id rejects the whole batch.
+    const ownership = await query<{ id: string }>(
+      `SELECT t.id FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
+        WHERE t.id = ANY($1::uuid[])
+          AND a.id = $2
+          AND a.tenant_id = $3`,
+      [ids, req.params.id, tenantId],
+    );
+    if (ownership.rowCount !== ids.length) {
+      return reply.code(400).send({
+        error: `One or more transactionIds do not belong to this account (found ${ownership.rowCount}, expected ${ids.length})`,
+      });
+    }
+    // Statement date as end-of-day UTC so cleared_at::date <= asOf
+    // includes statement-day clears across timezones.
+    const ts = `${body.statementDate}T23:59:59Z`;
+    const updated = await query(
+      `UPDATE transactions
+          SET cleared_at = $1
+        WHERE id = ANY($2::uuid[])`,
+      [ts, ids],
+    );
+    return {
+      reconciled: updated.rowCount ?? 0,
+      statementDate: body.statementDate,
+    };
+  });
 }

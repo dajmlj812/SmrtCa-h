@@ -44,7 +44,7 @@ export function UncategorizedPage() {
 
   async function onTxnUpdate(
     id: string,
-    updates: { categoryId: string | null },
+    updates: { categoryId?: string | null; clearedAt?: string | null },
   ) {
     try {
       await api.updateTransaction(id, updates);

@@ -15,7 +15,9 @@ interface Props {
    */
   onUpdate?: (
     id: string,
-    updates: { categoryId: string | null },
+    // 0.19.2 — clearedAt added so the cleared-toggle column can
+    // round-trip through the same callback as category edits.
+    updates: { categoryId?: string | null; clearedAt?: string | null },
   ) => Promise<void>;
   /** Called when the user clicks the attachments icon on a row. */
   onOpenAttachments?: (transaction: Transaction) => void;
@@ -107,6 +109,11 @@ export function TransactionTable({
                 />
               </th>
             )}
+            {/* 0.19.2 — cleared toggle column. Tiny checkbox so the
+                column doesn't dominate; tooltip explains intent. */}
+            <th className="cleared-col" title="Cleared (reconciled to bank statement)">
+              ✓
+            </th>
             <th>Date</th>
             {showAccount && <th>Account</th>}
             <th>Description</th>
@@ -191,6 +198,30 @@ function TransactionRow({
           />
         </td>
       )}
+      <td className="cleared-col">
+        <input
+          type="checkbox"
+          aria-label={t.cleared_at ? 'Mark as uncleared' : 'Mark as cleared'}
+          checked={t.cleared_at !== null}
+          disabled={saving || !onUpdate}
+          title={
+            t.cleared_at
+              ? `Cleared ${new Date(t.cleared_at).toLocaleDateString()}`
+              : 'Uncleared — pending reconcile'
+          }
+          onChange={async () => {
+            if (!onUpdate) return;
+            setSaving(true);
+            try {
+              await onUpdate(t.id, {
+                clearedAt: t.cleared_at ? null : new Date().toISOString(),
+              });
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      </td>
       <td className="nowrap">{formatDate(t.txn_date)}</td>
       {showAccount && <td>{t.account_name}</td>}
       <td className="desc">

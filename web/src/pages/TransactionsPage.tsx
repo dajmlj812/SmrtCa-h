@@ -233,7 +233,7 @@ export function TransactionsPage() {
 
   async function onTxnUpdate(
     id: string,
-    updates: { categoryId: string | null },
+    updates: { categoryId?: string | null; clearedAt?: string | null },
   ) {
     try {
       const updated = await api.updateTransaction(id, updates);
@@ -247,6 +247,7 @@ export function TransactionsPage() {
                   categories.find((c) => c.id === updated.category_id)?.name ??
                   null,
                 normalization_status: updated.normalization_status,
+                cleared_at: updated.cleared_at,
               }
             : t,
         ),

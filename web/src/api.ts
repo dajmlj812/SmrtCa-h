@@ -458,6 +458,8 @@ export interface Transaction {
   account_name: string;
   category_name: string | null;
   attachment_count?: number;
+  /** 0.19.2 — null when uncleared; ISO timestamp when cleared. */
+  cleared_at: string | null;
   created_at: string;
 }
 
@@ -1407,6 +1409,17 @@ export interface PayoffResponse {
 export interface UpdateTransactionInput {
   merchant?: string;
   categoryId?: string | null;
+  /** 0.19.2 — per-row cleared toggle. null = uncleared, ISO date string = cleared as of. */
+  clearedAt?: string | null;
+}
+
+// 0.19.2 — cleared-balance summary for the Reconcile workflow.
+export interface ClearedBalanceSummary {
+  account_id: string;
+  as_of: string;
+  cleared_balance_cents: number;
+  uncleared_count: number;
+  uncleared_sum_cents: number;
 }
 
 export interface ExportFilters {
@@ -1477,6 +1490,27 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     }).then((r) => r.transaction),
+
+  // 0.19.2 — reconciliation API.
+  getClearedBalance: (accountId: string, asOf?: string) => {
+    const q = asOf ? `?asOf=${encodeURIComponent(asOf)}` : '';
+    return http<ClearedBalanceSummary>(
+      `/api/accounts/${accountId}/cleared-balance${q}`,
+    );
+  },
+
+  reconcileAccount: (
+    accountId: string,
+    input: { statementDate: string; transactionIds: string[] },
+  ) =>
+    http<{ reconciled: number; statementDate: string }>(
+      `/api/accounts/${accountId}/reconcile`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+    ),
 
   listCategories: () =>
     http<{ categories: Category[] }>('/api/categories').then(

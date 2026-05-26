@@ -247,13 +247,45 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
         updates.push(`category_id = $${params.length}`);
       }
 
+      // 0.19.2 — per-row cleared toggle. clearedAt is either an ISO
+      // date string (sets the cleared_at timestamp) or null
+      // (uncleared). The bulk-reconcile endpoint is the preferred
+      // path for clearing many rows at once; this is for ad-hoc
+      // marking one row as cleared/uncleared.
+      if (body.clearedAt !== undefined) {
+        if (body.clearedAt === null) {
+          params.push(null);
+          updates.push(`cleared_at = $${params.length}`);
+        } else if (typeof body.clearedAt === 'string') {
+          const parsed = new Date(body.clearedAt);
+          if (Number.isNaN(parsed.getTime())) {
+            return reply
+              .code(400)
+              .send({ error: 'clearedAt must be an ISO date string or null' });
+          }
+          params.push(parsed.toISOString());
+          updates.push(`cleared_at = $${params.length}`);
+        } else {
+          return reply
+            .code(400)
+            .send({ error: 'clearedAt must be an ISO date string or null' });
+        }
+      }
+
       if (updates.length === 0) {
         return reply
           .code(400)
           .send({ error: 'No updatable fields provided' });
       }
 
-      updates.push(`normalization_status = 'manual'`);
+      // Only flip normalization_status to 'manual' when the
+      // categorization actually changed. A cleared-only edit
+      // shouldn't fool the AI normalizer into skipping the row
+      // forever (clearedAt is a reconciliation flag, not a
+      // category decision).
+      if (body.merchant !== undefined || body.categoryId !== undefined) {
+        updates.push(`normalization_status = 'manual'`);
+      }
       params.push(req.params.id);
 
       const result = await query(
@@ -262,7 +294,7 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
        RETURNING id, account_id, txn_date, post_date, amount_cents,
                  raw_description, source_category, source_type, memo,
                  balance_cents, normalized_merchant, category_id,
-                 normalization_status, normalization_note, created_at`,
+                 normalization_status, normalization_note, cleared_at, created_at`,
         params,
       );
       if (result.rowCount === 0) {
@@ -330,6 +362,7 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
                 t.raw_description, t.source_category, t.source_type, t.memo,
                 t.balance_cents, t.normalized_merchant, t.category_id,
                 t.normalization_status, t.transfer_group_id, t.created_at,
+                t.cleared_at,
                 t.account_name, t.category_name, t.attachment_count,
                 t.running_balance_cents
            FROM (

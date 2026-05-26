@@ -1521,6 +1521,60 @@ select:focus {
 .check-col input[type="checkbox"] {
   cursor: pointer;
 }
+/* 0.19.2 — cleared-toggle column. Narrower than check-col since the
+   header is just "✓" and the body is a single checkbox. */
+.cleared-col {
+  width: 32px;
+  text-align: center;
+  color: var(--muted, #6b7280);
+}
+.cleared-col input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* 0.19.2 — reconcile modal layout. The modal goes wider than default
+   so the running-difference panel and the transaction table both
+   breathe. */
+.modal.modal-wide { max-width: 720px; width: 90vw; }
+.modal-body { padding: 12px 16px 16px; }
+.reconcile-body { display: flex; flex-direction: column; gap: 12px; }
+.reconcile-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  padding: 12px 14px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.reconcile-summary-row {
+  display: contents;
+}
+.reconcile-summary-row > strong { text-align: right; }
+.reconcile-diff > * {
+  font-size: 16px;
+  font-weight: 700;
+  padding-top: 6px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  margin-top: 4px;
+}
+.reconcile-diff.is-zero > * { color: #047857; }
+.reconcile-diff:not(.is-zero) > * { color: #b45309; }
+.reconcile-table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+}
+
+/* AccountDetail page-header actions row — keeps the new Reconcile
+   button + the existing Delete button aligned to the right. */
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 tr.selected {
   background: #f1f5ff;
 }
