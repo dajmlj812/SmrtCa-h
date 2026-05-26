@@ -3,6 +3,7 @@ import {
   api,
   isUpgradeRequired,
   type AssistantClientMessage,
+  type AssistantStagedBatch,
   type AssistantToolCall,
 } from '../api';
 
@@ -37,6 +38,10 @@ export function AssistantPage() {
   const [error, setError] = useState<string | null>(null);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
+  // 0.20.1 — stage mode + the most-recent staged batch awaiting review.
+  const [stageMode, setStageMode] = useState(false);
+  const [pendingBatch, setPendingBatch] = useState<AssistantStagedBatch | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,7 +78,9 @@ export function AssistantPage() {
     }));
 
     try {
-      const res = await api.assistantChat(wire);
+      const res = await api.assistantChat(wire, {
+        mode: stageMode ? 'stage' : 'auto',
+      });
       setMessages((cur) => [
         ...cur,
         {
@@ -84,6 +91,16 @@ export function AssistantPage() {
           stopReason: res.stopReason,
         },
       ]);
+      // 0.20.1 — if the server staged write actions, fetch the
+      // full batch so the preview panel can render the full list.
+      if (res.staged_batch_id) {
+        try {
+          const batch = await api.getStagedBatch(res.staged_batch_id);
+          setPendingBatch(batch);
+        } catch {
+          /* preview is best-effort */
+        }
+      }
     } catch (err) {
       if (isUpgradeRequired(err)) {
         // 0.15.4: 402 from /api/assistant/chat means either the plan
@@ -109,6 +126,35 @@ export function AssistantPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void send();
+    }
+  }
+
+  // 0.20.1 — staged batch lifecycle from the panel.
+  async function applyBatch() {
+    if (!pendingBatch) return;
+    setBatchBusy(true);
+    setError(null);
+    try {
+      const updated = await api.commitStagedBatch(pendingBatch.id);
+      setPendingBatch(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Apply failed');
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function undoLatestBatch() {
+    if (!pendingBatch) return;
+    setBatchBusy(true);
+    setError(null);
+    try {
+      const updated = await api.undoStagedBatch(pendingBatch.id);
+      setPendingBatch(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Undo failed');
+    } finally {
+      setBatchBusy(false);
     }
   }
 
@@ -226,6 +272,28 @@ export function AssistantPage() {
             </div>
           </div>
         )}
+
+        {pendingBatch && (
+          <StagedBatchPanel
+            batch={pendingBatch}
+            busy={batchBusy}
+            onApply={() => void applyBatch()}
+            onUndo={() => void undoLatestBatch()}
+            onDismiss={() => setPendingBatch(null)}
+          />
+        )}
+      </div>
+
+      <div className="chat-stage-toggle">
+        <label>
+          <input
+            type="checkbox"
+            checked={stageMode}
+            disabled={busy}
+            onChange={(e) => setStageMode(e.target.checked)}
+          />
+          <span>Stage actions (review before applying)</span>
+        </label>
       </div>
 
       <form className="chat-form" onSubmit={onSubmit}>
@@ -241,6 +309,89 @@ export function AssistantPage() {
           {busy ? 'Sending…' : 'Send'}
         </button>
       </form>
+    </div>
+  );
+}
+
+// 0.20.1 — preview panel for a staged batch. Shows the action list,
+// any "unsupported undo" warning, and Apply / Undo / Dismiss
+// buttons depending on the batch's current status.
+function StagedBatchPanel({
+  batch,
+  busy,
+  onApply,
+  onUndo,
+  onDismiss,
+}: {
+  batch: AssistantStagedBatch;
+  busy: boolean;
+  onApply: () => void;
+  onUndo: () => void;
+  onDismiss: () => void;
+}) {
+  const unsupportedCount = batch.inverses.filter((i) => i.unsupported).length;
+  return (
+    <div className={`staged-batch staged-batch-${batch.status}`}>
+      <header className="staged-batch-head">
+        <strong>
+          {batch.status === 'pending' && 'Proposed changes — review before applying'}
+          {batch.status === 'applied' && '✓ Applied'}
+          {batch.status === 'undone' && '↶ Undone'}
+          {batch.status === 'failed' && '⚠ Failed — see error below'}
+        </strong>
+        <button type="button" className="btn-link" onClick={onDismiss}>
+          ✕
+        </button>
+      </header>
+      <ol className="staged-batch-list">
+        {(batch.action_descriptions ?? batch.actions.map((a) => a.tool)).map((d, i) => (
+          <li key={i}>{d}</li>
+        ))}
+      </ol>
+      {batch.status === 'applied' && unsupportedCount > 0 && (
+        <p className="muted small">
+          {unsupportedCount} action{unsupportedCount === 1 ? '' : 's'} cannot
+          be undone automatically (no inverse available for that tool).
+          Manual undo via the audit log if needed.
+        </p>
+      )}
+      {batch.error && (
+        <pre className="banner error" style={{ whiteSpace: 'pre-wrap' }}>
+          {batch.error}
+        </pre>
+      )}
+      <footer className="staged-batch-actions">
+        {batch.status === 'pending' && (
+          <>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={onDismiss}
+              disabled={busy}
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={onApply}
+              disabled={busy}
+            >
+              {busy ? 'Applying…' : `Apply ${batch.actions.length} action${batch.actions.length === 1 ? '' : 's'}`}
+            </button>
+          </>
+        )}
+        {batch.status === 'applied' && (
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={onUndo}
+            disabled={busy || unsupportedCount === batch.actions.length}
+          >
+            {busy ? 'Undoing…' : 'Undo this batch'}
+          </button>
+        )}
+      </footer>
     </div>
   );
 }

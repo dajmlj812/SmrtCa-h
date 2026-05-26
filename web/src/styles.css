@@ -1576,6 +1576,46 @@ select:focus {
   align-items: center;
 }
 
+/* 0.20.1 — assistant staged-batch preview panel. */
+.staged-batch {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 3px solid #4f8cff;
+  background: var(--card-bg, #fff);
+}
+.staged-batch-pending { border-left-color: #4f8cff; }
+.staged-batch-applied { border-left-color: #10b981; }
+.staged-batch-undone { border-left-color: #6b7280; }
+.staged-batch-failed { border-left-color: #ef4444; }
+.staged-batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.staged-batch-list {
+  margin: 6px 0 8px 18px;
+  font-size: 13px;
+}
+.staged-batch-list li { margin: 2px 0; }
+.staged-batch-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.chat-stage-toggle {
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+}
+.chat-stage-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
 /* 0.20.0 — proactive insight cards on dashboard. */
 .insight-cards-empty {
   display: flex;

@@ -234,6 +234,25 @@ export interface AssistantChatResponse {
   toolCalls: AssistantToolCall[];
   iterations: number;
   stopReason: 'end_turn' | 'tool_use_loop_cap' | 'error';
+  /** 0.20.1 — populated when mode='stage' and writes were intercepted. */
+  stagedActions?: Array<{ tool: string; input: Record<string, unknown> }>;
+  staged_batch_id?: string;
+}
+
+// 0.20.1 — staged batch shape mirrored from the server.
+export interface AssistantStagedBatch {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  status: 'pending' | 'applied' | 'undone' | 'failed';
+  summary: string;
+  actions: Array<{ tool: string; input: Record<string, unknown> }>;
+  inverses: Array<{ kind: string; payload: Record<string, unknown>; unsupported?: boolean }>;
+  error: string | null;
+  created_at: string;
+  applied_at: string | null;
+  undone_at: string | null;
+  action_descriptions?: string[];
 }
 
 export interface PlaidItemSummary {
@@ -3223,11 +3242,28 @@ export const api = {
   assistantStatus: () =>
     http<{ available: boolean; reason?: string }>('/api/assistant/status'),
 
-  assistantChat: (messages: AssistantClientMessage[]) =>
+  assistantChat: (
+    messages: AssistantClientMessage[],
+    opts: { mode?: 'auto' | 'stage' } = {},
+  ) =>
     http<AssistantChatResponse>('/api/assistant/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, mode: opts.mode ?? 'auto' }),
+    }),
+
+  // 0.20.1 — staged batch lifecycle.
+  getStagedBatch: (id: string) =>
+    http<AssistantStagedBatch>(`/api/assistant/staged/${id}`),
+
+  commitStagedBatch: (id: string) =>
+    http<AssistantStagedBatch>(`/api/assistant/staged/${id}/commit`, {
+      method: 'POST',
+    }),
+
+  undoStagedBatch: (id: string) =>
+    http<AssistantStagedBatch>(`/api/assistant/staged/${id}/undo`, {
+      method: 'POST',
     }),
 
   // ── Calendar (Phase 9.3 / 0.12.3) ────────────────────────

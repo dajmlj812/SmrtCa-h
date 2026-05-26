@@ -60,6 +60,12 @@ export interface AssistantChatResult {
   toolCalls: AssistantToolCallLog[];
   iterations: number;
   stopReason: 'end_turn' | 'tool_use_loop_cap' | 'error';
+  /**
+   * 0.20.1 — write-tool calls that were INTERCEPTED rather than
+   * executed (mode='stage'). The chat route persists these as a
+   * staged batch the user reviews + applies via /api/assistant/staged.
+   */
+  stagedActions?: Array<{ tool: string; input: Record<string, unknown> }>;
 }
 
 export interface AssistantChatOptions {
@@ -68,6 +74,13 @@ export interface AssistantChatOptions {
   /** Injected by tests; production uses the global SDK client. */
   client?: Anthropic;
   model?: string;
+  /**
+   * 0.20.1 — execution mode.
+   *   'auto'  (default) — write tools execute immediately.
+   *   'stage' — write tools are NOT executed; they're collected in
+   *             stagedActions for user review + apply.
+   */
+  mode?: 'auto' | 'stage';
 }
 
 /**
@@ -96,6 +109,8 @@ export async function runAssistantChat(
   }));
 
   const toolCalls: AssistantToolCallLog[] = [];
+  const stagedActions: Array<{ tool: string; input: Record<string, unknown> }> = [];
+  const stageMode = opts.mode === 'stage';
   let iterations = 0;
   let stopReason: AssistantChatResult['stopReason'] = 'end_turn';
   let finalText = '';
@@ -148,6 +163,29 @@ export async function runAssistantChat(
         continue;
       }
       try {
+        // 0.20.1 — in stage mode, intercept write tools instead of
+        // running them. Tell the model the action is staged so it
+        // can keep planning + reporting; the user reviews + applies
+        // the whole batch from /assistant later.
+        if (stageMode && tool.kind === 'write') {
+          stagedActions.push({
+            tool: tool.name,
+            input: (block.input ?? {}) as Record<string, unknown>,
+          });
+          const placeholder = {
+            staged: true,
+            message:
+              `Action staged for user review. ${stagedActions.length} action(s) pending in this batch.`,
+          };
+          log.result = placeholder;
+          toolResultBlocks.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: JSON.stringify(placeholder),
+          });
+          toolCalls.push(log);
+          continue;
+        }
         const result = await tool.execute(opts.ctx, block.input);
         log.result = result;
         toolResultBlocks.push({
@@ -174,7 +212,13 @@ export async function runAssistantChat(
     stopReason = 'tool_use_loop_cap';
   }
 
-  return { reply: finalText, toolCalls, iterations, stopReason };
+  return {
+    reply: finalText,
+    toolCalls,
+    iterations,
+    stopReason,
+    ...(stageMode ? { stagedActions } : {}),
+  };
 }
 
 /**

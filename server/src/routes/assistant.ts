@@ -11,6 +11,13 @@ import {
   runAssistantChat,
   type AssistantMessage,
 } from '../domain/assistant/runtime.js';
+import {
+  commitBatch,
+  createBatch,
+  describeAction,
+  getBatch,
+  undoBatch,
+} from '../domain/assistant/staging.js';
 
 /**
  * Phase 9.1 — assistant routes.
@@ -40,6 +47,8 @@ function requireTenant(req: FastifyRequest, reply: FastifyReply): string | null 
 
 interface ChatBody {
   messages?: Array<{ role: string; content: string }>;
+  /** 0.20.1 — when 'stage', write tools are intercepted for user review. */
+  mode?: 'auto' | 'stage';
 }
 
 export async function assistantRoutes(app: FastifyInstance): Promise<void> {
@@ -116,11 +125,93 @@ export async function assistantRoutes(app: FastifyInstance): Promise<void> {
     const client = (app as unknown as { assistantClientOverride?: Anthropic })
       .assistantClientOverride;
 
+    const mode: 'auto' | 'stage' =
+      req.body?.mode === 'stage' ? 'stage' : 'auto';
+
     const result = await runAssistantChat({
       messages,
       ctx: { tenantId, userId: req.user!.id },
       ...(client ? { client } : {}),
+      mode,
     });
+
+    // 0.20.1 — persist staged batches as soon as the chat returns.
+    // The client then routes the user to the preview view via
+    // result.staged_batch_id. We don't auto-commit; user clicks
+    // Apply in the UI.
+    if (mode === 'stage' && result.stagedActions && result.stagedActions.length > 0) {
+      const batch = await createBatch(
+        { tenantId, userId: req.user!.id },
+        result.reply.slice(0, 200) || 'Multi-step change',
+        result.stagedActions,
+      );
+      return { ...result, staged_batch_id: batch.id };
+    }
+
     return result;
   });
+
+  // 0.20.1 — staged-batch lifecycle endpoints. The chat route in
+  // stage mode creates the batch; these manage commit + undo.
+  app.get<{ Params: { id: string } }>('/api/assistant/staged/:id', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const batch = await getBatch(
+      { tenantId, userId: req.user!.id },
+      req.params.id,
+    );
+    if (!batch) return reply.code(404).send({ error: 'Batch not found' });
+    return {
+      ...batch,
+      action_descriptions: batch.actions.map(describeAction),
+    };
+  });
+
+  app.post<{ Params: { id: string } }>(
+    '/api/assistant/staged/:id/commit',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      const ctx = { tenantId, userId: req.user!.id };
+      const batch = await getBatch(ctx, req.params.id);
+      if (!batch) return reply.code(404).send({ error: 'Batch not found' });
+      if (batch.status !== 'pending') {
+        return reply.code(409).send({
+          error: `Batch is ${batch.status}; only pending batches can be committed`,
+        });
+      }
+      try {
+        const updated = await commitBatch(ctx, batch);
+        return updated;
+      } catch (err) {
+        return reply.code(500).send({
+          error: err instanceof Error ? err.message : 'Commit failed',
+        });
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/assistant/staged/:id/undo',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      const ctx = { tenantId, userId: req.user!.id };
+      const batch = await getBatch(ctx, req.params.id);
+      if (!batch) return reply.code(404).send({ error: 'Batch not found' });
+      if (batch.status !== 'applied') {
+        return reply.code(409).send({
+          error: `Batch is ${batch.status}; only applied batches can be undone`,
+        });
+      }
+      try {
+        const updated = await undoBatch(ctx, batch);
+        return updated;
+      } catch (err) {
+        return reply.code(500).send({
+          error: err instanceof Error ? err.message : 'Undo failed',
+        });
+      }
+    },
+  );
 }
