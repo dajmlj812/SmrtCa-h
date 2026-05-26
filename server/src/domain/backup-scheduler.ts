@@ -1,5 +1,7 @@
+import { access, mkdir } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import { getEffectiveValue } from './settings.js';
-import { pruneOldBackups, runBackup } from './backup-runner.js';
+import { pruneOldBackups, resolveBackupDir, runBackup } from './backup-runner.js';
 import { pool } from '../db/pool.js';
 
 /**
@@ -35,8 +37,53 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 export function startBackupScheduler(): void {
   if (timer) return;
+  // 0.22.x — boot-time writability check. We've hit "backups silently
+  // failed for 24h because the volume got recreated as root" twice now
+  // (once on prod, once on test). The container runs as UID 1000 with
+  // cap_drop ALL, so an inability to write into /data/backups is
+  // unrecoverable at runtime — the chown has to happen on the host.
+  // Logging loudly at boot turns this from a silent scheduled-job
+  // regression into something the operator sees the second they
+  // bring the stack up. The result of the check doesn't affect
+  // scheduler startup (still ticks, still runs manual backups will
+  // bubble the same error to the operator who clicked Run).
+  void checkBackupDirWritable();
   timer = setInterval(() => void tick(), TICK_MS);
   if (typeof timer.unref === 'function') timer.unref();
+}
+
+async function checkBackupDirWritable(): Promise<void> {
+  try {
+    const dir = await resolveBackupDir();
+    // mkdir is idempotent with recursive:true; gives us a clear
+    // signal whether the directory can be created OR is writable.
+    await mkdir(dir, { recursive: true });
+    await access(dir, fsConstants.W_OK);
+    // Quiet success — only the failure is loud.
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      [
+        '',
+        '╔═══════════════════════════════════════════════════════════════╗',
+        '║ BACKUP DIRECTORY NOT WRITABLE                                  ║',
+        '║                                                                ║',
+        '║ The container cannot write to the backup output directory.    ║',
+        '║ Scheduled + manual backups will fail with EACCES until this   ║',
+        '║ is fixed on the HOST side. The container runs as UID 1000     ║',
+        '║ with cap_drop ALL, so chown cannot be performed from inside.  ║',
+        '║                                                                ║',
+        '║ Fix (run on the docker host as root):                          ║',
+        '║   HOST_DIR=$(docker volume inspect \\                          ║',
+        '║       smrtcash_smrtcash-backups --format "{{.Mountpoint}}")   ║',
+        '║   chown -R 1000:1000 "$HOST_DIR"                               ║',
+        '║                                                                ║',
+        `║ Error: ${(err instanceof Error ? err.message : String(err)).slice(0, 53).padEnd(53)}    ║`,
+        '╚═══════════════════════════════════════════════════════════════╝',
+        '',
+      ].join('\n'),
+    );
+  }
 }
 
 export function stopBackupScheduler(): void {
