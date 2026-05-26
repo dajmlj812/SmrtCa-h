@@ -79,8 +79,8 @@ this roadmap. The conclusion:
 
 - **Pricing.** We price below Monarch ($14.99/mo) and at parity
   with Simplifi ($5.99/mo, more limited). Annual at ~58% off
-  monthly. The 0.19.0 slice ships a visible "Save 41%" badge on
-  the annual tier to lead users there.
+  monthly. The 0.22.0 slice (promoted from 0.19.0) shipped a
+  visible "Save N%" badge on the annual tier to lead users there.
 
 - **Mobile via PWA.** Responsive web, installable to phone, one
   codebase, no app stores. Native re-evaluated only if PWA
@@ -639,15 +639,11 @@ impact-per-day so the early wins compound.
 
 ### Planned slices (ordered by impact-per-day)
 
-- **0.19.0** 📋 — **Annual-pre-pay discount badge** (~half
-  day). Pricing already shows the yearly tier at ~58% off
-  the equivalent monthly cost; the /billing page presents both
-  options without leading the user toward annual. Adds a
-  visible "Save 41%" badge on the annual card + a subtitle
-  framing the yearly price in monthly-equivalent terms. No
-  pricing change, no Stripe change — pure presentation lift.
-  Quickest win in the series; ships first so the conversion
-  signal is live before the heavier slices land.
+- **0.19.0** ✅ — **Promoted to [0.22.0](#022x--production-launch-readiness-)**
+  and shipped 2026-05-25. Visible "Save N%" badge on annual
+  cards + monthly-equivalent subtitle on /billing. Per-plan
+  discount (Plus 41%, Starter + Family 38%) computed from the
+  actual price delta in `plans.ts`.
 - **0.19.1** 📋 — **Bill negotiation assist** (~1 day). Same
   pattern as 0.18.1 (cancellation help) but for an adjacent
   category. For detected recurring utilities (electric, gas,
