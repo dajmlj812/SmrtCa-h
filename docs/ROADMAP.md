@@ -630,7 +630,7 @@ features that justify them.
 
 ---
 
-## 0.19.x — Reconciliation, investment analysis, ops debt 📋
+## 0.19.x — Reconciliation, investment analysis, ops debt ✅
 
 Pulled forward the surviving deferred items from the 0.18.x
 competitive read plus the operational-debt list that had been
@@ -644,7 +644,7 @@ impact-per-day so the early wins compound.
   cards + monthly-equivalent subtitle on /billing. Per-plan
   discount (Plus 41%, Starter + Family 38%) computed from the
   actual price delta in `plans.ts`.
-- **0.19.1** 📋 — **Bill negotiation assist** (~1 day). Same
+- **0.19.1** ✅ — **Bill negotiation assist** (~1 day). Same
   pattern as 0.18.1 (cancellation help) but for an adjacent
   category. For detected recurring utilities (electric, gas,
   water, internet, cell), surface the company's
@@ -655,7 +655,7 @@ impact-per-day so the early wins compound.
   existing bill row carry user-specific edits. Reuses the
   modal pattern from 0.18.1 — small additional code, large
   user-value lift.
-- **0.19.2** 📋 — **Cleared / uncleared reconciliation**
+- **0.19.2** ✅ — **Cleared / uncleared reconciliation**
   (~2–3 days). The Banktivity / Moneydance power-user gap.
   Adds `transactions.cleared_at timestamptz` (nullable). A
   new account-detail "Reconcile" workflow lets the user enter
@@ -666,7 +666,7 @@ impact-per-day so the early wins compound.
   rows). Per-row cleared toggle on the Transactions table for
   ad-hoc marking. New "as-of cleared balance" available in
   the account balance API.
-- **0.19.3** 📋 — **Investment analysis (Empower-class)**
+- **0.19.3** ✅ — **Investment analysis (Empower-class)**
   (~3–5 days). Three sub-features on the existing
   `holdings` + `retirement_projections` data:
   - **Fee analyzer** — accepts a per-holding `expense_ratio`
@@ -682,7 +682,7 @@ impact-per-day so the early wins compound.
     distribution around the assumed return ± stddev), shows
     the percentile fan (10th / 50th / 90th) instead of a
     single deterministic line.
-- **0.19.4** 📋 — **Observability** (~2–3 days). Today the
+- **0.19.4** ✅ — **Observability** (~2–3 days). Today the
   /health page covers process metrics; an external sink is
   the gap. This slice ships:
   - **Structured request logs** — JSON-line per HTTP request
