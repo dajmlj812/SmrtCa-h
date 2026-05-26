@@ -1576,6 +1576,47 @@ select:focus {
   align-items: center;
 }
 
+/* 0.20.2 — voice input button (mic) on the assistant page. */
+.voice-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--card-bg, #fff);
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.15s;
+}
+.btn-mic:hover:not(:disabled) {
+  background: rgba(79, 140, 255, 0.08);
+}
+.btn-mic-recording {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  animation: mic-pulse 1.4s infinite;
+}
+.btn-mic:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+.voice-input-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
 /* 0.20.1 — assistant staged-batch preview panel. */
 .staged-batch {
   margin: 12px 0;

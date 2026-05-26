@@ -6,6 +6,7 @@ import {
   type AssistantStagedBatch,
   type AssistantToolCall,
 } from '../api';
+import { VoiceInputButton } from '../components/VoiceInputButton';
 
 /**
  * Phase 9.1 (0.12.1) — AI assistant chat page.
@@ -303,6 +304,10 @@ export function AssistantPage() {
           onKeyDown={onKeyDown}
           placeholder="Ask anything about your finances…"
           rows={2}
+          disabled={busy}
+        />
+        <VoiceInputButton
+          onTranscript={(text) => setInput(text)}
           disabled={busy}
         />
         <button className="btn" type="submit" disabled={busy || !input.trim()}>
