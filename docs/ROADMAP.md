@@ -853,7 +853,7 @@ competitors have shipped them; that's our opening. Ordered by
 
 ---
 
-## 0.22.x — Production launch readiness 🔜
+## 0.22.x — Production launch readiness ✅
 
 The series that gets us to a live, paying-customer production
 deploy. Goal: **production deploy tomorrow.** Some items are
@@ -862,13 +862,13 @@ captured as runbooks.
 
 ### Codeable slices
 
-- **0.22.0** 🔜 — **Annual-pre-pay discount badge**
+- **0.22.0** ✅ — **Annual-pre-pay discount badge**
   (~½ day). Promoted from 0.19.0. Visible "Save 41%" badge
   on the annual card on `/billing`, plus a subtitle framing
   the yearly price in monthly-equivalent terms. No pricing
   change, no Stripe change — pure presentation lift. Ships
   before launch so the conversion signal is live on day 1.
-- **0.22.1** 🔜 — **Live-mode Stripe configuration verifier**
+- **0.22.1** ✅ — **Live-mode Stripe configuration verifier**
   (~half day). A new `/system/saas-readiness` super-only
   panel checks: live-mode secret key present, live-mode
   webhook secret present, all 4 plan products + price
@@ -877,7 +877,7 @@ captured as runbooks.
   Each check is green/red with a one-line "how to fix" link
   to STRIPE_SETUP.md. Prevents the most-common cause of
   "I switched to live and now everything 500s."
-- **0.22.2** 🔜 — **Pricing + landing copy polish** (~1 day).
+- **0.22.2** ✅ — **Pricing + landing copy polish** (~1 day).
   Review every customer-facing copy surface (login, signup,
   /billing, dunning, verification email, support footer) and
   reset for paid SaaS:
