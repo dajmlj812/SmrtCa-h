@@ -3630,36 +3630,52 @@ code {
   color: var(--accent);
   font-size: 12px;
 }
-.calendar-spend {
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--neg);
+/* 0.21.x — day cell layout: head row (date left / count + marker
+ * right), amounts column right-aligned, net total centered at the
+ * bottom, expanded detail when clicked. */
+.calendar-day {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.calendar-income {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--pos);
+.calendar-day-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 4px;
 }
-.calendar-bill-total {
+.calendar-day-count-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
-  margin-top: 2px;
-  color: var(--neg);
+  color: var(--muted);
 }
-.calendar-count {
-  font-size: 11px;
-  margin-top: 2px;
+.calendar-day-count { font-weight: 500; }
+.calendar-day-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 600;
 }
+.calendar-day-net {
+  margin-top: auto;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.calendar-day-net.pos { color: var(--pos); }
+.calendar-day-net.neg { color: var(--neg); }
 
-/* 0.21.x — inline-expanded day cell. The cell grows downward and
- * pushes the grid row taller (CSS grid will adopt the tallest cell
- * in each row). Detail rows are flex so name + amount sit on one
- * line each. */
 .calendar-day.expanded {
   min-height: 0;
 }
 .calendar-day-detail {
-  margin-top: 6px;
+  margin-top: 4px;
   padding-top: 6px;
   border-top: 1px dashed var(--border);
   font-size: 12px;
@@ -3669,6 +3685,36 @@ code {
   display: flex;
   justify-content: space-between;
   gap: 6px;
+}
+
+/* 0.21.x — account filter chips on /calendar. Replaces the bare
+ * .pill that was unreadable on dark mode and didn't look clickable
+ * unselected. */
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.account-chip:hover {
+  border-color: var(--accent);
+  background: var(--surface-3);
+}
+.account-chip.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+.account-chip.selected:hover {
+  filter: brightness(0.95);
 }
 
 /* ─────────────────────────────────────────────────────────────

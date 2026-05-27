@@ -284,11 +284,11 @@ export function CalendarPage() {
                 <button
                   key={a.id}
                   type="button"
-                  className={`pill ${on ? 'pos' : ''}`}
-                  style={{ cursor: 'pointer', border: 0 }}
+                  className={`account-chip ${on ? 'selected' : ''}`}
                   onClick={() => toggleAccount(a.id)}
                 >
-                  {on ? '✓ ' : ''}{a.name}
+                  {on && <span aria-hidden style={{ marginRight: 4 }}>✓</span>}
+                  {a.name}
                 </button>
               );
             })}
@@ -402,6 +402,12 @@ export function CalendarPage() {
                 (s, b) => s + b.amount_cents,
                 0,
               );
+              const dayNet =
+                day.income_cents - day.spend_cents - billsTotal;
+              const hasAnyAmount =
+                day.spend_cents > 0
+                || day.income_cents > 0
+                || billsTotal > 0;
               return (
                 <button
                   key={day.date}
@@ -411,37 +417,51 @@ export function CalendarPage() {
                     '--day-intensity': intensity.toFixed(2),
                   } as CSSProperties}
                 >
+                  {/* Top row: date on the left, txn count + bill
+                      marker on the right. */}
                   <div className="calendar-day-head">
                     <span className="calendar-day-num">
                       {Number(day.date.slice(-2))}
                     </span>
-                    {day.bills_due.length > 0 && (
-                      <span
-                        className="calendar-bill-marker"
-                        title={`${day.bills_due.length} bill(s) due`}
-                      >
-                        ▲ {day.bills_due.length}
-                      </span>
-                    )}
+                    <span className="calendar-day-count-wrap">
+                      {day.txn_count > 0 && (
+                        <span className="calendar-day-count">
+                          {day.txn_count} txn{day.txn_count === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {day.bills_due.length > 0 && (
+                        <span
+                          className="calendar-bill-marker"
+                          title={`${day.bills_due.length} bill(s) due`}
+                        >
+                          ▲ {day.bills_due.length}
+                        </span>
+                      )}
+                    </span>
                   </div>
-                  {day.spend_cents > 0 && (
-                    <div className="calendar-spend neg">
-                      {formatCents(-day.spend_cents)}
+                  {/* Amounts column — right-aligned. */}
+                  {hasAnyAmount && (
+                    <div className="calendar-day-amounts">
+                      {day.income_cents > 0 && (
+                        <div className="pos">+{formatCents(day.income_cents)}</div>
+                      )}
+                      {day.spend_cents > 0 && (
+                        <div className="neg">−{formatCents(day.spend_cents)}</div>
+                      )}
+                      {billsTotal > 0 && (
+                        <div className="neg" title="Bills due">
+                          Bills −{formatCents(billsTotal)}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {day.income_cents > 0 && (
-                    <div className="calendar-income pos">
-                      +{formatCents(day.income_cents)}
-                    </div>
-                  )}
-                  {billsTotal > 0 && (
-                    <div className="calendar-bill-total neg">
-                      Bills: {formatCents(-billsTotal)}
-                    </div>
-                  )}
-                  {day.txn_count > 1 && !isExpanded && (
-                    <div className="calendar-count muted">
-                      {day.txn_count} txns
+                  {/* Net for the day — centered at the bottom. */}
+                  {hasAnyAmount && (
+                    <div
+                      className={`calendar-day-net ${dayNet < 0 ? 'neg' : dayNet > 0 ? 'pos' : ''}`}
+                    >
+                      Net {dayNet < 0 ? '−' : dayNet > 0 ? '+' : ''}
+                      {formatCents(Math.abs(dayNet))}
                     </div>
                   )}
                   {isExpanded && (
@@ -462,9 +482,7 @@ export function CalendarPage() {
                           ))}
                         </>
                       )}
-                      {day.spend_cents === 0
-                        && day.income_cents === 0
-                        && day.bills_due.length === 0 && (
+                      {!hasAnyAmount && (
                         <div className="muted small">No activity</div>
                       )}
                     </div>
