@@ -119,13 +119,15 @@ function parseInput(body: unknown): Omit<WizardInput, 'tenantId'> | { error: str
   };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function readRecurringOverrides(
   raw: unknown,
 ): Record<string, Record<number, number>> | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const out: Record<string, Record<number, number>> = {};
   for (const [catId, perPeriod] of Object.entries(raw as Record<string, unknown>)) {
-    if (!UUID.test(catId) || !perPeriod || typeof perPeriod !== 'object') continue;
+    if (!UUID_RE.test(catId) || !perPeriod || typeof perPeriod !== 'object') continue;
     const periodMap: Record<number, number> = {};
     for (const [k, v] of Object.entries(perPeriod as Record<string, unknown>)) {
       const idx = Number(k);
@@ -143,7 +145,7 @@ function readDisabled(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: string[] = [];
   for (const id of raw) {
-    if (typeof id === 'string' && UUID.test(id)) out.push(id);
+    if (typeof id === 'string' && UUID_RE.test(id)) out.push(id);
   }
   return out.length > 0 ? out : undefined;
 }
