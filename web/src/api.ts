@@ -197,6 +197,31 @@ export interface MileageSummary {
   total_deduction_cents: number;
 }
 
+export type CancellationStatus =
+  | 'queued' | 'in_progress' | 'done' | 'couldnt' | 'abandoned';
+
+export interface CancellationQueueItem {
+  id: string;
+  bill_id: string | null;
+  service_name: string;
+  status: CancellationStatus;
+  cancel_url: string | null;
+  notes: string | null;
+  monthly_cents: number | null;
+  added_at: string;
+  last_attempt_at: string | null;
+  completed_at: string | null;
+}
+
+export interface CancellationQueueInput {
+  serviceName: string;
+  status?: CancellationStatus;
+  billId?: string | null;
+  cancelUrl?: string | null;
+  notes?: string | null;
+  monthlyCents?: number | null;
+}
+
 export interface CashFlowSeriesPoint {
   date: string;
   projected_cents: number;
@@ -3613,6 +3638,26 @@ export const api = {
 
   deleteCustodyPeriod: (id: string) =>
     http<void>(`/api/household/custody-periods/${id}`, { method: 'DELETE' }),
+
+  // 0.21.6 — cancellation queue
+  listCancellationQueue: (status?: string) => {
+    const qs = status ? `?status=${status}` : '';
+    return http<{ items: CancellationQueueItem[] }>(`/api/cancellation-queue${qs}`);
+  },
+  createCancellationQueue: (body: CancellationQueueInput) =>
+    http<{ item: CancellationQueueItem }>('/api/cancellation-queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  updateCancellationQueue: (id: string, body: Partial<CancellationQueueInput>) =>
+    http<{ item: CancellationQueueItem }>(`/api/cancellation-queue/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  deleteCancellationQueue: (id: string) =>
+    http<void>(`/api/cancellation-queue/${id}`, { method: 'DELETE' }),
 
   // 0.21.4 — Investment performance
   investmentPerformance: (params?: {

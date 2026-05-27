@@ -46,6 +46,7 @@ import { MileagePage } from './pages/MileagePage';
 import { WarrantiesPage } from './pages/WarrantiesPage';
 import { HouseholdPage } from './pages/HouseholdPage';
 import { ScenarioPage } from './pages/ScenarioPage';
+import { CancellationsPage } from './pages/CancellationsPage';
 import { AnomaliesPage } from './pages/AnomaliesPage';
 import { BillingPage } from './pages/BillingPage';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -368,6 +369,7 @@ function AuthenticatedApp({
             <NavLink to="/goals">Goals</NavLink>
             <NavLink to="/bills">Bills</NavLink>
             <NavLink to="/subscriptions">Subscriptions</NavLink>
+            <NavLink to="/cancellations">Cancel queue</NavLink>
             <NavLink to="/retirement">Retirement</NavLink>
             <NavLink to="/investments">Investments</NavLink>
             <NavLink to="/debt-payoff">Debt payoff</NavLink>
@@ -456,6 +458,7 @@ function AuthenticatedApp({
           <Route path="/warranties" element={<WarrantiesPage />} />
           <Route path="/household" element={<HouseholdPage />} />
           <Route path="/scenarios" element={<ScenarioPage />} />
+          <Route path="/cancellations" element={<CancellationsPage />} />
           <Route path="/anomalies" element={<AnomaliesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />

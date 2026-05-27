@@ -67,6 +67,7 @@ import { taxYearRoutes } from './routes/tax-year.js';
 import { mileageRoutes } from './routes/mileage.js';
 import { warrantyRoutes } from './routes/warranties.js';
 import { householdRoutes } from './routes/household.js';
+import { cancellationQueueRoutes } from './routes/cancellation-queue.js';
 import { anomalyRoutes } from './routes/anomalies.js';
 import { billingRoutes } from './routes/billing.js';
 import { applyBootSettings } from './domain/settings.js';
@@ -457,6 +458,7 @@ export async function buildApp(
   await app.register(mileageRoutes);
   await app.register(warrantyRoutes);
   await app.register(householdRoutes);
+  await app.register(cancellationQueueRoutes);
   await app.register(anomalyRoutes);
   await app.register(billingRoutes);
 
