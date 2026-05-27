@@ -9,6 +9,7 @@ import {
 import { TransactionTable } from '../components/TransactionTable';
 import { AttachmentsModal } from '../components/AttachmentsModal';
 import { BulkActionBar } from '../components/BulkActionBar';
+import { RefundStatusModal } from '../components/RefundStatusModal';
 import { SplitsModal } from '../components/SplitsModal';
 import { SplitTransactionModal } from '../components/SplitTransactionModal';
 
@@ -62,6 +63,7 @@ export function TransactionsPage() {
   );
   const [splittingFor, setSplittingFor] = useState<Transaction | null>(null);
   const [sharingFor, setSharingFor] = useState<Transaction | null>(null);
+  const [refundingFor, setRefundingFor] = useState<Transaction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -459,6 +461,7 @@ export function TransactionsPage() {
           onOpenAttachments={setAttachmentsFor}
           onOpenSplits={setSplittingFor}
           onOpenShares={setSharingFor}
+          onOpenRefund={setRefundingFor}
           selection={{
             selected: selectedIds,
             onToggle: (id) =>
@@ -517,6 +520,18 @@ export function TransactionsPage() {
           onSaved={() => {
             setSplittingFor(null);
             void load({ accountId, search, offset });
+          }}
+        />
+      )}
+
+      {refundingFor && (
+        <RefundStatusModal
+          transaction={refundingFor}
+          onClose={() => setRefundingFor(null)}
+          onSaved={(updated) => {
+            setTransactions((prev) =>
+              prev.map((t) => (t.id === updated.id ? updated : t)),
+            );
           }}
         />
       )}

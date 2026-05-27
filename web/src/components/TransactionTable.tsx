@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
-import type { Category, Transaction } from '../api';
+import type { Category, RefundStatus, Transaction } from '../api';
+import { REFUND_STATUS_LABELS } from '../api';
 import { formatCents, formatDate } from '../format';
+
+const REFUND_PILL_TONE: Record<RefundStatus, string> = {
+  refund_pending: 'warn',
+  refunded: 'pos',
+  chargeback_initiated: 'warn',
+  disputed: 'warn',
+  closed: '',
+};
 
 interface Props {
   transactions: Transaction[];
@@ -17,7 +26,13 @@ interface Props {
     id: string,
     // 0.19.2 — clearedAt added so the cleared-toggle column can
     // round-trip through the same callback as category edits.
-    updates: { categoryId?: string | null; clearedAt?: string | null },
+    // 0.21.1 — refundStatus/refundNote added for the refund/chargeback flow.
+    updates: {
+      categoryId?: string | null;
+      clearedAt?: string | null;
+      refundStatus?: RefundStatus | null;
+      refundNote?: string | null;
+    },
   ) => Promise<void>;
   /** Called when the user clicks the attachments icon on a row. */
   onOpenAttachments?: (transaction: Transaction) => void;
@@ -25,6 +40,8 @@ interface Props {
   onOpenSplits?: (transaction: Transaction) => void;
   /** Called when the user clicks the share-with-people icon on a row. */
   onOpenShares?: (transaction: Transaction) => void;
+  /** 0.21.1 — Called when the user wants to set/edit refund status. */
+  onOpenRefund?: (transaction: Transaction) => void;
   /** When provided, render a checkbox column and report changes. */
   selection?: {
     selected: Set<string>;
@@ -76,6 +93,7 @@ export function TransactionTable({
   onOpenAttachments,
   onOpenSplits,
   onOpenShares,
+  onOpenRefund,
   selection,
 }: Props) {
   const groups = useMemo(
@@ -138,6 +156,7 @@ export function TransactionTable({
               onOpenAttachments={onOpenAttachments}
               onOpenSplits={onOpenSplits}
               onOpenShares={onOpenShares}
+              onOpenRefund={onOpenRefund}
               selection={selection}
             />
           ))}
@@ -157,6 +176,7 @@ function TransactionRow({
   onOpenAttachments,
   onOpenSplits,
   onOpenShares,
+  onOpenRefund,
   selection,
 }: {
   transaction: Transaction;
@@ -168,6 +188,7 @@ function TransactionRow({
   onOpenAttachments?: Props['onOpenAttachments'];
   onOpenSplits?: Props['onOpenSplits'];
   onOpenShares?: Props['onOpenShares'];
+  onOpenRefund?: Props['onOpenRefund'];
   selection?: Props['selection'];
 }) {
   const t = transaction;
@@ -238,6 +259,26 @@ function TransactionRow({
               ↔ transfer
             </span>
           )}
+          {t.refund_status && (
+            <button
+              type="button"
+              className={`pill ${REFUND_PILL_TONE[t.refund_status] || ''}`}
+              title={
+                (t.refund_note ? `${t.refund_note} — ` : '') +
+                (t.refund_updated_at
+                  ? `Updated ${new Date(t.refund_updated_at).toLocaleDateString()}`
+                  : '')
+              }
+              onClick={() => onOpenRefund?.(t)}
+              disabled={!onOpenRefund}
+              style={{
+                cursor: onOpenRefund ? 'pointer' : 'default',
+                border: 0,
+              }}
+            >
+              ↩ {REFUND_STATUS_LABELS[t.refund_status]}
+            </button>
+          )}
           {t.normalized_merchant && (
             <span className="desc-sub">{t.raw_description}</span>
           )}
@@ -287,7 +328,7 @@ function TransactionRow({
           )}
         </td>
       )}
-      {(onOpenAttachments || onOpenSplits || onOpenShares) && (
+      {(onOpenAttachments || onOpenSplits || onOpenShares || onOpenRefund) && (
         <td className="attach-col">
           {onOpenAttachments && (
             <button
@@ -329,6 +370,21 @@ function TransactionRow({
               aria-label="Share transaction"
             >
               <span aria-hidden>👥</span>
+            </button>
+          )}
+          {onOpenRefund && (
+            <button
+              type="button"
+              className={`attach-btn ${t.refund_status ? 'has-attachments' : ''}`}
+              onClick={() => onOpenRefund(t)}
+              title={
+                t.refund_status
+                  ? `Refund: ${REFUND_STATUS_LABELS[t.refund_status]}`
+                  : 'Track refund / chargeback'
+              }
+              aria-label="Track refund"
+            >
+              <span aria-hidden>↩</span>
             </button>
           )}
         </td>

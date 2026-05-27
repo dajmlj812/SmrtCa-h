@@ -272,6 +272,44 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      // 0.21.1 — refund/chargeback lifecycle. null clears; otherwise
+      // one of the CHECK-allowed states.
+      if (body.refundStatus !== undefined) {
+        const allowed = [
+          'refund_pending', 'refunded',
+          'chargeback_initiated', 'disputed', 'closed',
+        ];
+        if (body.refundStatus === null) {
+          params.push(null);
+          updates.push(`refund_status = $${params.length}`);
+          params.push(null);
+          updates.push(`refund_updated_at = $${params.length}`);
+        } else if (
+          typeof body.refundStatus === 'string' &&
+          allowed.includes(body.refundStatus)
+        ) {
+          params.push(body.refundStatus);
+          updates.push(`refund_status = $${params.length}`);
+          updates.push(`refund_updated_at = now()`);
+        } else {
+          return reply.code(400).send({
+            error: `refundStatus must be one of ${allowed.join(', ')} or null`,
+          });
+        }
+      }
+      if (body.refundNote !== undefined) {
+        if (body.refundNote === null) {
+          params.push(null);
+        } else if (typeof body.refundNote === 'string') {
+          params.push(body.refundNote.trim() || null);
+        } else {
+          return reply
+            .code(400)
+            .send({ error: 'refundNote must be a string or null' });
+        }
+        updates.push(`refund_note = $${params.length}`);
+      }
+
       if (updates.length === 0) {
         return reply
           .code(400)
@@ -294,7 +332,8 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
        RETURNING id, account_id, txn_date, post_date, amount_cents,
                  raw_description, source_category, source_type, memo,
                  balance_cents, normalized_merchant, category_id,
-                 normalization_status, normalization_note, cleared_at, created_at`,
+                 normalization_status, normalization_note, cleared_at,
+                 refund_status, refund_note, refund_updated_at, created_at`,
         params,
       );
       if (result.rowCount === 0) {
@@ -363,6 +402,7 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
                 t.balance_cents, t.normalized_merchant, t.category_id,
                 t.normalization_status, t.transfer_group_id, t.created_at,
                 t.cleared_at,
+                t.refund_status, t.refund_note, t.refund_updated_at,
                 t.account_name, t.category_name, t.attachment_count,
                 t.running_balance_cents
            FROM (

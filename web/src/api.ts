@@ -612,8 +612,27 @@ export interface Transaction {
   attachment_count?: number;
   /** 0.19.2 — null when uncleared; ISO timestamp when cleared. */
   cleared_at: string | null;
+  /** 0.21.1 — refund/chargeback lifecycle. null = normal. */
+  refund_status: RefundStatus | null;
+  refund_note: string | null;
+  refund_updated_at: string | null;
   created_at: string;
 }
+
+export type RefundStatus =
+  | 'refund_pending'
+  | 'refunded'
+  | 'chargeback_initiated'
+  | 'disputed'
+  | 'closed';
+
+export const REFUND_STATUS_LABELS: Record<RefundStatus, string> = {
+  refund_pending: 'Refund pending',
+  refunded: 'Refunded',
+  chargeback_initiated: 'Chargeback initiated',
+  disputed: 'Disputed',
+  closed: 'Closed (no refund)',
+};
 
 export interface TransferLeg {
   id: string;
@@ -1584,6 +1603,9 @@ export interface UpdateTransactionInput {
   categoryId?: string | null;
   /** 0.19.2 — per-row cleared toggle. null = uncleared, ISO date string = cleared as of. */
   clearedAt?: string | null;
+  /** 0.21.1 — refund/chargeback lifecycle. null clears. */
+  refundStatus?: RefundStatus | null;
+  refundNote?: string | null;
 }
 
 // 0.19.2 — cleared-balance summary for the Reconcile workflow.
