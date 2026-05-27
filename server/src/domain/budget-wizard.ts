@@ -694,52 +694,68 @@ export async function ensureAccountsUnclaimed(
 }
 
 /**
- * 0.21.x — additional recurring spend categories that the paycheck
- * wizard seeds alongside groceries/fuel/tolls. Same list the
- * monthly-budget seed uses, minus the three the wizard already
- * handles explicitly. The wizard scales each from a 3-month
- * trailing weekly average down to per-period.
+ * 0.21.x — recurring spend categories the paycheck wizard seeds
+ * alongside groceries/fuel/tolls. Parent categories (Food at
+ * home, Food out) roll up their children's spend automatically;
+ * leaf categories use their own.
  */
 const PAYCHECK_RECURRING_CATEGORIES = [
+  'Food at home',
+  'Food out',
+  'Gas & Fuel',
   'Parking',
-  'Public Transit',
   'Taxi & Rideshare',
-  'Restaurants',
-  'Fast Food',
-  'Coffee Shops',
-  'Food Delivery',
 ];
 
+/**
+ * For each target category (named in PAYCHECK_RECURRING_CATEGORIES),
+ * compute the average weekly spend over the trailing 12 weeks
+ * INCLUDING any child categories. "Food at home" → sums spend on
+ * itself + Groceries + Food Delivery, etc.
+ *
+ * Returns a Map keyed by the TARGET category id (the parent /
+ * named one), value = average weekly cents.
+ */
 async function weeklyRecurringByCategory(
   tenantId: string,
   accountIds: string[] | null,
-  categoryIds: readonly string[],
+  targetIds: readonly string[],
 ): Promise<Map<string, number>> {
-  // For each category id passed in, compute average weekly spend
-  // over the trailing 12 weeks (matches the wizard's groceries
-  // window). Returns a Map keyed by category_id.
-  if (categoryIds.length === 0) return new Map();
-  const r = await pool.query<{ category_id: string; weekly: string }>(
-    `SELECT category_id, ROUND(AVG(weekly_spend))::bigint::text AS weekly
-       FROM (
-         SELECT t.category_id,
-                date_trunc('week', t.txn_date) AS w,
-                SUM(-t.amount_cents)::bigint AS weekly_spend
-           FROM transactions t
-           JOIN accounts a ON a.id = t.account_id
-          WHERE a.tenant_id = $1
-            AND ($2::uuid[] IS NULL OR a.id = ANY($2::uuid[]))
-            AND t.category_id = ANY($3::uuid[])
-            AND t.amount_cents < 0
-            AND t.transfer_group_id IS NULL
-            AND t.txn_date >= (now()::date - interval '12 weeks')
-          GROUP BY t.category_id, date_trunc('week', t.txn_date)
-       ) m
-   GROUP BY category_id`,
-    [tenantId, accountIds, categoryIds],
+  if (targetIds.length === 0) return new Map();
+  // For each target id, build the set of "matching" category ids:
+  // the target itself + every category whose parent_id is the
+  // target. (The canonical taxonomy is 2-level so direct-children
+  // is enough.) Then compute the weekly average over the union.
+  const r = await pool.query<{ target_id: string; weekly: string }>(
+    `WITH targets AS (
+       SELECT t.id AS target_id, ARRAY(
+         SELECT id FROM categories
+          WHERE id = t.id OR parent_id = t.id
+       ) AS matching_ids
+         FROM categories t
+        WHERE t.id = ANY($3::uuid[])
+     ),
+     weekly AS (
+       SELECT tg.target_id,
+              date_trunc('week', tr.txn_date) AS w,
+              SUM(-tr.amount_cents)::bigint   AS weekly_spend
+         FROM targets tg
+         JOIN transactions tr ON tr.category_id = ANY(tg.matching_ids)
+         JOIN accounts a       ON a.id = tr.account_id
+        WHERE a.tenant_id = $1
+          AND ($2::uuid[] IS NULL OR a.id = ANY($2::uuid[]))
+          AND tr.amount_cents  < 0
+          AND tr.transfer_group_id IS NULL
+          AND tr.txn_date >= (now()::date - interval '12 weeks')
+        GROUP BY tg.target_id, date_trunc('week', tr.txn_date)
+     )
+     SELECT target_id, ROUND(AVG(weekly_spend))::bigint::text AS weekly
+       FROM weekly
+   GROUP BY target_id`,
+    [tenantId, accountIds, targetIds],
   );
   const out = new Map<string, number>();
-  for (const row of r.rows) out.set(row.category_id, Number(row.weekly));
+  for (const row of r.rows) out.set(row.target_id, Number(row.weekly));
   return out;
 }
 
@@ -821,24 +837,30 @@ export async function commitWizard(
   for (const p of preview.periods) {
     let cCreated = 0;
     let cSkipped = 0;
+    // 0.21.x — paycheck plan seeds at the parent-category level
+    // (Food at home, Food out, Gas & Fuel, Parking, Taxi &
+    // Rideshare) instead of the old leaf-level Groceries / Fuel /
+    // Tolls. Same concept as monthly-budget seed. The wizard
+    // preview UI still shows the leaf amounts but they don't
+    // commit — the parent rows derived from trailing 12-week
+    // spend (rolling up children) are what land on the plan.
+    //
+    // miscCat + savingsCat keep their user-driven inputs.
     const editableInputs: Array<{
       catId: string | null;
       amount: number;
       note: string | null;
     }> = [
-      { catId: groceriesCat, amount: p.groceriesCents, note: null },
-      { catId: fuelCat, amount: p.fuelCents, note: null },
-      { catId: tollsCat, amount: p.tollsCents, note: null },
       { catId: miscCat, amount: p.miscCents, note: p.miscNote || null },
       { catId: savingsCat, amount: p.savingsCents, note: null },
     ];
+    // Suppress unused-var TS warnings — groceriesCat / fuelCat /
+    // tollsCat are still resolved above for backward compat in case
+    // a future patch wants to surface them in the preview.
+    void groceriesCat;
+    void fuelCat;
+    void tollsCat;
 
-    // 0.21.x — extra recurring categories (Parking / Transit /
-    // Taxi / Restaurants / Fast Food / Coffee Shops / Food
-    // Delivery). Each one's amount is its weekly trailing avg
-    // scaled to this period's day count. Categories with zero
-    // trailing spend in the window contribute zero and get
-    // skipped by the amount > 0 guard below.
     for (const catId of recurringCatIds) {
       const weekly = recurringWeekly.get(catId) ?? 0;
       if (weekly <= 0) continue;
