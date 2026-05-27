@@ -113,7 +113,39 @@ function parseInput(body: unknown): Omit<WizardInput, 'tenantId'> | { error: str
     savingsLowPctOverride: readPctOverride('savingsLowPctOverride'),
     savingsMidPctOverride: readPctOverride('savingsMidPctOverride'),
     savingsHighPctOverride: readPctOverride('savingsHighPctOverride'),
+    // 0.21.x — recurring category overrides.
+    recurringOverrideCents: readRecurringOverrides(b.recurringOverrideCents),
+    recurringDisabled: readDisabled(b.recurringDisabled),
   };
+}
+
+function readRecurringOverrides(
+  raw: unknown,
+): Record<string, Record<number, number>> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, Record<number, number>> = {};
+  for (const [catId, perPeriod] of Object.entries(raw as Record<string, unknown>)) {
+    if (!UUID.test(catId) || !perPeriod || typeof perPeriod !== 'object') continue;
+    const periodMap: Record<number, number> = {};
+    for (const [k, v] of Object.entries(perPeriod as Record<string, unknown>)) {
+      const idx = Number(k);
+      const cents = Number(v);
+      if (!Number.isInteger(idx) || idx < 0) continue;
+      if (!Number.isFinite(cents) || cents < 0) continue;
+      periodMap[idx] = Math.round(cents);
+    }
+    if (Object.keys(periodMap).length > 0) out[catId] = periodMap;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function readDisabled(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: string[] = [];
+  for (const id of raw) {
+    if (typeof id === 'string' && UUID.test(id)) out.push(id);
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 export async function budgetWizardRoutes(app: FastifyInstance): Promise<void> {

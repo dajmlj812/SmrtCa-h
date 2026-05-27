@@ -66,6 +66,27 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
   const [savingsAccountId, setSavingsAccountId] = useState<string>('');
 
   /**
+   * 0.21.x — per-category, per-period overrides for the five
+   * recurring rows (Food at home / Food out / Gas & Fuel /
+   * Parking / Taxi & Rideshare). Keyed by category UUID then
+   * period index. Empty maps = use the server-computed
+   * 12-week trailing avg.
+   */
+  const [recurringOverrides, setRecurringOverrides] = useState<
+    Record<string, Record<number, number>>
+  >({});
+
+  /**
+   * 0.21.x — categories the user disabled for this wizard run.
+   * Map keyed by category UUID, value = display name so the
+   * "re-enable" pill can render its label even though the
+   * preview no longer includes the row.
+   */
+  const [recurringDisabled, setRecurringDisabled] = useState<
+    Map<string, string>
+  >(new Map());
+
+  /**
    * 0.17.8 — accounts the wizard should consider. Loaded from
    * the tenant's account list; defaults to "every account
    * selected". Unchecking an account removes its bills,
@@ -142,6 +163,8 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         savingsLowPctOverride: parsePct(lowPctOverride),
         savingsMidPctOverride: parsePct(midPctOverride),
         savingsHighPctOverride: parsePct(highPctOverride),
+        recurringOverrideCents: recurringOverrides,
+        recurringDisabled: Array.from(recurringDisabled.keys()),
       });
       setPreview(p);
     } catch (e) {
@@ -160,6 +183,8 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
     accounts.length,
     allSelected,
     selectedAccountIds,
+    recurringOverrides,
+    recurringDisabled,
   ]);
 
   useEffect(() => {
@@ -179,6 +204,29 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
       } else {
         next[field][idx] = cents;
       }
+      return next;
+    });
+  }
+
+  function overrideRecurring(categoryId: string, idx: number, value: string) {
+    const cents = Math.round(Number(value) * 100);
+    setRecurringOverrides((prev) => {
+      const next = { ...prev, [categoryId]: { ...(prev[categoryId] ?? {}) } };
+      if (!Number.isFinite(cents) || cents < 0) {
+        delete next[categoryId][idx];
+      } else {
+        next[categoryId][idx] = cents;
+      }
+      if (Object.keys(next[categoryId]).length === 0) delete next[categoryId];
+      return next;
+    });
+  }
+
+  function toggleRecurringDisabled(categoryId: string, name: string) {
+    setRecurringDisabled((prev) => {
+      const next = new Map(prev);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.set(categoryId, name);
       return next;
     });
   }
@@ -226,6 +274,8 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         savingsLowPctOverride: parsePct(lowPctOverride),
         savingsMidPctOverride: parsePct(midPctOverride),
         savingsHighPctOverride: parsePct(highPctOverride),
+        recurringOverrideCents: recurringOverrides,
+        recurringDisabled: Array.from(recurringDisabled.keys()),
       });
       onCommitted({ planId: r.planId, created: r.created, skipped: r.skipped });
     } catch (e) {
@@ -454,6 +504,23 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
             <div className="wizard-defaults muted">
               Source defaults · Groceries median {formatCents(preview.groceriesWeeklyMedianCents)}/wk · Fuel {formatCents(preview.fuelWeeklyCents)}/wk · Tolls {formatCents(preview.tollsWeeklyCents)}/wk
             </div>
+            {recurringDisabled.size > 0 && (
+              <div className="muted small" style={{ marginBottom: 12 }}>
+                Removed this run:{' '}
+                {Array.from(recurringDisabled.entries()).map(([id, name]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="account-chip"
+                    style={{ marginRight: 6 }}
+                    onClick={() => toggleRecurringDisabled(id, name)}
+                    title="Click to re-enable this category for the run"
+                  >
+                    + Add {name}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="wizard-grid">
               {preview.periods.map((p) => (
                 <div key={p.index} className="wizard-period">
@@ -486,20 +553,21 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
                       </tr>
                       {/* 0.21.x — five parent-level recurring categories
                           (Food at home, Food out, Gas & Fuel, Parking,
-                          Taxi & Rideshare). Read-only: amounts derive
-                          from each category's trailing 12-week spend
-                          rolled up across its children. Editable on
-                          the budget page after commit. */}
+                          Taxi & Rideshare). Each row is editable in
+                          place; the × removes the category from this
+                          wizard run entirely (across every period). */}
                       {p.recurring.map((r) => (
-                        <tr key={r.category_id}>
-                          <td className="muted">{r.category_name}</td>
-                          <td className="num neg">
-                            {formatCents(-r.amount_cents)}
-                          </td>
-                          <td className="muted small">
-                            12-week avg, scaled to {p.days} day{p.days === 1 ? '' : 's'}
-                          </td>
-                        </tr>
+                        <RecurringRow
+                          key={r.category_id}
+                          row={r}
+                          periodIdx={p.index}
+                          onChange={(v) =>
+                            overrideRecurring(r.category_id, p.index, v)
+                          }
+                          onRemove={() =>
+                            toggleRecurringDisabled(r.category_id, r.category_name)
+                          }
+                        />
                       ))}
                       <MiscRow
                         cents={p.miscCents}
@@ -584,6 +652,46 @@ function EditableRow({
         />
       </td>
       <td className="muted">editable per period</td>
+    </tr>
+  );
+}
+
+function RecurringRow({
+  row,
+  periodIdx,
+  onChange,
+  onRemove,
+}: {
+  row: { category_id: string; category_name: string; amount_cents: number };
+  periodIdx: number;
+  onChange: (value: string) => void;
+  onRemove: () => void;
+}) {
+  void periodIdx; // index identifies which cell — used in parent override map
+  return (
+    <tr>
+      <td>{row.category_name}</td>
+      <td className="num">
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={(row.amount_cents / 100).toFixed(2)}
+          onChange={(e) => onChange(e.target.value)}
+          className="wizard-amount"
+        />
+      </td>
+      <td className="muted small">
+        12-week avg (editable) ·{' '}
+        <button
+          type="button"
+          className="btn-link danger"
+          title="Don't seed this category — applies to every period in this run"
+          onClick={onRemove}
+        >
+          × remove
+        </button>
+      </td>
     </tr>
   );
 }

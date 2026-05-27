@@ -498,6 +498,20 @@ export interface WizardInput extends WizardInputSavings {
   savingsLowPctOverride?: number;
   savingsMidPctOverride?: number;
   savingsHighPctOverride?: number;
+  /**
+   * 0.21.x — per-run overrides for the five recurring-category
+   * rows (Food at home / Food out / Gas & Fuel / Parking / Taxi
+   * & Rideshare). Keyed by category UUID. Each value is a
+   * sparse array: `[period_idx] = amount_cents` for any period
+   * where the user replaced the auto-computed amount.
+   */
+  recurringOverrideCents?: Record<string, Record<number, number>>;
+  /**
+   * 0.21.x — UUIDs of recurring categories the user opted out of
+   * for this wizard run. Disabled categories are omitted from
+   * every period's `recurring` array.
+   */
+  recurringDisabled?: string[];
 }
 
 export async function buildWizardPreview(input: WizardInput): Promise<WizardPreview> {
@@ -622,13 +636,21 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
       accountIds,
     );
     // 0.21.x — recurring category amounts for this period.
+    // Honors per-user disabled set and per-period overrides.
+    const disabledSet = new Set(input.recurringDisabled ?? []);
     const recurring = recurringCategoryRows
+      .filter((cat) => !disabledSet.has(cat.id))
       .map((cat) => {
+        const override = input.recurringOverrideCents?.[cat.id]?.[i];
         const weekly = recurringWeeklyMap.get(cat.id) ?? 0;
+        const auto = weekly > 0 ? scaleToPeriod(weekly, days) : 0;
         return {
           category_id: cat.id,
           category_name: cat.name,
-          amount_cents: weekly > 0 ? scaleToPeriod(weekly, days) : 0,
+          amount_cents:
+            typeof override === 'number' && Number.isFinite(override) && override >= 0
+              ? override
+              : auto,
         };
       })
       .filter((r) => r.amount_cents > 0);
@@ -876,14 +898,11 @@ export async function commitWizard(
     let cCreated = 0;
     let cSkipped = 0;
     // 0.21.x — paycheck plan seeds at the parent-category level
-    // (Food at home, Food out, Gas & Fuel, Parking, Taxi &
-    // Rideshare) instead of the old leaf-level Groceries / Fuel /
-    // Tolls. Same concept as monthly-budget seed. The wizard
-    // preview UI still shows the leaf amounts but they don't
-    // commit — the parent rows derived from trailing 12-week
-    // spend (rolling up children) are what land on the plan.
-    //
-    // miscCat + savingsCat keep their user-driven inputs.
+    // using whatever lives in the preview's `recurring` array.
+    // The preview already honors per-period overrides + the
+    // per-run "disabled" set the user toggled in the wizard, so
+    // commit just iterates and inserts. miscCat + savingsCat are
+    // user-driven inputs that stay separate.
     const editableInputs: Array<{
       catId: string | null;
       amount: number;
@@ -893,18 +912,21 @@ export async function commitWizard(
       { catId: savingsCat, amount: p.savingsCents, note: null },
     ];
     // Suppress unused-var TS warnings — groceriesCat / fuelCat /
-    // tollsCat are still resolved above for backward compat in case
-    // a future patch wants to surface them in the preview.
+    // tollsCat are still resolved above for backward compat.
     void groceriesCat;
     void fuelCat;
     void tollsCat;
-
-    for (const catId of recurringCatIds) {
-      const weekly = recurringWeekly.get(catId) ?? 0;
-      if (weekly <= 0) continue;
+    // recurringCatIds / recurringWeekly resolved above are kept
+    // for back-compat but no longer iterated — commit reads the
+    // preview's `recurring` array directly so user overrides /
+    // disabled flags carry through.
+    void recurringCatIds;
+    void recurringWeekly;
+    for (const r of p.recurring) {
+      if (r.amount_cents <= 0) continue;
       editableInputs.push({
-        catId,
-        amount: scaleToPeriod(weekly, p.days),
+        catId: r.category_id,
+        amount: r.amount_cents,
         note: null,
       });
     }

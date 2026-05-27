@@ -3286,6 +3286,12 @@ export const api = {
     savingsLowPctOverride?: number;
     savingsMidPctOverride?: number;
     savingsHighPctOverride?: number;
+    /** 0.21.x — per-category, per-period overrides for the
+     *  recurring rows (Food at home / Food out / Gas & Fuel /
+     *  Parking / Taxi & Rideshare). Keyed by category UUID. */
+    recurringOverrideCents?: Record<string, Record<number, number>>;
+    /** 0.21.x — category UUIDs the user disabled for this run. */
+    recurringDisabled?: string[];
   }) =>
     http<{ preview: WizardPreview }>('/api/budgets/wizard/preview', {
       method: 'POST',
@@ -3312,6 +3318,10 @@ export const api = {
     savingsLowPctOverride?: number;
     savingsMidPctOverride?: number;
     savingsHighPctOverride?: number;
+    /** 0.21.x — see budgetWizardPreview.recurringOverrideCents. */
+    recurringOverrideCents?: Record<string, Record<number, number>>;
+    /** 0.21.x — see budgetWizardPreview.recurringDisabled. */
+    recurringDisabled?: string[];
   }) =>
     http<{
       result: {
