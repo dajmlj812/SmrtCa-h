@@ -1,10 +1,12 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { Category } from '../api';
 
 /**
@@ -78,6 +80,12 @@ export function CategoryPicker({
   const [highlightIdx, setHighlightIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    placement: 'below' | 'above';
+  } | null>(null);
 
   // Index parents so we can show "Parent · Child" labels in the
   // dropdown.
@@ -112,17 +120,49 @@ export function CategoryPicker({
     return list.slice(0, 200);
   }, [categories, query, excludeIds, parentNameById]);
 
-  // Close on outside click.
+  // Anchor the popover to the input on open + on scroll/resize so
+  // it stays attached. Portaled to document.body to escape any
+  // .table-wrap { overflow: hidden } that would otherwise clip it.
+  useLayoutEffect(() => {
+    if (!open || !inputRef.current) return;
+    function update() {
+      const el = inputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const POPOVER_HEIGHT_ESTIMATE = 320;
+      const spaceBelow = window.innerHeight - r.bottom;
+      const placeAbove =
+        spaceBelow < POPOVER_HEIGHT_ESTIMATE && r.top > POPOVER_HEIGHT_ESTIMATE;
+      setPopoverPos({
+        top: placeAbove ? r.top - 2 : r.bottom + 2,
+        left: r.left,
+        width: Math.max(r.width, 320),
+        placement: placeAbove ? 'above' : 'below',
+      });
+    }
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
+
+  // Close on outside click. The popover is portaled, so the
+  // containment check has to include it too.
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
+      const target = e.target as Node | null;
+      if (!target) return;
       if (
-        containerRef.current &&
-        e.target instanceof Node &&
-        !containerRef.current.contains(e.target)
+        containerRef.current?.contains(target) ||
+        document.getElementById('cat-picker-portal')?.contains(target)
       ) {
-        setOpen(false);
+        return;
       }
+      setOpen(false);
     }
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
@@ -200,61 +240,80 @@ export function CategoryPicker({
           ×
         </button>
       )}
-      {open && (
-        <div className="cat-picker-list" role="listbox">
-          {allowFlex && (
-            <button
-              type="button"
-              role="option"
-              className={`cat-picker-row ${highlightIdx === 0 ? 'hl' : ''}`}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                commit(null);
-              }}
-              onMouseEnter={() => setHighlightIdx(0)}
-            >
-              <span><em>Flex pool (everything else)</em></span>
-            </button>
-          )}
-          {ranked.length === 0 && (
-            <div className="cat-picker-empty muted small">
-              No matches for "{query}".
-            </div>
-          )}
-          {ranked.map((r, i) => {
-            const offset = allowFlex ? 1 : 0;
-            const idx = i + offset;
-            return (
+      {open && popoverPos &&
+        createPortal(
+          <div
+            id="cat-picker-portal"
+            className="cat-picker-list"
+            role="listbox"
+            style={{
+              position: 'fixed',
+              top:
+                popoverPos.placement === 'above'
+                  ? undefined
+                  : popoverPos.top,
+              bottom:
+                popoverPos.placement === 'above'
+                  ? window.innerHeight - popoverPos.top
+                  : undefined,
+              left: popoverPos.left,
+              minWidth: popoverPos.width,
+            }}
+          >
+            {allowFlex && (
               <button
-                key={r.cat.id}
                 type="button"
                 role="option"
-                className={`cat-picker-row ${idx === highlightIdx ? 'hl' : ''}`}
+                className={`cat-picker-row ${highlightIdx === 0 ? 'hl' : ''}`}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  commit(r.cat.id);
+                  commit(null);
                 }}
-                onMouseEnter={() => setHighlightIdx(idx)}
+                onMouseEnter={() => setHighlightIdx(0)}
               >
-                <span className="cat-picker-name">
-                  {r.parentName && (
-                    <span className="muted small">{r.parentName} ·{' '}</span>
-                  )}
-                  {r.cat.name}
-                </span>
-                {r.cat.tax_category && (
-                  <span
-                    className="cat-picker-tax muted small"
-                    title="Auto-tagged for tax reports"
-                  >
-                    🏛 {r.cat.tax_category}
-                  </span>
-                )}
+                <span><em>Flex pool (everything else)</em></span>
               </button>
-            );
-          })}
-        </div>
-      )}
+            )}
+            {ranked.length === 0 && (
+              <div className="cat-picker-empty muted small">
+                No matches for "{query}".
+              </div>
+            )}
+            {ranked.map((r, i) => {
+              const offset = allowFlex ? 1 : 0;
+              const idx = i + offset;
+              return (
+                <button
+                  key={r.cat.id}
+                  type="button"
+                  role="option"
+                  className={`cat-picker-row ${idx === highlightIdx ? 'hl' : ''}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    commit(r.cat.id);
+                  }}
+                  onMouseEnter={() => setHighlightIdx(idx)}
+                >
+                  <span className="cat-picker-name">
+                    {r.parentName && (
+                      <span className="muted small">{r.parentName} ·{' '}</span>
+                    )}
+                    {r.cat.name}
+                  </span>
+                  {r.cat.tax_category && (
+                    <span
+                      className="cat-picker-tax muted small"
+                      title="Auto-tagged for tax reports"
+                    >
+                      🏛 {r.cat.tax_category}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
