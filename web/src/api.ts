@@ -2577,6 +2577,19 @@ export const api = {
       body: JSON.stringify({ fromMonth, toMonth }),
     }),
 
+  // 0.21.x — seed a month's monthly budget from active recurring bills.
+  seedBudgetFromBills: (month: string, overwrite = false) =>
+    http<{
+      created: number;
+      skipped: number;
+      total_monthly_cents: number;
+      bill_count: number;
+    }>('/api/budgets/seed-from-bills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month, overwrite }),
+    }),
+
   budgetActuals: (asOf: string) =>
     http<{
       asOf: string;

@@ -88,6 +88,32 @@ export function MonthlyBudgetPage() {
     }
   }
 
+  async function seedFromBills() {
+    setError(null);
+    const overwrite = rows.length > 0 && confirm(
+      `Replace the ${rows.length} existing budget row(s) for ${formatMonth(month)} ` +
+        'with a fresh seed from active bills?\n\n' +
+        'Click OK to wipe and reseed, or Cancel to only add rows for categories ' +
+        "that don't have a budget yet (existing rows untouched).",
+    );
+    try {
+      const r = await api.seedBudgetFromBills(month, overwrite);
+      if (r.bill_count === 0) {
+        alert('No active bills to seed from. Add bills on /bills first.');
+        return;
+      }
+      const msg =
+        r.created > 0
+          ? `Seeded ${r.created} budget row(s) from ${r.bill_count} bill(s). ` +
+            `Monthly total ${(r.total_monthly_cents / 100).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}.`
+          : 'Every bill category already had a budget — nothing to add.';
+      alert(msg);
+      await load(month);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Seed failed');
+    }
+  }
+
   async function onUpsert(input: {
     categoryId: string | null;
     amountCents: number;
@@ -156,11 +182,37 @@ export function MonthlyBudgetPage() {
       {!loading && rows.length === 0 && (
         <div className="card empty-card">
           <p className="muted">
-            No budgets set for {formatMonth(month)} yet. Use the form below
-            to add one, or copy from the previous month.
+            No budgets set for {formatMonth(month)} yet. Quick-start options:
           </p>
-          <button className="btn secondary" type="button" onClick={copyPrev}>
-            Copy from {formatMonth(prevMonth(month))}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn" type="button" onClick={seedFromBills}>
+              ✨ Seed from recurring bills
+            </button>
+            <button className="btn secondary" type="button" onClick={copyPrev}>
+              Copy from {formatMonth(prevMonth(month))}
+            </button>
+          </div>
+          <p className="muted small" style={{ marginTop: 8 }}>
+            Or use the form below to add a single row manually.
+          </p>
+        </div>
+      )}
+      {!loading && rows.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            justifyContent: 'flex-end',
+            margin: '8px 0',
+          }}
+        >
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={seedFromBills}
+            title="Add monthly budget rows for any category that has active bills but no budget yet"
+          >
+            ✨ Seed missing rows from bills
           </button>
         </div>
       )}

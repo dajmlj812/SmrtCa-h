@@ -302,6 +302,120 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  /**
+   * 0.21.x — Seed a month's budget from the tenant's active bills.
+   *
+   * For each active bill, convert its amount to a monthly equivalent
+   * using its frequency, group by category, and insert one monthly
+   * budget per category for the requested month.
+   *
+   * Behavior:
+   *   • `overwrite: false` (default) — skips any category that
+   *     already has a monthly budget for the month. Safe to call
+   *     repeatedly without losing user edits.
+   *   • `overwrite: true` — clears the month's monthly budgets and
+   *     reseeds. Use when the user explicitly wants a fresh seed.
+   *
+   * Bills without a category land under the flex pool (NULL
+   * category_id) so users see the total outflow even before
+   * categorising every bill.
+   */
+  app.post<{
+    Body: { month?: unknown; overwrite?: unknown };
+  }>('/api/budgets/seed-from-bills', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const { month, overwrite } = (req.body ?? {}) as {
+      month?: unknown;
+      overwrite?: unknown;
+    };
+    if (!isFirstOfMonth(month)) {
+      return reply
+        .code(400)
+        .send({ error: 'month must be a YYYY-MM-01 date' });
+    }
+    const doOverwrite = overwrite === true;
+
+    // Bills with active flag, with their category to roll up.
+    const bills = await query<{
+      amount_cents: string;
+      frequency: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'quarterly' | 'annual';
+      category_id: string | null;
+    }>(
+      `SELECT amount_cents::text, frequency, category_id
+         FROM bills
+        WHERE tenant_id = $1 AND active = true`,
+      [tenantId],
+    );
+
+    if (bills.rowCount === 0) {
+      return { created: 0, skipped: 0, total_monthly_cents: 0 };
+    }
+
+    // Sum per-category monthly equivalent. Multipliers below
+    // approximate how many times a frequency hits in an average
+    // month — picked to round-trip through the existing cash-flow
+    // projector's assumptions.
+    const MULTIPLIER: Record<string, number> = {
+      weekly: 52 / 12,
+      biweekly: 26 / 12,
+      semimonthly: 2,
+      monthly: 1,
+      quarterly: 1 / 3,
+      annual: 1 / 12,
+    };
+    const monthlyByCategory = new Map<string | null, number>();
+    for (const b of bills.rows) {
+      const mult = MULTIPLIER[b.frequency] ?? 1;
+      const monthlyCents = Math.round(Number(b.amount_cents) * mult);
+      if (monthlyCents <= 0) continue;
+      const key = b.category_id;
+      monthlyByCategory.set(key, (monthlyByCategory.get(key) ?? 0) + monthlyCents);
+    }
+
+    // Reset path: wipe the month's monthly budgets if overwriting.
+    if (doOverwrite) {
+      await query(
+        `DELETE FROM budgets
+          WHERE tenant_id = $1
+            AND period_type = 'monthly'
+            AND period_month = $2::date`,
+        [tenantId, month],
+      );
+    }
+
+    let created = 0;
+    let skipped = 0;
+    let total = 0;
+    for (const [categoryId, cents] of monthlyByCategory.entries()) {
+      total += cents;
+      const ins = await query<{ id: string }>(
+        `INSERT INTO budgets
+           (tenant_id, period_month, period_type, category_id, amount_cents)
+         SELECT $1, $2::date, 'monthly', $3, $4
+          WHERE NOT EXISTS (
+            SELECT 1 FROM budgets
+             WHERE tenant_id = $1
+               AND period_type = 'monthly'
+               AND period_month = $2::date
+               AND COALESCE(category_id, '00000000-0000-0000-0000-000000000000'::uuid)
+                   = COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+          )
+         RETURNING id`,
+        [tenantId, month, categoryId, cents],
+      );
+      if (ins.rowCount && ins.rowCount > 0) created++;
+      else skipped++;
+    }
+
+    return {
+      created,
+      skipped,
+      total_monthly_cents: total,
+      bill_count: bills.rowCount,
+    };
+  });
+
   // Copy monthly budgets from one month to another. Tenant-scoped on
   // both source and destination — copying across tenants is impossible.
   app.post<{ Body: { fromMonth?: unknown; toMonth?: unknown } }>(
