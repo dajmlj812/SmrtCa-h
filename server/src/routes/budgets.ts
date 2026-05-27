@@ -432,11 +432,14 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     ];
 
     // Resolve canonical category ids for the names that exist in
-    // this tenant (or the global NULL-tenant seed).
+    // this tenant (or the global NULL-tenant seed). DISTINCT ON
+    // collapses any "global + tenant copy of the same name" into a
+    // single row, preferring the tenant copy (NULLS LAST).
     const catRows = await query<{ id: string; name: string }>(
-      `SELECT id, name FROM categories
+      `SELECT DISTINCT ON (lower(name)) id, name FROM categories
         WHERE lower(name) = ANY($1::text[])
-          AND (tenant_id IS NULL OR tenant_id = $2::uuid)`,
+          AND (tenant_id IS NULL OR tenant_id = $2::uuid)
+        ORDER BY lower(name), tenant_id NULLS LAST`,
       [ALWAYS_BUDGET_CATEGORIES.map((n) => n.toLowerCase()), tenantId],
     );
 

@@ -540,6 +540,67 @@ export async function seedDefaultCategories(
       [leaf.taxCategory, leaf.name, tid],
     );
   }
+
+  // 0.21.x — consolidate duplicates. After a taxonomy change like
+  // "Groceries was top-level, now it's a child of Food at home,"
+  // the seed inserts both versions because the unique index
+  // includes parent_id (different parent → different unique key).
+  // This pass picks the canonical-parent row for each leaf, repoints
+  // every FK from any same-name duplicates to it, then deletes the
+  // duplicates.
+  for (const leaf of CANONICAL_CATEGORIES_FLAT) {
+    if (leaf.parent === null) continue;
+    const canonicalParentId = parentIdByName.get(leaf.parent.toLowerCase());
+    if (!canonicalParentId) continue;
+
+    const canonicalRow = await executor.query<{ id: string }>(
+      `SELECT id FROM categories
+        WHERE lower(name) = lower($1)
+          AND (tenant_id IS NOT DISTINCT FROM $2)
+          AND parent_id = $3
+        LIMIT 1`,
+      [leaf.name, tid, canonicalParentId],
+    );
+    if (canonicalRow.rowCount === 0) continue;
+    const canonicalId = canonicalRow.rows[0]!.id;
+
+    const dupes = await executor.query<{ id: string }>(
+      `SELECT id FROM categories
+        WHERE lower(name) = lower($1)
+          AND (tenant_id IS NOT DISTINCT FROM $2)
+          AND id <> $3`,
+      [leaf.name, tid, canonicalId],
+    );
+    for (const dupe of dupes.rows) {
+      // Repoint every FK that references the duplicate to the
+      // canonical row. budgets.category_id is ON DELETE CASCADE so
+      // we MUST repoint before deleting or the budget rows vanish.
+      await executor.query(
+        `UPDATE transactions SET category_id = $1 WHERE category_id = $2`,
+        [canonicalId, dupe.id],
+      );
+      await executor.query(
+        `UPDATE transaction_splits SET category_id = $1 WHERE category_id = $2`,
+        [canonicalId, dupe.id],
+      );
+      await executor.query(
+        `UPDATE bills SET category_id = $1 WHERE category_id = $2`,
+        [canonicalId, dupe.id],
+      );
+      await executor.query(
+        `UPDATE budgets SET category_id = $1 WHERE category_id = $2`,
+        [canonicalId, dupe.id],
+      );
+      await executor.query(
+        `UPDATE normalization_rules SET category_id = $1 WHERE category_id = $2`,
+        [canonicalId, dupe.id],
+      );
+      await executor.query(
+        `DELETE FROM categories WHERE id = $1`,
+        [dupe.id],
+      );
+    }
+  }
 }
 
 /**
