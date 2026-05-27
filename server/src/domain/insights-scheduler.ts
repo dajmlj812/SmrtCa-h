@@ -1,5 +1,6 @@
 import { pool, query } from '../db/pool.js';
 import { generateInsights } from './insights-generator.js';
+import { sweepOverdueBills } from './bill-matcher.js';
 
 /**
  * 0.20.0 — daily insight-card scanner.
@@ -44,6 +45,20 @@ export function stopInsightsScheduler(): void {
 async function tick(): Promise<void> {
   try {
     await pruneOldDismissedCards();
+    // 0.22.0 — sweep past-due bills BEFORE the per-tenant
+    // insights generator, so any bill_overdue cards land in the
+    // same scan window the user sees on their dashboard. Sweep
+    // is whole-fleet (one query); safe to re-run.
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await sweepOverdueBills(today);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        'insights-scheduler: overdue sweep failed:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
     const tenants = await query<{ id: string }>(`SELECT id FROM tenants`);
     for (const t of tenants.rows) {
       try {

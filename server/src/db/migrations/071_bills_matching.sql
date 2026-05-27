@@ -138,3 +138,24 @@ CREATE INDEX bill_match_triage_open_idx
 
 COMMENT ON TABLE bill_match_triage IS
   '0.22.0 — matcher candidates that did not auto-link (ambiguous vendor, edge-of-window amount, or edge-of-window date). User resolves from the /recurring triage section.';
+
+
+-- Extend insight_cards.kind to include 'bill_overdue' (emitted by
+-- sweepOverdueBills). The existing partial unique index
+-- idx_insight_cards_open_source from 061 already enforces
+-- (tenant_id, kind, source_id) uniqueness for open cards, which
+-- is what we want for dedupe — no new index needed.
+ALTER TABLE insight_cards
+  DROP CONSTRAINT IF EXISTS insight_cards_kind_check;
+
+ALTER TABLE insight_cards
+  ADD CONSTRAINT insight_cards_kind_check CHECK (kind IN (
+    'anomaly',
+    'budget_overrun_trend',
+    'goal_pace_slipping',
+    'unusual_recurring_charge',
+    'cash_flow_warning',
+    'fee_drag',
+    'warranty_expiring',
+    'bill_overdue'
+  ));

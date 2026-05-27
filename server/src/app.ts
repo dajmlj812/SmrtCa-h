@@ -30,6 +30,7 @@ import { userPreferencesRoutes } from './routes/user-preferences.js';
 import { budgetRoutes } from './routes/budgets.js';
 import { goalRoutes } from './routes/goals.js';
 import { billRoutes } from './routes/bills.js';
+import { billMatchingRoutes } from './routes/bill-matching.js';
 import { scheduleChangeRoutes } from './routes/schedule-changes.js';
 import { cancellationRoutes } from './routes/cancellation.js';
 import { negotiationRoutes } from './routes/negotiation.js';
@@ -422,6 +423,7 @@ export async function buildApp(
   await app.register(budgetRoutes);
   await app.register(goalRoutes);
   await app.register(billRoutes);
+  await app.register(billMatchingRoutes);
   await app.register(scheduleChangeRoutes);
   await app.register(cancellationRoutes);
   await app.register(negotiationRoutes);

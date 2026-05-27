@@ -317,6 +317,21 @@ export async function persistBatch(
     } catch {
       /* swallow — import wins; user can /api/anomalies/scan manually */
     }
+
+    // 0.22.0: bill matcher — see if any of these freshly-imported
+    // transactions pay a known bill. Single-row matcher runs once per
+    // inserted txn; cheap because each call is bounded by the number
+    // of active bills for this tenant (typically a few dozen).
+    try {
+      const { tryMatchTransaction } = await import(
+        '../domain/bill-matcher.js'
+      );
+      for (const txnId of result.insertedIds) {
+        await tryMatchTransaction(txnId);
+      }
+    } catch {
+      /* swallow — import wins; the user can manually mark-paid */
+    }
   }
 
   return result.payload;
