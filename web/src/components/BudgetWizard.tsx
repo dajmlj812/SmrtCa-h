@@ -51,15 +51,18 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
   }>({ groceries: {}, fuel: {}, tolls: {}, misc: {}, miscNote: {}, savings: {} });
 
   /**
-   * 0.17.22 — per-run % overrides for the three savings chips
-   * (defaults 25/50/75). Empty string = use platform default.
+   * 0.17.22 — per-run % overrides for the three savings chips.
+   * Pre-populated 25 / 50 / 75 (the platform defaults) so the
+   * fields look filled in. User can edit if they want a
+   * different mix; cleared values fall back to the server
+   * default delivered in `preview`.
    * `savingsAccountId` is the destination account picked from
    * the user's savings-type accounts; null/undefined = no
    * destination, savings still gets budgeted but unlinked.
    */
-  const [lowPctOverride, setLowPctOverride] = useState<string>('');
-  const [midPctOverride, setMidPctOverride] = useState<string>('');
-  const [highPctOverride, setHighPctOverride] = useState<string>('');
+  const [lowPctOverride, setLowPctOverride] = useState<string>('25');
+  const [midPctOverride, setMidPctOverride] = useState<string>('50');
+  const [highPctOverride, setHighPctOverride] = useState<string>('75');
   const [savingsAccountId, setSavingsAccountId] = useState<string>('');
 
   /**
