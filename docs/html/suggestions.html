@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Suggested next features# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-suggested-next-features">SmrtCash — Suggested next features<a class="heading-anchor" href="#smrtcash-suggested-next-features">#</a></h1>
+<p>Drafted 2026-05-25 alongside the future-event-editing + GUI-restart work. Things that would fit naturally on top of what&#39;s now in place, ranked by how high I&#39;d rate them if I were prioritizing.</p>
+<h2 id="1-future-dated-transactions-not-just-recurring-changes">1. Future-dated transactions (not just recurring changes)<a class="heading-anchor" href="#1-future-dated-transactions-not-just-recurring-changes">#</a></h2>
+<p>You can now schedule &quot;rent goes up to $2500 starting July 1.&quot; Logical next step: schedule a one-off transaction for a future date. Examples:</p>
+<ul>
+<li>&quot;On July 15 I&#39;ll receive a $5,000 bonus.&quot;</li>
+<li>&quot;On August 3 I&#39;m paying for the vacation rental, $1,200.&quot;</li>
+<li>&quot;I just paid the contractor&#39;s deposit but the cheque won&#39;t clear until next Friday — show it as pending.&quot;</li>
+</ul>
+<p>The data model: add a <code>pending_transactions</code> table (or a <code>posted_at</code> nullable column on <code>transactions</code>). The cash-flow forecast (already in 0.18.0) becomes dramatically more useful because it can include both recurring projections AND specific known future events. On the posted-at date, the row auto-realizes the same way schedule changes promote into bills/income.</p>
+<p><strong>Effort</strong>: ~2 hours including UI. Reuses the promotion pattern from this commit.</p>
+<h2 id="2-endarchive-a-bill-vs-delete">2. End/archive a bill (vs delete)<a class="heading-anchor" href="#2-endarchive-a-bill-vs-delete">#</a></h2>
+<p>Today: a bill goes away with <code>DELETE</code>, taking its history with it. That hurts long-tail analysis like &quot;how much did I spend on Netflix in 2024?&quot;</p>
+<p>Add an <code>archived_at</code> timestamp + an &quot;Archive&quot; action that hides the bill from the active list but keeps it for reports. Combined with the schedule-changes audit trail from this commit, the operator can answer &quot;show me everything I ever paid for streaming.&quot;</p>
+<p><strong>Effort</strong>: 1 hour. Schema, route, button. The reports side already joins to <code>bills</code> so a where-clause tweak is most of it.</p>
+<h2 id="3-2fa-totp-for-super-admin-and-tenant-admin-accounts">3. 2FA / TOTP for super-admin and tenant-admin accounts<a class="heading-anchor" href="#3-2fa-totp-for-super-admin-and-tenant-admin-accounts">#</a></h2>
+<p>The security audit closed every P0/P1/P2. The next class of attack against a SaaS is credential reuse: an operator&#39;s password from another site shows up in a credential-stuffing list and someone walks in.</p>
+<p>Add TOTP (RFC 6238) — operator scans a QR with Authenticator / 1Password / Bitwarden, supplies a 6-digit code on every login. Library: <a href="https://www.npmjs.com/package/otplib">@otplib/preset-default</a>. Schema: <code>users.totp_secret</code> (encrypted with the existing KEK) + <code>users.totp_enabled_at</code>. Backup codes too — 8 one-time recovery codes printed once.</p>
+<p>Start with super-admin only (the highest-value target). Make it optional for tenant admins, encouraged for everyone. Per-tenant policy could require it.</p>
+<p><strong>Effort</strong>: ~6-8 hours including UI flow + recovery codes + audit log.</p>
+<h2 id="4-push-notifications-via-the-pwa">4. Push notifications via the PWA<a class="heading-anchor" href="#4-push-notifications-via-the-pwa">#</a></h2>
+<p>The PWA already prompts to install. The next high-value feature: web-push for bill-due reminders + anomaly alerts. The /api/anomalies route already detects unusual spending; push notifications turn that signal into &quot;you should look at this&quot; instead of &quot;you&#39;ll see it next time you open the app.&quot;</p>
+<p>Library: <code>web-push</code> (Node side) + the browser&#39;s built-in Notification API. Per-user opt-in. Setting: <code>NOTIFY_BILLS_DUE_DAYS_AHEAD = 3</code> etc.</p>
+<p><strong>Effort</strong>: ~6 hours. Two-thirds of it is the consent + service-worker plumbing; the actual server-side &quot;schedule a push for this user&quot; is small.</p>
+<h2 id="5-email-change-flow-currently-impossible">5. Email-change flow (currently impossible)<a class="heading-anchor" href="#5-email-change-flow-currently-impossible">#</a></h2>
+<p>The audit&#39;s F-19 finding said &quot;no email-change endpoint exists&quot; was the most secure stance. But it&#39;s also a UX dead-end — a user who switches employers and wants to move their account to a new email has to ask you to do it manually.</p>
+<p>Add a proper two-step flow: user enters new email → confirmation token sent to the OLD email + the NEW email → both must click to confirm. The &quot;must click old too&quot; is the anti-ATO part. The audit&#39;s F-20 fix already requires <code>email_verified</code> for OIDC links; this is the same idea for local accounts.</p>
+<p><strong>Effort</strong>: ~3 hours. Reuses the verify-email infrastructure.</p>
+<h2 id="6-quotsoft-deletequot-for-transactions">6. &quot;Soft delete&quot; for transactions<a class="heading-anchor" href="#6-quotsoft-deletequot-for-transactions">#</a></h2>
+<p>Today <code>DELETE FROM transactions</code> removes a row outright. If a user accidentally bulk-deletes 200 transactions, their only recovery is the daily backup (which loses everything that happened since).</p>
+<p>Add a <code>deleted_at</code> column + a 30-day soft-delete window with an &quot;Undo&quot; action in the transactions list. The bulk-delete confirm modal mentions the recovery window.</p>
+<p>The AI assistant already audit-logs its writes; reaching back through audit history to undo IS possible but operationally painful. A column-level soft-delete is the right primitive.</p>
+<p><strong>Effort</strong>: ~3 hours including index changes + query updates.</p>
+<h2 id="7-ai-assistant-quotdry-runquot-for-write-tools">7. AI assistant: &quot;dry-run&quot; for write tools<a class="heading-anchor" href="#7-ai-assistant-quotdry-runquot-for-write-tools">#</a></h2>
+<p>The assistant&#39;s write tools (recategorize, set budget, update savings goal, etc.) take effect immediately. The audit log gives reversibility but the user has to know what to look for.</p>
+<p>Add a <code>dryRun: true</code> parameter to every write tool. The assistant runs the query but doesn&#39;t commit; the result includes a &quot;this would have changed N rows&quot; message. The user clicks &quot;Apply&quot; or &quot;Discard&quot; in the UI. This makes the assistant feel more like a senior bookkeeper presenting work than a magic black box.</p>
+<p><strong>Effort</strong>: ~4 hours. Affects 11 write tools; mostly mechanical.</p>
+<h2 id="8-currency-conversion-display-on-the-dashboard">8. Currency conversion display on the dashboard<a class="heading-anchor" href="#8-currency-conversion-display-on-the-dashboard">#</a></h2>
+<p>The multi-currency code is in. The dashboard rolls up multi-currency holdings + accounts via <code>display_currency</code>. But the UI doesn&#39;t always make the conversion visible — a $1,000 account in CAD shows as a USD-equivalent number with no indication of the source. Tooltip on hover, or a small &quot;(CAD: 1357)&quot; suffix, would help users trust the number.</p>
+<p><strong>Effort</strong>: 30 min. UI-only.</p>
+<h2 id="9-customizable-dashboard-widgets">9. Customizable dashboard widgets<a class="heading-anchor" href="#9-customizable-dashboard-widgets">#</a></h2>
+<p>The dashboard layout is fixed today. Users want to reorder cards — &quot;I care most about cash flow&quot; vs &quot;I care most about debt payoff.&quot; A drag-handle on each card + a per-user dashboard layout stored in <code>users.web_settings</code> (already exists as a JSON column for the idle-timeout) is enough.</p>
+<p><strong>Effort</strong>: ~4 hours. UX-heavy because drag-drop is fiddly.</p>
+<h2 id="10-spending-velocity-alerts">10. Spending velocity alerts<a class="heading-anchor" href="#10-spending-velocity-alerts">#</a></h2>
+<p>Already detectable from the existing transaction history. &quot;You spent 65% of your monthly Groceries budget by day 12 of the month.&quot; Surfaces on the dashboard or pushes a notification when crossed.</p>
+<p>Builds on item #4 (push notifications) but isn&#39;t strictly dependent — could be an in-app banner first.</p>
+<p><strong>Effort</strong>: ~3 hours.</p>
+<h2 id="my-pick-the-three-i39d-ship-first">My pick — the three I&#39;d ship first<a class="heading-anchor" href="#my-pick-the-three-i39d-ship-first">#</a></h2>
+<p>If I had eight hours to spend on user-visible improvements after today&#39;s work:</p>
+<ol>
+<li><strong>#2 (Archive bills)</strong> — 1 hour, makes today&#39;s schedule-changes feature properly historical</li>
+<li><strong>#1 (Future-dated transactions)</strong> — 2 hours, the natural extension of schedule changes into one-off events; makes cash-flow forecasting dramatically better</li>
+<li><strong>#3 (2FA for super-admin)</strong> — defense in depth at the highest-value account; closes the credential-stuffing window now that the rest of auth is tight</li>
+</ol>
+<p>The combined ~10 hours produces three features each individually worth doing. After that, item #4 (push notifications) is the next big force-multiplier because it changes the app from a passive viewer to an active assistant.</p>
+<h2 id="deliberate-non-recommendations">Deliberate non-recommendations<a class="heading-anchor" href="#deliberate-non-recommendations">#</a></h2>
+<ul>
+<li><strong>Adding a second financial-data provider</strong> (MX, Yodlee, etc. alongside Plaid). The audit&#39;s F-23 SSRF work and F-17 Plaid token storage are correct. Adding a second provider doubles the surface for no clear customer win until Plaid coverage gaps become a real complaint.</li>
+<li><strong>Multi-currency wallet</strong> (holding non-USD balances vs converted). Big lift, narrow audience.</li>
+<li><strong>Social features</strong> (sharing budgets with non-household members, comments). Personal finance is a private product; resist this even when users ask.</li>
+<li><strong>Subscription consolidation suggestions</strong> (&quot;you have Netflix + Hulu + Disney — consider bundling&quot;). Cute, but the AI assistant already lets you ask, and a hard-coded heuristic ages poorly.</li>
+</ul>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-27 13:47:33 UTC · commit cff74b2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runbook — Rotating the KEK (ATTACHMENT_ENCRYPTION_KEY)# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="runbook-rotating-the-kek-attachment_encryption_key">Runbook — Rotating the KEK (<code>ATTACHMENT_ENCRYPTION_KEY</code>)<a class="heading-anchor" href="#runbook-rotating-the-kek-attachment_encryption_key">#</a></h1>
+<p>The KEK is the platform-level encryption key that:</p>
+<ul>
+<li>Wraps every tenant&#39;s data-encryption key (DEK) in <code>tenant_encryption_keys.wrapped_dek</code>. The DEK in turn encrypts each tenant&#39;s attachments.</li>
+<li>Directly encrypts the few short secrets we hold per-tenant in DB columns: <code>plaid_items.access_token_encrypted</code>, <code>ofx_dc_connections.username_encrypted</code>, <code>ofx_dc_connections.password_encrypted</code>.</li>
+</ul>
+<p>Rotating the KEK means re-wrapping every DEK and re-encrypting every short secret under a new KEK, then telling the server the new KEK is the current one.</p>
+<h2 id="when-to-rotate">When to rotate<a class="heading-anchor" href="#when-to-rotate">#</a></h2>
+<ul>
+<li><strong>A KEK has been exposed</strong> (in a backup, a transcript, a screenshot, a stack trace). The audit&#39;s F-13 finding caused this on the test server during the security review of 0.18.12 — the old backup format wrote the KEK to disk in plaintext.</li>
+<li><strong>A scheduled rotation</strong> every 6-12 months as a good-hygiene practice.</li>
+<li><strong>Migrating from one operator to another</strong> (the new operator should not inherit a KEK the previous operator knew).</li>
+</ul>
+<p>If a tenant&#39;s DEK is suspected of being compromised but the KEK is fine, <strong>don&#39;t rotate the KEK</strong> — use <code>POST /api/system/tenants/:id/rotate-encryption-key</code> (the per-tenant DEK rotation) instead. KEK rotation is much heavier.</p>
+<h2 id="pre-flight">Pre-flight<a class="heading-anchor" href="#pre-flight">#</a></h2>
+<ol>
+<li><strong>Take a backup</strong>. The rotation is transactional at the DB layer, but a crash between the DB commit and the <code>.env</code> write would leave the system in a recover-by-hand state. The backup is your return path.<pre><code class="language-sh">ssh srv-prod &#39;cd /opt/smrtcash &amp;&amp; docker exec smrtcash-app node /app/scripts/backup.mjs&#39;
+</code></pre>
+</li>
+<li><strong>Confirm <code>server/dist/attachments/kek-rotation.js</code> exists</strong>. The CLI imports the compiled JS — if you haven&#39;t done <code>npm run build --prefix server</code> since pulling the latest code, the CLI will fail with a clear error.</li>
+<li><strong>Coordinate downtime</strong> if this is the production server. The rotation itself takes seconds, but the container restart that follows interrupts every active session. For a low-traffic install, do it in your maintenance window. For a busier install, announce it.</li>
+</ol>
+<h2 id="run">Run<a class="heading-anchor" href="#run">#</a></h2>
+<pre><code class="language-sh"># SSH into the server
+ssh srv-prod
+cd /opt/smrtcash
+
+# Generate + apply a fresh KEK (interactive — asks for &quot;ROTATE&quot; confirmation)
+docker exec -it smrtcash-app node /app/scripts/rotate-kek.mjs
+
+# Or non-interactive:
+docker exec smrtcash-app node /app/scripts/rotate-kek.mjs --yes
+
+# Or use your own key (must be 32 bytes base64 or 64 hex chars):
+docker exec smrtcash-app node /app/scripts/rotate-kek.mjs --new-kek &quot;$(openssl rand -base64 32)&quot; --yes
+
+# Or rehearse without changing .env:
+docker exec smrtcash-app node /app/scripts/rotate-kek.mjs --dry-run
+</code></pre>
+<p>The script will:</p>
+<ol>
+<li>Confirm with you (&quot;Type ROTATE to proceed&quot;).</li>
+<li>Open a DB transaction.</li>
+<li>Rewrap every <code>tenant_encryption_keys.wrapped_dek</code> row.</li>
+<li>Re-encrypt every <code>plaid_items.access_token_encrypted</code>.</li>
+<li>Re-encrypt every <code>ofx_dc_connections.{username,password}_encrypted</code> pair.</li>
+<li>Commit the transaction.</li>
+<li>Write the new KEK into <code>.env</code> (backing up the old file to <code>.env.bak.&lt;timestamp&gt;</code>).</li>
+<li>Print a &quot;now restart the container&quot; reminder.</li>
+</ol>
+<p>If anything fails before step 7, the DB transaction is rolled back and the old KEK is still the correct one. Nothing on disk changed.</p>
+<p>If the script fails after the DB commit but before the <code>.env</code> write — extremely unlikely, but: the script prints the new KEK before it tries to write. Save that value, then either re-run with <code>--new-kek &lt;that-value&gt;</code> or paste it into <code>.env</code> manually.</p>
+<h2 id="restart">Restart<a class="heading-anchor" href="#restart">#</a></h2>
+<p>The running container still has the OLD KEK in its <code>process.env</code> from boot. Until you restart, every write to a KEK-encrypted column will use the OLD KEK, which can no longer be unwrapped on the next read.</p>
+<pre><code class="language-sh">docker compose up -d --force-recreate app
+</code></pre>
+<p>Confirm:</p>
+<pre><code class="language-sh">curl https://your-host/api/health    # should return {&quot;status&quot;:&quot;ok&quot;}
+# Then log in via the web app and verify:
+#   - Existing receipts open (image preview renders without error)
+#   - Plaid sync runs (Settings → Connections → Sync now)
+#   - OFX-DC sync runs if you use one
+</code></pre>
+<h2 id="verify">Verify<a class="heading-anchor" href="#verify">#</a></h2>
+<p>If anything is mis-encrypted after the rotation, the server logs will show:</p>
+<pre><code>Error: Unsupported state or unable to authenticate data
+   at Decipheriv.final ...
+</code></pre>
+<p>That&#39;s AES-GCM tag mismatch. It means data in DB was written under one KEK but the running process holds another. Recovery options:</p>
+<ul>
+<li><strong>The DB was rewrapped but the container still has the old KEK loaded</strong> → restart the container, then everything should work.</li>
+<li><strong>Some new data was written between the DB commit and the restart</strong> → that data was encrypted under the OLD KEK because the running process still had it. The fix is to delete those specific rows and re-do whatever action created them (re-link Plaid, re-enter OFX-DC creds).</li>
+<li><strong>The <code>.env</code> file got the new KEK but the rotation transaction was somehow aborted</strong> → very unlikely (the script commits before writing). Restore <code>.env.bak.&lt;timestamp&gt;</code> and you&#39;re back on the old KEK.</li>
+</ul>
+<h2 id="after-rotation">After rotation<a class="heading-anchor" href="#after-rotation">#</a></h2>
+<ul>
+<li>Delete the <code>.env.bak.&lt;timestamp&gt;</code> file once you&#39;re confident the rotation worked. It still contains the OLD KEK, which is the value you were trying to invalidate.</li>
+<li>If the OLD KEK was in any backup snapshot prior to 0.18.13, those backups must also be deleted or have their <code>env.snapshot.json</code> files removed. (Post-0.18.13, secret keys are never written to backups in the first place; see commit 16ad964.)</li>
+<li>Make a note in the operator log when the rotation happened.</li>
+</ul>
+<h2 id="what-rotation-does-not-do">What rotation does NOT do<a class="heading-anchor" href="#what-rotation-does-not-do">#</a></h2>
+<ul>
+<li>It does <strong>not</strong> rotate per-tenant DEKs. Each tenant&#39;s DEK material is unchanged — only the envelope around it is replaced. A tenant whose DEK is suspected of being compromised still needs <code>rotate-encryption-key</code> (per-tenant) separately.</li>
+<li>It does <strong>not</strong> re-encrypt the actual attachment files on disk. Those are encrypted with the DEK, not the KEK, so they don&#39;t need to change.</li>
+<li>It does <strong>not</strong> rotate <code>SESSION_SECRET</code>, <code>STRIPE_*</code>, <code>SMTP_PASS</code>, or any other env-resident secret. Those are independent and have their own rotation procedures (mostly: change the env, restart).</li>
+<li>It does <strong>not</strong> touch the <code>audit_log</code> table or any other plaintext column. Nothing about the rotation is observable in audit history beyond the restart event.</li>
+</ul>
+<h2 id="what-gets-logged">What gets logged<a class="heading-anchor" href="#what-gets-logged">#</a></h2>
+<p>The rotation runs offline (script invocation), so no audit row is written from the script itself. Add an external operator log entry (PagerDuty event, Slack message, whatever your norm is) so there&#39;s a record outside the system.</p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-27 13:47:33 UTC · commit cff74b2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

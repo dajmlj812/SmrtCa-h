@@ -379,6 +379,59 @@ a card-network event.</li>
 tenants, no new subs) usually means a Checkout regression.</li>
 </ul>
 <hr>
+<h2 id="backups-failing-with-eacces-on-databackups">Backups failing with EACCES on <code>/data/backups</code><a class="heading-anchor" href="#backups-failing-with-eacces-on-databackups">#</a></h2>
+<h3 id="symptom">Symptom<a class="heading-anchor" href="#symptom">#</a></h3>
+<p><code>POST /api/backups/run</code> (or the scheduled tick) returns / logs:</p>
+<pre><code>EACCES: permission denied, mkdir &#39;/data/backups/2026-MM-DD_HH-MM-SS&#39;
+</code></pre>
+<h3 id="root-cause">Root cause<a class="heading-anchor" href="#root-cause">#</a></h3>
+<p>The app container runs as <code>node</code> (UID 1000) with <code>cap_drop: ALL</code>. The
+<code>/data/backups</code> directory is a docker volume mount; if the volume was
+just created (fresh stack, or after <code>docker compose down -v</code>) the host
+path is owned by <code>root:root</code> and the container has no way to chown it
+from inside — the dropped capabilities prevent it.</p>
+<p>This has bitten us twice (prod cutover + a test redeploy). Boot-time
+detection now logs a bordered banner to stderr when this happens
+(<code>server/src/domain/backup-scheduler.ts</code> <code>checkBackupDirWritable</code>), so
+<code>docker compose logs app</code> shows the fix in plain English.</p>
+<h3 id="fix">Fix<a class="heading-anchor" href="#fix">#</a></h3>
+<p>On the <strong>docker host</strong> (not inside the container):</p>
+<pre><code class="language-bash"># Resolve the volume&#39;s host path
+HOST_DIR=$(docker volume inspect smrtcash_smrtcash-backups \
+  --format &quot;{{.Mountpoint}}&quot;)
+
+# Chown to UID 1000 (the container&#39;s node user — different /etc/passwd
+# name but same UID as the host&#39;s `ubuntu` on most distros).
+chown -R 1000:1000 &quot;$HOST_DIR&quot;
+
+# Verify
+ls -la &quot;$HOST_DIR&quot;
+</code></pre>
+<h3 id="verify-the-fix">Verify the fix<a class="heading-anchor" href="#verify-the-fix">#</a></h3>
+<pre><code class="language-bash"># Trigger one backup; should write a fresh timestamped dir and return success.
+docker exec smrtcash-app node -e &quot;
+import(&#39;./dist/domain/backup-runner.js&#39;).then(async (m) =&gt; {
+  const r = await m.runBackup({ kind: &#39;manual&#39; });
+  console.log(JSON.stringify(r, null, 2));
+}).catch(e =&gt; { console.error(&#39;FAIL:&#39;, e.message); process.exit(1); });
+&quot;
+</code></pre>
+<p>Successful runs show <code>&quot;status&quot;:&quot;success&quot;</code> and a non-zero <code>db_bytes</code>.
+After the chown, the boot-time check on the next container restart
+also goes quiet (success path is silent — only failures log).</p>
+<h3 id="when-this-recurs">When this recurs<a class="heading-anchor" href="#when-this-recurs">#</a></h3>
+<ul>
+<li>After any <code>docker compose down -v</code> (volumes are destroyed + recreated)</li>
+<li>After a fresh stack provision on a new host</li>
+<li>After deleting + recreating a specific volume (<code>docker volume rm</code>)</li>
+<li><strong>Not</strong> after plain <code>docker compose down</code> (volumes survive)</li>
+<li><strong>Not</strong> after <code>docker compose up -d --build app</code> (no volume churn)</li>
+</ul>
+<p>If the boot banner fires unexpectedly without a known volume reset,
+check <code>docker volume ls</code> for stray sibling volumes (e.g.
+<code>smrtcah_smrtcash-backups</code> from the <code>$h</code> path-name footgun — see
+local-dev memory).</p>
+<hr>
 <h2 id="useful-one-liners">Useful one-liners<a class="heading-anchor" href="#useful-one-liners">#</a></h2>
 <pre><code class="language-bash"># How many tenants, paying vs not
 psql &quot;$DATABASE_URL&quot; -c \
@@ -486,7 +539,7 @@ playbook entirely — there&#39;s nothing to fix.</p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 04:02:37 UTC · commit 0f5907e</span>
+  <span>Generated 2026-05-27 13:47:32 UTC · commit cff74b2</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

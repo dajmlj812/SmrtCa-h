@@ -161,12 +161,240 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.18.11 + 0.18.12 close out the 0.18.x competitive-parity series.
-0.18.11 ships the SaaS deploy walkthrough + an operator runbook
-entry for the verification-gate stuck-user case. 0.18.12 adds
-URL-shape validation on every URL-typed setting (with a
-specific catch for the <code>@</code>-instead-of-<code>.</code> typo that drove this
-whole slice).</em></p>
+<p><em>0.21.x arc is shipped end-to-end (0.21.0–0.21.7) plus 0.21.8
+budget-page split. See entries below for each slice. The
+post-arc verification walk-through lives at
+<code>docs/VERIFY_0.21.x.md</code>.</em></p>
+<hr>
+<h2 id="0218-2026-05-27-split-budgets-into-monthly-paycheck-pages">[0.21.8] — 2026-05-27 — Split Budgets into Monthly + Paycheck pages<a class="heading-anchor" href="#0218-2026-05-27-split-budgets-into-monthly-paycheck-pages">#</a></h2>
+<p>The single <code>/budgets</code> page mixed two distinct workflows: a
+month-to-date category-target table and a Paycheck-to-Paycheck
+plan with per-period cards. They share categories conceptually
+but want very different chrome, so this slice splits them.</p>
+<p><strong>Frontend</strong> (<code>web/src/pages/</code>):</p>
+<ul>
+<li>New <code>MonthlyBudgetPage</code> — categories vs. month-to-date table,
+month-picker, edit-target inline. URL <code>/monthly-budget</code>.</li>
+<li>New <code>PaycheckBudgetPage</code> — plan / period cards, wizard
+launcher, per-plan delete. URL <code>/paycheck-budget</code>.</li>
+<li>Old <code>/budgets</code> URL redirects to <code>/monthly-budget</code> so any
+existing bookmarks keep working.</li>
+</ul>
+<p><strong>Nav</strong>: under Planning, <strong>Budgets</strong> replaced by two siblings —
+<strong>Monthly budget</strong> and <strong>Paycheck budget</strong>.</p>
+<hr>
+<h2 id="0217-2026-05-27-portable-smrtcash-data-export-importer">[0.21.7] — 2026-05-27 — Portable .smrtcash data export + importer<a class="heading-anchor" href="#0217-2026-05-27-portable-smrtcash-data-export-importer">#</a></h2>
+<p>User-facing extension on the existing portability export changes
+from <code>.tar.gz</code> to <code>.smrtcash</code> (still a gzipped tarball). New
+<code>importTenantBundle()</code> rehydrates the core tables back into a
+fresh tenant.</p>
+<p><strong>Server</strong> (<code>server/src/domain/portability.ts</code>,
+<code>server/src/routes/portability.ts</code>):</p>
+<ul>
+<li>Renamed suggested filename to <code>.smrtcash</code>.</li>
+<li><code>importTenantBundle(targetTenantId, archivePath)</code> — extracts,
+parses <code>tenant.json</code>, rehydrates <code>categories</code> (parents first
+with child remapping), <code>accounts</code>, and <code>transactions</code> with FK
+remapping. Returns counts + <code>skipped</code> list.</li>
+<li><code>POST /api/portability/import</code> — admin-only multipart upload
+accepting the <code>.smrtcash</code> file. Imports into the CURRENT
+tenant; caller is expected to use an empty tenant for clean
+rehydration. Writes an audit log entry.</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/pages/WorkspacePage.tsx</code>):</p>
+<ul>
+<li>Data portability section gains an Import file picker, a
+confirmation prompt, and a result summary banner.</li>
+</ul>
+<p><strong>Known follow-ups</strong> (returned in <code>skipped</code>): budgets, bills,
+recurring income, holdings, and attachment file bodies are not
+yet rehydrated by the importer.</p>
+<hr>
+<h2 id="0216-2026-05-27-manual-subscription-cancellation-queue-scoped-down">[0.21.6] — 2026-05-27 — Manual subscription cancellation queue (scoped down)<a class="heading-anchor" href="#0216-2026-05-27-manual-subscription-cancellation-queue-scoped-down">#</a></h2>
+<p>The roadmap entry described automated cancellations via
+Playwright. After review of the ToS / unauthorized-access
+exposure, scope was reduced to a manual queue.</p>
+<p><strong>Server</strong> (<code>server/src/db/migrations/068_cancellation_queue.sql</code>,
+<code>server/src/routes/cancellation-queue.ts</code>):</p>
+<ul>
+<li>New <code>cancellation_queue</code> table with a state machine
+(<code>queued → in_progress → done | couldnt | abandoned</code>),
+optional <code>bill_id</code> backref, <code>cancel_url</code>, <code>monthly_cents</code>,
+<code>notes</code>. Partial index on open rows.</li>
+<li><code>/api/cancellation-queue</code> CRUD with status filter
+(<code>open</code> / <code>closed</code> / specific state).</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/pages/CancellationsPage.tsx</code>):</p>
+<ul>
+<li>New <code>/cancellations</code> page in the Planning nav, per-row
+state-transition buttons, monthly-savings rollup of completed
+rows, add/edit modal.</li>
+</ul>
+<p><strong>Deliberately NOT in scope</strong>: stored vendor credentials,
+outbound HTTP on the user&#39;s behalf, headless-browser flows.</p>
+<hr>
+<h2 id="0215-2026-05-27-scenario-cash-flow-forecasting">[0.21.5] — 2026-05-27 — Scenario cash-flow forecasting<a class="heading-anchor" href="#0215-2026-05-27-scenario-cash-flow-forecasting">#</a></h2>
+<p>What-if overlay on top of the existing <code>/api/cash-flow</code> projection.</p>
+<p><strong>Server</strong> (<code>server/src/routes/bills.ts</code>):</p>
+<ul>
+<li><code>/api/cash-flow</code> accepts optional <code>incomePct</code>, <code>expensePct</code>,
+and <code>oneTime</code> (comma-separated <code>date:cents</code> pairs) query
+params. Response gains a <code>scenario</code> block alongside the
+baseline series.</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/api.ts</code>,
+<code>web/src/pages/ScenarioPage.tsx</code>):</p>
+<ul>
+<li><code>api.cashFlow()</code> is now <code>({ days, scenario })</code>; legacy
+positional <code>cashFlow(days)</code> callers updated.</li>
+<li>New <code>/scenarios</code> page in the Planning nav. Two sliders
+(50–200% on income / expense), repeatable one-time event
+rows, side-by-side baseline-vs-scenario chart.</li>
+</ul>
+<hr>
+<h2 id="0214-2026-05-27-investment-performance-twrr-irr-vs-benchmark">[0.21.4] — 2026-05-27 — Investment performance: TWRR, IRR, vs benchmark<a class="heading-anchor" href="#0214-2026-05-27-investment-performance-twrr-irr-vs-benchmark">#</a></h2>
+<p>Time-weighted and money-weighted returns plus a S&amp;P 500
+benchmark comparison.</p>
+<p><strong>Server</strong>
+(<code>server/src/domain/investment-performance.ts</code>,
+<code>server/src/routes/investments.ts</code>):</p>
+<ul>
+<li><code>twrr()</code> — sub-period multiplication across cash flows.</li>
+<li><code>irr()</code> — Newton-Raphson with bisection fallback.</li>
+<li><code>annualize()</code> — period-length → annualized rate.</li>
+<li><code>benchmarkCumulativeReturn()</code> — static yearly S&amp;P 500
+total-return table; accepts optional override.</li>
+<li><code>GET /api/investments/performance</code> returns per-account +
+portfolio numbers over the requested window.</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/pages/InvestmentsPage.tsx</code>):</p>
+<ul>
+<li>New Performance section at the top with start/end pickers,
+four metric cards (TWRR, IRR, benchmark, vs benchmark), and
+a per-account table.</li>
+</ul>
+<p><strong>Caveats</strong>: beginning-of-period account value is approximated
+from cumulative prior-balance transactions; precise historical
+TWRR needs daily holdings snapshots (follow-up).</p>
+<hr>
+<h2 id="0213-2026-05-27-non-traditional-household-models">[0.21.3] — 2026-05-27 — Non-traditional household models<a class="heading-anchor" href="#0213-2026-05-27-non-traditional-household-models">#</a></h2>
+<p>Three new primitives for households that aren&#39;t &quot;one couple,
+one shared account&quot;:</p>
+<p><strong>Server</strong>
+(<code>server/src/db/migrations/067_household_participants.sql</code>,
+<code>server/src/routes/household.ts</code>):</p>
+<ul>
+<li><code>household_participants</code> — named people (spouse / child /
+co_parent / roommate / dependent / other), optional email +
+color.</li>
+<li><code>account_splits</code> — per-account percentage allocation across
+participants. App-layer enforces sum == 100.</li>
+<li><code>custody_periods</code> — date-ranged &quot;this account is 100% this
+participant&#39;s&quot; rules; latest start wins for overlaps.</li>
+<li><code>/api/household/participants/totals</code> — applies splits and
+custody to produce per-participant year-to-date rollup.</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/pages/HouseholdPage.tsx</code>):</p>
+<ul>
+<li><code>/household</code> page with sections for participants, account
+splits, custody periods, and the rollup table.</li>
+<li>Modal forms for add/edit/delete of each resource.</li>
+</ul>
+<p><strong>Out of scope</strong>: cross-tenant invites — existing
+membership/role flow already covers spouse/child access.</p>
+<hr>
+<h2 id="0212-2026-05-27-receipt-warranty-tracking">[0.21.2] — 2026-05-27 — Receipt → warranty tracking<a class="heading-anchor" href="#0212-2026-05-27-receipt-warranty-tracking">#</a></h2>
+<p><strong>Server</strong>
+(<code>server/src/db/migrations/065_warranties.sql</code>,
+<code>server/src/db/migrations/066_insight_cards_warranty_kind.sql</code>,
+<code>server/src/routes/warranties.ts</code>):</p>
+<ul>
+<li><code>warranties</code> table (item / vendor / purchase + expiry dates,
+optional <code>purchase_cents</code>, optional <code>transaction_id</code> +
+<code>attachment_id</code> backrefs).</li>
+<li><code>/api/warranties</code> CRUD with status filter
+(<code>active</code> / <code>expired</code> / <code>expiring</code>).</li>
+<li><code>findExpiringWarranties()</code> used by the daily insights
+scheduler; <code>insight_cards.kind</code> CHECK extended with
+<code>warranty_expiring</code>.</li>
+<li><code>insights-generator.ts</code> emits a card for any warranty within
+30 days of expiry with severity escalating warn → critical.</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/pages/WarrantiesPage.tsx</code>):</p>
+<ul>
+<li><code>/warranties</code> page in the Tools nav, status filter, add/edit
+modal, summary cards (active / expiring / expired / covered
+value).</li>
+</ul>
+<p><strong>Bug fix</strong> (<code>cff74b2</code>): the original migration used
+<code>CURRENT_DATE</code> in an index <code>WHERE</code> clause — Postgres requires
+that to be <code>IMMUTABLE</code>. Dropped the partial-predicate; small
+warranty row counts make a full index fine.</p>
+<hr>
+<h2 id="0211-2026-05-27-refund-chargeback-tracking">[0.21.1] — 2026-05-27 — Refund / chargeback tracking<a class="heading-anchor" href="#0211-2026-05-27-refund-chargeback-tracking">#</a></h2>
+<p><strong>Server</strong> (<code>server/src/db/migrations/064_transactions_refund_status.sql</code>,
+<code>server/src/routes/transactions.ts</code>):</p>
+<ul>
+<li>New columns on <code>transactions</code>: <code>refund_status</code>, <code>refund_note</code>,
+<code>refund_updated_at</code>. Allowed states: <code>refund_pending</code>,
+<code>refunded</code>, <code>chargeback_initiated</code>, <code>disputed</code>, <code>closed</code>.
+Partial index on open (non-resolved) rows.</li>
+<li><code>PATCH /api/transactions/:id</code> accepts <code>refundStatus</code> +
+<code>refundNote</code>; <code>refund_updated_at</code> auto-stamps on every change.</li>
+<li><code>/api/transactions</code> returns the three new fields per row.</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/components/RefundStatusModal.tsx</code>,
+<code>web/src/components/TransactionTable.tsx</code>,
+<code>web/src/pages/TransactionsPage.tsx</code>):</p>
+<ul>
+<li>TransactionTable shows a coloured <code>↩ {status}</code> pill in the
+description meta when set.</li>
+<li>A <code>↩</code> icon in the row&#39;s actions column opens the modal for
+set / edit / clear.</li>
+<li>Modal shows the transaction&#39;s merchant + amount + date and
+the last-updated timestamp.</li>
+</ul>
+<hr>
+<h2 id="0210-2026-05-27-real-tax-export-schedule-c-mileage-txf">[0.21.0] — 2026-05-27 — Real tax export: Schedule C, mileage, TXF<a class="heading-anchor" href="#0210-2026-05-27-real-tax-export-schedule-c-mileage-txf">#</a></h2>
+<p>Mint-class tax export — Schedule C grouping, IRS-compliant
+mileage log, TurboTax-importable TXF v042 file.</p>
+<p><strong>Server</strong>
+(<code>server/src/db/migrations/063_mileage_log.sql</code>,
+<code>server/src/domain/tax-schedule-c.ts</code>,
+<code>server/src/routes/mileage.ts</code>,
+<code>server/src/routes/tax-year.ts</code>):</p>
+<ul>
+<li>New <code>mileage_log</code> table with date / purpose / miles per trip,
+optional vehicle + odometer + locations.</li>
+<li><code>SCHEDULE_C_LINES</code> table mapping line number → label → TXF
+code with keyword fallbacks for the free-text <code>tax_category</code>
+column. <code>matchScheduleCLine()</code> does exact-label / &quot;Schedule C<ul>
+<li>Line N&quot; prefix / keyword matching.</li>
+</ul>
+</li>
+<li><code>buildTxf()</code> emits TXF v042 records (V042 / ASmrtCash /
+Dmm/dd/yyyy / per-line TD / N{code} / C1 / L1 / $amount /
+P{description} / ^).</li>
+<li>New endpoints:<ul>
+<li><code>/api/mileage</code> CRUD + <code>/api/mileage/summary/:year</code>.</li>
+<li><code>/api/reports/tax-year/:year/schedule-c</code> JSON view that
+rolls free-text <code>tax_category</code> labels into Schedule C
+lines and folds business mileage onto line 9.</li>
+<li><code>/api/reports/tax-year/:year.txf</code> — TurboTax-importable
+file.</li>
+<li><code>/api/reports/tax-year/:year/mileage.csv</code> — per-trip
+substantiation log.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Frontend</strong> (<code>web/src/pages/MileagePage.tsx</code>,
+<code>web/src/pages/TaxYearPage.tsx</code>):</p>
+<ul>
+<li>New <code>/mileage</code> page in Insights nav with summary cards,
+per-purpose breakdown table, trip table, add/edit modal.</li>
+<li><code>/tax</code> page gains a Summary / Schedule C tab toggle plus
+Download TXF and Mileage CSV buttons in the header.</li>
+</ul>
 <hr>
 <h2 id="01812-2026-05-24-settings-url-validation-guardrails">[0.18.12] — 2026-05-24 — Settings URL validation guardrails<a class="heading-anchor" href="#01812-2026-05-24-settings-url-validation-guardrails">#</a></h2>
 <p>The <code>@</code>-instead-of-<code>.</code> typo that consumed hours of diagnosis
@@ -6868,7 +7096,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 04:02:37 UTC · commit 0f5907e</span>
+  <span>Generated 2026-05-27 13:47:32 UTC · commit cff74b2</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

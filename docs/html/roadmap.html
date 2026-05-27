@@ -262,22 +262,27 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <tr>
 <td><strong>0.19.x</strong></td>
 <td><strong>Reconciliation, investment analysis, ops debt</strong></td>
-<td>📋 Planned</td>
+<td>✅ Complete — 2026-05-26</td>
 </tr>
 <tr>
 <td><strong>0.20.x</strong></td>
 <td><strong>Agentic AI moat — proactive insights, staged actions, voice</strong></td>
-<td>📋 Planned</td>
+<td>✅ Complete — 2026-05-26</td>
 </tr>
 <tr>
 <td><strong>0.21.x</strong></td>
 <td><strong>Universal customer asks competitors haven&#39;t delivered</strong></td>
-<td>📋 Planned</td>
+<td>✅ Complete — 2026-05-27</td>
 </tr>
 <tr>
 <td><strong>0.22.x</strong></td>
 <td><strong>Production launch readiness — Stripe live, ToS, observability</strong></td>
-<td>🔜 Tomorrow</td>
+<td>✅ Complete — 2026-05-24</td>
+</tr>
+<tr>
+<td><strong>0.23.x</strong></td>
+<td><strong>Scaling — vertical upgrade runbook + horizontal architecture (read replicas, multi-instance app, object-store attachments)</strong></td>
+<td>📋 Planned</td>
 </tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
@@ -312,8 +317,8 @@ has nothing. The 0.20.x series doubles down on this.</li>
 </li>
 <li><p><strong>Pricing.</strong> We price below Monarch ($14.99/mo) and at parity
 with Simplifi ($5.99/mo, more limited). Annual at ~58% off
-monthly. The 0.19.0 slice ships a visible &quot;Save 41%&quot; badge on
-the annual tier to lead users there.</p>
+monthly. The 0.22.0 slice (promoted from 0.19.0) shipped a
+visible &quot;Save N%&quot; badge on the annual tier to lead users there.</p>
 </li>
 <li><p><strong>Mobile via PWA.</strong> Responsive web, installable to phone, one
 codebase, no app stores. Native re-evaluated only if PWA
@@ -829,23 +834,19 @@ No competitor matches it; every other comparison axis
 on or matching.</li>
 </ul>
 <hr>
-<h2 id="019x-reconciliation-investment-analysis-ops-debt">0.19.x — Reconciliation, investment analysis, ops debt 📋<a class="heading-anchor" href="#019x-reconciliation-investment-analysis-ops-debt">#</a></h2>
+<h2 id="019x-reconciliation-investment-analysis-ops-debt">0.19.x — Reconciliation, investment analysis, ops debt ✅<a class="heading-anchor" href="#019x-reconciliation-investment-analysis-ops-debt">#</a></h2>
 <p>Pulled forward the surviving deferred items from the 0.18.x
 competitive read plus the operational-debt list that had been
 parked in a &quot;Beyond v0.19+&quot; section. Ordering is by
 impact-per-day so the early wins compound.</p>
 <h3 id="planned-slices-ordered-by-impact-per-day">Planned slices (ordered by impact-per-day)<a class="heading-anchor" href="#planned-slices-ordered-by-impact-per-day">#</a></h3>
 <ul>
-<li><strong>0.19.0</strong> 📋 — <strong>Annual-pre-pay discount badge</strong> (~half
-day). Pricing already shows the yearly tier at ~58% off
-the equivalent monthly cost; the /billing page presents both
-options without leading the user toward annual. Adds a
-visible &quot;Save 41%&quot; badge on the annual card + a subtitle
-framing the yearly price in monthly-equivalent terms. No
-pricing change, no Stripe change — pure presentation lift.
-Quickest win in the series; ships first so the conversion
-signal is live before the heavier slices land.</li>
-<li><strong>0.19.1</strong> 📋 — <strong>Bill negotiation assist</strong> (~1 day). Same
+<li><strong>0.19.0</strong> ✅ — <strong>Promoted to <a href="#022x--production-launch-readiness-">0.22.0</a></strong>
+and shipped 2026-05-25. Visible &quot;Save N%&quot; badge on annual
+cards + monthly-equivalent subtitle on /billing. Per-plan
+discount (Plus 41%, Starter + Family 38%) computed from the
+actual price delta in <code>plans.ts</code>.</li>
+<li><strong>0.19.1</strong> ✅ — <strong>Bill negotiation assist</strong> (~1 day). Same
 pattern as 0.18.1 (cancellation help) but for an adjacent
 category. For detected recurring utilities (electric, gas,
 water, internet, cell), surface the company&#39;s
@@ -856,7 +857,7 @@ big-N national providers; per-bill override fields on the
 existing bill row carry user-specific edits. Reuses the
 modal pattern from 0.18.1 — small additional code, large
 user-value lift.</li>
-<li><strong>0.19.2</strong> 📋 — <strong>Cleared / uncleared reconciliation</strong>
+<li><strong>0.19.2</strong> ✅ — <strong>Cleared / uncleared reconciliation</strong>
 (~2–3 days). The Banktivity / Moneydance power-user gap.
 Adds <code>transactions.cleared_at timestamptz</code> (nullable). A
 new account-detail &quot;Reconcile&quot; workflow lets the user enter
@@ -867,7 +868,7 @@ commit (sets <code>cleared_at = statement_date</code> on the touched
 rows). Per-row cleared toggle on the Transactions table for
 ad-hoc marking. New &quot;as-of cleared balance&quot; available in
 the account balance API.</li>
-<li><strong>0.19.3</strong> 📋 — <strong>Investment analysis (Empower-class)</strong>
+<li><strong>0.19.3</strong> ✅ — <strong>Investment analysis (Empower-class)</strong>
 (~3–5 days). Three sub-features on the existing
 <code>holdings</code> + <code>retirement_projections</code> data:<ul>
 <li><strong>Fee analyzer</strong> — accepts a per-holding <code>expense_ratio</code>
@@ -885,7 +886,7 @@ the percentile fan (10th / 50th / 90th) instead of a
 single deterministic line.</li>
 </ul>
 </li>
-<li><strong>0.19.4</strong> 📋 — <strong>Observability</strong> (~2–3 days). Today the
+<li><strong>0.19.4</strong> ✅ — <strong>Observability</strong> (~2–3 days). Today the
 /health page covers process metrics; an external sink is
 the gap. This slice ships:<ul>
 <li><strong>Structured request logs</strong> — JSON-line per HTTP request
@@ -907,7 +908,7 @@ the anomaly-alert pattern from 0.13.2).</li>
 </li>
 </ul>
 <hr>
-<h2 id="020x-agentic-ai-moat">0.20.x — Agentic AI moat 📋<a class="heading-anchor" href="#020x-agentic-ai-moat">#</a></h2>
+<h2 id="020x-agentic-ai-moat">0.20.x — Agentic AI moat ✅<a class="heading-anchor" href="#020x-agentic-ai-moat">#</a></h2>
 <p>The single biggest unexploited lever in this space. SmrtCash
 already has 17 audit-logged tool calls in the assistant; no
 competitor has more than a handful, and Monarch&#39;s 2024
@@ -919,7 +920,7 @@ don&#39;t compete on &quot;your hardware&quot; anymore — we compete on what
 the assistant does on your behalf.</p>
 <h3 id="planned-slices-ordered-by-impact-per-day">Planned slices (ordered by impact-per-day)<a class="heading-anchor" href="#planned-slices-ordered-by-impact-per-day">#</a></h3>
 <ul>
-<li><strong>0.20.0</strong> 📋 — <strong>Proactive insight cards on the dashboard</strong>
+<li><strong>0.20.0</strong> ✅ — <strong>Proactive insight cards on the dashboard</strong>
 (~2–3 days). Every morning the assistant scans the prior
 24h + 30-day trends and surfaces 0–3 &quot;noticed this&quot; cards on
 the dashboard: an anomaly above the existing scanner
@@ -931,7 +932,7 @@ already exist (anomalies 0.13.2, cash-flow forecast 0.18.0,
 goal pace 0.18.5) — this slice wraps them in AI-curated copy
 and dashboard placement. <strong>Changes the perceptual feel of the
 product more than any other ~3-day slice.</strong></li>
-<li><strong>0.20.1</strong> 📋 — <strong>Multi-step staged actions in the assistant</strong>
+<li><strong>0.20.1</strong> ✅ — <strong>Multi-step staged actions in the assistant</strong>
 (~2–3 days). Today the assistant fires one tool call at a
 time and changes are immediate. This slice adds a &quot;stage,
 preview, commit&quot; wrapper: the assistant proposes a diff
@@ -941,7 +942,7 @@ reviews + clicks Apply, every change is audit-logged, and a
 single &quot;undo this batch&quot; button reverts the whole thing.
 Unlocks user trust for complex requests like &quot;reorganize my
 budgets along Ramsey 50/30/20.&quot;</li>
-<li><strong>0.20.2</strong> 📋 — <strong>Voice-first PWA assistant</strong> (~3–5 days).
+<li><strong>0.20.2</strong> ✅ — <strong>Voice-first PWA assistant</strong> (~3–5 days). Shipped MVP using Web Speech API (Safari on-device, Chrome/Edge cloud-routed). Whisper.cpp WASM upgrade is a documented follow-up for strict on-device privacy across all browsers.
 Open the assistant on mobile, tap a mic icon, say &quot;Log a $87
 Costco run, split 60/40 grocery/household.&quot; Whisper.cpp WASM
 for on-device speech-to-text (no audio leaves the phone),
@@ -960,86 +961,101 @@ Slice TBD; depends on 0.20.0 landing first to validate the
 insight-cards model.</li>
 </ul>
 <hr>
-<h2 id="021x-universal-customer-asks">0.21.x — Universal customer asks 📋<a class="heading-anchor" href="#021x-universal-customer-asks">#</a></h2>
-<p>These are the loudest unmet asks on r/MonarchMoney, r/Simplifi,
+<h2 id="021x-universal-customer-asks">0.21.x — Universal customer asks ✅<a class="heading-anchor" href="#021x-universal-customer-asks">#</a></h2>
+<p>These were the loudest unmet asks on r/MonarchMoney, r/Simplifi,
 the YNAB forums, and Empower reviews. None of the cloud PFM
-competitors have shipped them; that&#39;s our opening. Ordered by
-&quot;how often does the complaint show up + how hard is the lift.&quot;</p>
-<h3 id="planned-slices-ordered-by-impact-per-day">Planned slices (ordered by impact-per-day)<a class="heading-anchor" href="#planned-slices-ordered-by-impact-per-day">#</a></h3>
+competitors had shipped them at the time; that was our opening.
+Shipped end-to-end on 2026-05-27.</p>
+<h3 id="shipped-slices">Shipped slices<a class="heading-anchor" href="#shipped-slices">#</a></h3>
 <ul>
-<li><strong>0.21.0</strong> 📋 — <strong>Real tax export</strong> (~3–4 days). Schedule C
-for self-employed users, mileage from the existing
-<code>vehicles</code> + <code>commute_routes</code> data, home-office tracking
-as a category flag. Output as a TurboTax-importable TXF
-file + a CSV that follows the IRS line-numbering
-convention. <strong>Mint had this; nobody else does</strong> — was a
-#1 reason people stuck with Mint and a #1 grief since the
-shutdown. Probably the biggest &quot;obvious unmet ask&quot; in the
-market.</li>
-<li><strong>0.21.1</strong> 📋 — <strong>Refund / chargeback tracking</strong> (~1–2
-days). New <code>transactions.refund_status</code> column (&#39;pending&#39;,
-&#39;refunded&#39;, &#39;denied&#39;) + optional refund-link to the
-original transaction. UI: a &quot;Dispute&quot; / &quot;Mark refunded&quot;
-action on every transaction row; a dashboard tile showing
-pending disputes. No PFM closes this loop today — users
-manually track refunds in a spreadsheet.</li>
-<li><strong>0.21.2</strong> 📋 — <strong>Receipt → warranty tracking</strong> (~2 days).
-Existing receipt OCR (Phase 3) already extracts
-merchant + amount + date. Add an optional &quot;this item is
-under warranty until&quot; field; render a <code>/warranties</code>
-view of all items with expiry dates, sortable by
-expiring-soonest. Email reminder 30 days before expiry.</li>
-<li><strong>0.21.3</strong> 📋 — <strong>Non-traditional household models</strong>
-(~3–5 days). Today the tenant ↔ user model assumes &quot;one
-household, one couple.&quot; Real households are messier:
-divorced co-parents splitting kid expenses 50/50,
-adult children managing aging parents&#39; bills under a
-separate-but-visible context, polycules, financially-
-cohabiting roommates. Three sub-features:<ul>
-<li><strong>Per-account &quot;shared-with&quot;</strong> — extends the per-account
-RBAC from 0.13.4 with a &quot;split-percentage&quot; config.
-Mark account X as 60% me / 40% other-tenant; the
-aggregations show me 60% of every transaction.</li>
-<li><strong>Cross-tenant visibility (read-only)</strong> — invite
-another tenant&#39;s user to see specific accounts as a
-read-only observer. Eldercare use case.</li>
-<li><strong>Custody-period assignment</strong> — for shared-kid
-expenses, tag a date range as &quot;user A&#39;s custody&quot;;
-spend in that range is attributed accordingly for
-reimbursement reporting.</li>
+<li><strong>0.21.0</strong> ✅ — <strong>Real tax export</strong> (commit <code>edc9f4f</code>).
+New <code>mileage_log</code> table for IRS-compliant per-trip logging;
+<code>tax-schedule-c.ts</code> maps free-text <code>tax_category</code> labels onto
+Schedule C lines (exact-label, &quot;Schedule C - Line N&quot; prefix,
+keyword fallback). <code>/api/reports/tax-year/:year/schedule-c</code>
+JSON, <code>.txf</code> (TurboTax v042), and <code>/mileage.csv</code> endpoints.
+<code>/tax</code> page gains a Summary / Schedule C tab + Download TXF<ul>
+<li>Mileage CSV buttons; new <code>/mileage</code> page in Insights.</li>
 </ul>
 </li>
-<li><strong>0.21.4</strong> 📋 — <strong>Investment performance analysis</strong>
-(~2–3 days). The 0.19.3 fee-analyzer slice handles the
-cost side; this slice handles returns. Per-holding TWRR
-(time-weighted return), portfolio IRR (money-weighted),
-vs-benchmark (S&amp;P 500 / 60/40 default; user-overridable).
-Empower shows positions but not these metrics; users
-ask for them constantly.</li>
-<li><strong>0.21.5</strong> 📋 — <strong>Scenario cash-flow forecasting</strong>
-(~2–3 days). Extends the 0.18.0 cash-flow hero with
-&quot;what-if&quot; sliders: income loss for N months, one-time
-big expense, rate change on a debt. Re-runs the
-projection in real time. Simplifi shows a single
-deterministic line; nobody offers scenario modeling.</li>
-<li><strong>0.21.6</strong> 📋 — <strong>Subscription cancellation execution</strong>
-(~5–7 days, legally risky). 0.18.1 ships cancellation
-<em>instructions</em>; this slice adds <strong>execution</strong>.
-Consent-based headless browser (Playwright in a worker
-container) that logs into the merchant with credentials
-the user provides, navigates the cancel flow, captures
-proof. Rocket Money charges $9/mo for this and won&#39;t
-let people self-host. Legal review required per
-jurisdiction before flagging this for actual users —
-the slice covers the technical build only.</li>
-<li><strong>0.21.7</strong> 📋 — <strong>Truly portable data export</strong> (~2
-days). The existing portability export (0.13.0) is
-CSV + JSON of the raw tables. This slice adds a
-single-file <code>.smrtcash</code> bundle: every table + every
-attachment + the tenant&#39;s DEK (unwrapped, so the export
-is self-decrypting on import elsewhere). Round-trips
-back into the importer cleanly. The Mint-shutdown
-audience cares about this in a deep way.</li>
+<li><strong>0.21.1</strong> ✅ — <strong>Refund / chargeback tracking</strong> (commit
+<code>1869230</code>). <code>refund_status</code> lifecycle on transactions
+(<code>refund_pending → refunded | disputed | chargeback_initiated → closed</code>), with <code>refund_note</code> + <code>refund_updated_at</code>. UI: a
+↩ pill in the description meta and a refund action that
+opens <code>RefundStatusModal</code>.</li>
+<li><strong>0.21.2</strong> ✅ — <strong>Receipt → warranty tracking</strong> (commit
+<code>f3cf8ba</code>). <code>warranties</code> table (item / vendor / purchase +
+expiry dates / optional price / transaction + attachment
+backrefs). <code>/warranties</code> page with status filter and edit
+modal. Daily insights scanner emits a <code>warranty_expiring</code>
+card with escalating severity as the date approaches.</li>
+<li><strong>0.21.3</strong> ✅ — <strong>Non-traditional household models</strong>
+(commit <code>eef8ddd</code>). Three new tables: <code>household_participants</code>
+(named people), <code>account_splits</code> (percentage allocation),
+<code>custody_periods</code> (date-ranged ownership). <code>/household</code> page
+manages all three plus a per-participant year-to-date rollup.
+Cross-tenant invites are deferred — the existing
+membership/role flow covers spouse/child cases.</li>
+<li><strong>0.21.4</strong> ✅ — <strong>Investment performance analysis</strong> (commit
+<code>3064d53</code>). New <code>investment-performance.ts</code> domain: TWRR,
+IRR (Newton-Raphson with bisection fallback), annualize, and
+S&amp;P 500 benchmark from a static yearly-return table.
+<code>/api/investments/performance</code> returns per-account + portfolio
+numbers; <code>/investments</code> page gains a Performance section.
+Caveat: beginning-of-period value is approximated from
+cumulative prior-balance transactions — precise historical
+TWRR needs daily holdings snapshots (follow-up).</li>
+<li><strong>0.21.5</strong> ✅ — <strong>Scenario cash-flow forecasting</strong> (commit
+<code>c287400</code>). <code>/api/cash-flow</code> accepts <code>incomePct</code>,
+<code>expensePct</code>, and <code>oneTime</code> query params and returns both
+baseline and scenario series. New <code>/scenarios</code> page with
+sliders (50–200%), one-time event rows, and a baseline-vs-
+scenario chart in the Planning nav group.</li>
+<li><strong>0.21.6</strong> ✅ — <strong>Subscription cancellation queue, scoped
+down</strong> (commit <code>a7f9b28</code>). After review of the original
+Playwright-automation plan, scope was reduced to a manual
+queue: <code>cancellation_queue</code> table with state machine
+(<code>queued → in_progress → done | couldnt | abandoned</code>), no
+vendor credentials, no outbound automation. <code>/cancellations</code>
+page with per-row state-transition buttons + monthly-savings
+rollup of completed rows.</li>
+<li><strong>0.21.7</strong> ✅ — <strong>Portable .smrtcash data export + importer</strong>
+(commit <code>0c7de6b</code>). Renamed the user-facing extension to
+<code>.smrtcash</code> (still gzipped tar under the hood) and added
+<code>importTenantBundle()</code> to rehydrate categories (parents
+first), accounts, and transactions with FK remapping.
+<code>POST /api/portability/import</code> accepts multipart upload;
+workspace page gains an Import section. Budgets / bills /
+recurring_income / holdings / attachment file bodies are
+returned in <code>skipped</code> — known follow-up work.</li>
+<li><strong>0.21.8</strong> ✅ — <strong>Split Budgets into Monthly + Paycheck pages</strong>
+(UX restructure). The single <code>/budgets</code> page that mixed the
+category-target table with the Paycheck-to-Paycheck plan
+cards is now two URLs: <code>/monthly-budget</code> (categories vs.
+month-to-date) and <code>/paycheck-budget</code> (plan / period cards
+with the wizard). Old <code>/budgets</code> URL redirects to
+<code>/monthly-budget</code> for compatibility. Nav under Planning
+shows two entries: <strong>Monthly budget</strong> + <strong>Paycheck budget</strong>.</li>
+</ul>
+<h3 id="verification">Verification<a class="heading-anchor" href="#verification">#</a></h3>
+<p>Per-slice walk-throughs are in
+<a href="VERIFY_0.21.x.html">docs/VERIFY_0.21.x.md</a> — set-up, click path,
+expected outcome for each slice. Use that doc to confirm the
+above shipped as designed before declaring the arc done.</p>
+<h3 id="stretch-deferred-from-this-arc">Stretch (deferred from this arc)<a class="heading-anchor" href="#stretch-deferred-from-this-arc">#</a></h3>
+<ul>
+<li><strong>Cross-tenant invites</strong> — was the third bullet of 0.21.3.
+Existing tenant-membership flow already covers spouse/child
+access; true cross-tenant linking deferred until there&#39;s a
+concrete use case.</li>
+<li><strong>Daily holdings snapshots</strong> — needed for precise historical
+TWRR in 0.21.4.</li>
+<li><strong>Wide importer round-trip</strong> — 0.21.7 covers categories /
+accounts / transactions. Budgets, bills, recurring_income,
+holdings, and attachment bodies still need importer work.</li>
+<li><strong>Subscription cancellation automation</strong> — the original
+0.21.6 scope. Deferred pending legal review of the ToS /
+unauthorized-access exposure.</li>
 </ul>
 <h3 id="stretch-tbd">Stretch / TBD<a class="heading-anchor" href="#stretch-tbd">#</a></h3>
 <ul>
@@ -1050,20 +1066,20 @@ in the dashboard would reduce the universal pain. Slice TBD
 pending Plaid usage in production.</li>
 </ul>
 <hr>
-<h2 id="022x-production-launch-readiness">0.22.x — Production launch readiness 🔜<a class="heading-anchor" href="#022x-production-launch-readiness">#</a></h2>
+<h2 id="022x-production-launch-readiness">0.22.x — Production launch readiness ✅<a class="heading-anchor" href="#022x-production-launch-readiness">#</a></h2>
 <p>The series that gets us to a live, paying-customer production
 deploy. Goal: <strong>production deploy tomorrow.</strong> Some items are
 codeable slices, others are one-time operator workflows
 captured as runbooks.</p>
 <h3 id="codeable-slices">Codeable slices<a class="heading-anchor" href="#codeable-slices">#</a></h3>
 <ul>
-<li><strong>0.22.0</strong> 🔜 — <strong>Annual-pre-pay discount badge</strong>
+<li><strong>0.22.0</strong> ✅ — <strong>Annual-pre-pay discount badge</strong>
 (~½ day). Promoted from 0.19.0. Visible &quot;Save 41%&quot; badge
 on the annual card on <code>/billing</code>, plus a subtitle framing
 the yearly price in monthly-equivalent terms. No pricing
 change, no Stripe change — pure presentation lift. Ships
 before launch so the conversion signal is live on day 1.</li>
-<li><strong>0.22.1</strong> 🔜 — <strong>Live-mode Stripe configuration verifier</strong>
+<li><strong>0.22.1</strong> ✅ — <strong>Live-mode Stripe configuration verifier</strong>
 (~half day). A new <code>/system/saas-readiness</code> super-only
 panel checks: live-mode secret key present, live-mode
 webhook secret present, all 4 plan products + price
@@ -1072,7 +1088,7 @@ enabled, automatic-tax setting matches operator intent.
 Each check is green/red with a one-line &quot;how to fix&quot; link
 to STRIPE_SETUP.md. Prevents the most-common cause of
 &quot;I switched to live and now everything 500s.&quot;</li>
-<li><strong>0.22.2</strong> 🔜 — <strong>Pricing + landing copy polish</strong> (~1 day).
+<li><strong>0.22.2</strong> ✅ — <strong>Pricing + landing copy polish</strong> (~1 day).
 Review every customer-facing copy surface (login, signup,
 /billing, dunning, verification email, support footer) and
 reset for paid SaaS:<ul>
@@ -1159,12 +1175,75 @@ story has to fail (drop-off attributable to install/UX)
 before a native build earns its complexity.</li>
 </ul>
 <hr>
+<h2 id="023x-scaling">0.23.x — Scaling 📋<a class="heading-anchor" href="#023x-scaling">#</a></h2>
+<p><strong>Goal:</strong> Stop reaching for &quot;stand up a new server&quot; as the answer to &quot;we&#39;re running out of capacity.&quot; Build the runbook for vertical upgrades and the architecture for horizontal scale so growth doesn&#39;t require an emergency migration.</p>
+<p>The trigger for this series is the <strong>/health → Server capacity</strong> widget (0.18.13). Once that widget says &quot;prepare a replacement environment by [date],&quot; we want the migration to be a 1-hour boring procedure, not a project.</p>
+<h3 id="0230-vertical-scale-runbook">0.23.0 — Vertical-scale runbook ⬆️<a class="heading-anchor" href="#0230-vertical-scale-runbook">#</a></h3>
+<p>Document and rehearse the cheapest answer to &quot;we need more capacity&quot;: <strong>bigger box.</strong> Until traffic justifies the architectural complexity of horizontal scale, vertical is the right move.</p>
+<p>Deliverables:</p>
+<ul>
+<li><code>docs/RUNBOOK_VERTICAL_SCALE.md</code> — step-by-step for moving SmrtCash to a beefier VM with minimal downtime:<ul>
+<li>Pre-flight: take a backup (<code>scripts/backup.mjs</code>), confirm <code>health-capacity</code> projection vs. the new VM&#39;s capacity ceiling, schedule maintenance window.</li>
+<li>Provision the new VM (CPU/RAM/disk sized to the next 12 months of projected growth + 50% headroom).</li>
+<li>Sync: copy <code>/data</code> via rsync while the old box is still serving, then short maintenance window for final delta + DB freeze.</li>
+<li>DNS swap via Cloudflare (low TTL ahead of time).</li>
+<li>Verification: hit <code>/api/health</code>, walk a smoke checklist (login, dashboard, attach receipt, run scan, sync transactions, view Stripe portal).</li>
+<li>Rollback: keep the old VM warm for 24h.</li>
+</ul>
+</li>
+<li><strong>Reusable migration script</strong> at <code>scripts/migrate-server.sh</code> that rolls those steps into one prompt-driven flow.</li>
+<li><strong>Capacity ceiling estimates</strong> documented per Hostinger VM tier (or chosen host&#39;s equivalent) so the operator knows when the next-bigger tier still won&#39;t be enough.</li>
+</ul>
+<p>Expected lifespan of vertical-only scaling: probably good through low-thousands of paying tenants. Beyond that → 0.23.1+.</p>
+<h3 id="0231-stateless-app-shared-session-store">0.23.1 — Stateless app + shared session store ↔️<a class="heading-anchor" href="#0231-stateless-app-shared-session-store">#</a></h3>
+<p>Today the app is single-instance: one container, in-memory rate limit state, file-system attachments. Sharing instances behind a load balancer requires eliminating per-instance state.</p>
+<p>Deliverables:</p>
+<ul>
+<li><strong>Redis (or Valkey) integration</strong> for the rolling rate-limit counters (when F-01 lands those — see security audit), the OCR retry queue, and any short-lived process-bound state.</li>
+<li><strong>Sessions stay in Postgres</strong> (already there — <code>sessions</code> table). No change needed; this slice is mostly about NOT introducing new instance-local state going forward.</li>
+<li><strong>Health-check endpoint</strong> that returns 200 once the app is ready to accept traffic and 503 during startup migrations. Required for a load balancer to do anything sensible during deploys.</li>
+<li><strong>Multi-instance Docker compose</strong> sample at <code>docker-compose.scale.yml</code> showing N app containers behind an Nginx LB on a single host — the &quot;scale up before scale out&quot; intermediate step.</li>
+</ul>
+<h3 id="0232-attachments-to-object-storage">0.23.2 — Attachments to object storage 📦<a class="heading-anchor" href="#0232-attachments-to-object-storage">#</a></h3>
+<p>Today receipts live on the app&#39;s local filesystem encrypted with the per-tenant DEK. That&#39;s a hard ceiling on horizontal scale because every app instance needs the same files.</p>
+<p>Deliverables:</p>
+<ul>
+<li><strong>S3-compatible client</strong> (R2 / Backblaze B2 / Wasabi / actual AWS S3) behind a small adapter — the encryption layer stays in our process; the storage layer just gets a new backend.</li>
+<li><strong>Migration script</strong> <code>scripts/migrate-attachments-to-s3.mjs</code> that walks <code>/data/attachments</code>, uploads each file as <code>&lt;bucket&gt;/&lt;tenant_id&gt;/&lt;attachment_id&gt;</code>, verifies the upload, then deletes the local file. Resumable.</li>
+<li><strong>Setting</strong>: <code>ATTACHMENT_STORAGE=local|s3</code> with <code>S3_*</code> config keys. Defaults to <code>local</code> so self-host installs aren&#39;t surprised.</li>
+<li><strong>Backup script</strong> updates: when <code>ATTACHMENT_STORAGE=s3</code>, backups skip the attachments tar and the operator relies on S3 lifecycle/versioning for that side.</li>
+<li><strong>F-31 hardening</strong>: container can finally run with <code>read-only</code> rootfs since attachments no longer write to the local FS.</li>
+</ul>
+<h3 id="0233-postgres-read-replica-connection-pooling">0.23.3 — Postgres read replica + connection pooling 📊<a class="heading-anchor" href="#0233-postgres-read-replica-connection-pooling">#</a></h3>
+<p>Once we&#39;re running N app instances, the DB becomes the next bottleneck. Two moves:</p>
+<p>Deliverables:</p>
+<ul>
+<li><strong>PgBouncer</strong> in front of Postgres (transaction-mode pooling) so app instances don&#39;t each consume a fan-out of long-held connections.</li>
+<li><strong>Read-replica routing</strong> — a <code>pool.replicaQuery()</code> helper that targets a read-only Postgres replica for the dashboard, reports, and assistant read tools. Writes still go to the primary. Transparent to the rest of the codebase because we wrap the existing <code>pool.query()</code> with the replica choice at the call site.</li>
+<li><strong>Replica lag awareness</strong> — if the replica is more than 30s behind, fall back to the primary so the user never sees stale data.</li>
+<li><strong>Documentation</strong> at <code>docs/RUNBOOK_HORIZONTAL_SCALE.md</code> covering the cutover.</li>
+</ul>
+<h3 id="0234-multi-region-optional-customer-driven">0.23.4 — Multi-region (optional, customer-driven) 🌎<a class="heading-anchor" href="#0234-multi-region-optional-customer-driven">#</a></h3>
+<p>Probably 2027+. Only worth doing once we have measurable EU/AU/AP customer base. Sketch only:</p>
+<ul>
+<li>Postgres logical replication across regions</li>
+<li>S3 cross-region replication (or per-region buckets)</li>
+<li>Latency-based DNS routing</li>
+<li>Per-region data residency for GDPR (revisit F-33&#39;s deferred-EU decision when we get here)</li>
+</ul>
+<h3 id="what39s-deliberately-out-of-scope-and-why">What&#39;s deliberately out of scope (and why)<a class="heading-anchor" href="#what39s-deliberately-out-of-scope-and-why">#</a></h3>
+<ul>
+<li><strong>Sharding Postgres</strong>. Useless at SmrtCash&#39;s scale and a constant complexity tax. Don&#39;t go there unless we see &gt;100M txn rows per tenant (Personal Finance Lover&#39;s Million-Row Power User is a real edge case but not a planning constraint).</li>
+<li><strong>Microservices</strong>. The monolith is right for this product. Splitting <code>assistant</code> or <code>billing</code> into separate services would multiply the deploy surface for no real isolation benefit — they all share the same tenant data anyway.</li>
+<li><strong>Server-side rendering</strong>. The PWA model works for personal finance. SSR would add a node runtime in front of the static SPA assets for no measurable benefit.</li>
+</ul>
+<hr>
 <p><em>This roadmap is a living document. Phase scope and ordering may shift as the
 product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-25 04:02:38 UTC · commit 0f5907e</span>
+  <span>Generated 2026-05-27 13:47:32 UTC · commit cff74b2</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

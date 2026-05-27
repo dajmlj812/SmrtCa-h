@@ -40,10 +40,10 @@ application — nothing is "all or nothing."
 | **0.16.x** | **SaaS launch readiness — signup, password reset, per-tenant encryption** | ✅ Complete — 2026-05-24 |
 | **0.17.x** | **Documentation refresh + HTML build pipeline** | ✅ Complete — 2026-05-24 (0.17.0) |
 | **0.18.x** | **Competitive parity & depth — close gaps vs Monarch / Simplifi / YNAB / Rocket Money / Lunch Money / Empower** | ✅ Complete — 0.18.0…0.18.12 shipped 2026-05-24 |
-| **0.19.x** | **Reconciliation, investment analysis, ops debt** | 📋 Planned |
-| **0.20.x** | **Agentic AI moat — proactive insights, staged actions, voice** | 📋 Planned |
-| **0.21.x** | **Universal customer asks competitors haven't delivered** | 📋 Planned |
-| **0.22.x** | **Production launch readiness — Stripe live, ToS, observability** | 🔜 Tomorrow |
+| **0.19.x** | **Reconciliation, investment analysis, ops debt** | ✅ Complete — 2026-05-26 |
+| **0.20.x** | **Agentic AI moat — proactive insights, staged actions, voice** | ✅ Complete — 2026-05-26 |
+| **0.21.x** | **Universal customer asks competitors haven't delivered** | ✅ Complete — 2026-05-27 |
+| **0.22.x** | **Production launch readiness — Stripe live, ToS, observability** | ✅ Complete — 2026-05-24 |
 | **0.23.x** | **Scaling — vertical upgrade runbook + horizontal architecture (read replicas, multi-instance app, object-store attachments)** | 📋 Planned |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
@@ -758,86 +758,104 @@ the assistant does on your behalf.
 
 ---
 
-## 0.21.x — Universal customer asks 📋
+## 0.21.x — Universal customer asks ✅
 
-These are the loudest unmet asks on r/MonarchMoney, r/Simplifi,
+These were the loudest unmet asks on r/MonarchMoney, r/Simplifi,
 the YNAB forums, and Empower reviews. None of the cloud PFM
-competitors have shipped them; that's our opening. Ordered by
-"how often does the complaint show up + how hard is the lift."
+competitors had shipped them at the time; that was our opening.
+Shipped end-to-end on 2026-05-27.
 
-### Planned slices (ordered by impact-per-day)
+### Shipped slices
 
-- **0.21.0** 📋 — **Real tax export** (~3–4 days). Schedule C
-  for self-employed users, mileage from the existing
-  `vehicles` + `commute_routes` data, home-office tracking
-  as a category flag. Output as a TurboTax-importable TXF
-  file + a CSV that follows the IRS line-numbering
-  convention. **Mint had this; nobody else does** — was a
-  #1 reason people stuck with Mint and a #1 grief since the
-  shutdown. Probably the biggest "obvious unmet ask" in the
-  market.
-- **0.21.1** 📋 — **Refund / chargeback tracking** (~1–2
-  days). New `transactions.refund_status` column ('pending',
-  'refunded', 'denied') + optional refund-link to the
-  original transaction. UI: a "Dispute" / "Mark refunded"
-  action on every transaction row; a dashboard tile showing
-  pending disputes. No PFM closes this loop today — users
-  manually track refunds in a spreadsheet.
-- **0.21.2** 📋 — **Receipt → warranty tracking** (~2 days).
-  Existing receipt OCR (Phase 3) already extracts
-  merchant + amount + date. Add an optional "this item is
-  under warranty until" field; render a `/warranties`
-  view of all items with expiry dates, sortable by
-  expiring-soonest. Email reminder 30 days before expiry.
-- **0.21.3** 📋 — **Non-traditional household models**
-  (~3–5 days). Today the tenant ↔ user model assumes "one
-  household, one couple." Real households are messier:
-  divorced co-parents splitting kid expenses 50/50,
-  adult children managing aging parents' bills under a
-  separate-but-visible context, polycules, financially-
-  cohabiting roommates. Three sub-features:
-  - **Per-account "shared-with"** — extends the per-account
-    RBAC from 0.13.4 with a "split-percentage" config.
-    Mark account X as 60% me / 40% other-tenant; the
-    aggregations show me 60% of every transaction.
-  - **Cross-tenant visibility (read-only)** — invite
-    another tenant's user to see specific accounts as a
-    read-only observer. Eldercare use case.
-  - **Custody-period assignment** — for shared-kid
-    expenses, tag a date range as "user A's custody";
-    spend in that range is attributed accordingly for
-    reimbursement reporting.
-- **0.21.4** 📋 — **Investment performance analysis**
-  (~2–3 days). The 0.19.3 fee-analyzer slice handles the
-  cost side; this slice handles returns. Per-holding TWRR
-  (time-weighted return), portfolio IRR (money-weighted),
-  vs-benchmark (S&P 500 / 60/40 default; user-overridable).
-  Empower shows positions but not these metrics; users
-  ask for them constantly.
-- **0.21.5** 📋 — **Scenario cash-flow forecasting**
-  (~2–3 days). Extends the 0.18.0 cash-flow hero with
-  "what-if" sliders: income loss for N months, one-time
-  big expense, rate change on a debt. Re-runs the
-  projection in real time. Simplifi shows a single
-  deterministic line; nobody offers scenario modeling.
-- **0.21.6** 📋 — **Subscription cancellation execution**
-  (~5–7 days, legally risky). 0.18.1 ships cancellation
-  *instructions*; this slice adds **execution**.
-  Consent-based headless browser (Playwright in a worker
-  container) that logs into the merchant with credentials
-  the user provides, navigates the cancel flow, captures
-  proof. Rocket Money charges $9/mo for this and won't
-  let people self-host. Legal review required per
-  jurisdiction before flagging this for actual users —
-  the slice covers the technical build only.
-- **0.21.7** 📋 — **Truly portable data export** (~2
-  days). The existing portability export (0.13.0) is
-  CSV + JSON of the raw tables. This slice adds a
-  single-file `.smrtcash` bundle: every table + every
-  attachment + the tenant's DEK (unwrapped, so the export
-  is self-decrypting on import elsewhere). Round-trips
-  back into the importer cleanly. The Mint-shutdown
-  audience cares about this in a deep way.
+- **0.21.0** ✅ — **Real tax export** (commit `edc9f4f`).
+  New `mileage_log` table for IRS-compliant per-trip logging;
+  `tax-schedule-c.ts` maps free-text `tax_category` labels onto
+  Schedule C lines (exact-label, "Schedule C - Line N" prefix,
+  keyword fallback). `/api/reports/tax-year/:year/schedule-c`
+  JSON, `.txf` (TurboTax v042), and `/mileage.csv` endpoints.
+  `/tax` page gains a Summary / Schedule C tab + Download TXF
+  + Mileage CSV buttons; new `/mileage` page in Insights.
+- **0.21.1** ✅ — **Refund / chargeback tracking** (commit
+  `1869230`). `refund_status` lifecycle on transactions
+  (`refund_pending → refunded | disputed | chargeback_initiated
+  → closed`), with `refund_note` + `refund_updated_at`. UI: a
+  ↩ pill in the description meta and a refund action that
+  opens `RefundStatusModal`.
+- **0.21.2** ✅ — **Receipt → warranty tracking** (commit
+  `f3cf8ba`). `warranties` table (item / vendor / purchase +
+  expiry dates / optional price / transaction + attachment
+  backrefs). `/warranties` page with status filter and edit
+  modal. Daily insights scanner emits a `warranty_expiring`
+  card with escalating severity as the date approaches.
+- **0.21.3** ✅ — **Non-traditional household models**
+  (commit `eef8ddd`). Three new tables: `household_participants`
+  (named people), `account_splits` (percentage allocation),
+  `custody_periods` (date-ranged ownership). `/household` page
+  manages all three plus a per-participant year-to-date rollup.
+  Cross-tenant invites are deferred — the existing
+  membership/role flow covers spouse/child cases.
+- **0.21.4** ✅ — **Investment performance analysis** (commit
+  `3064d53`). New `investment-performance.ts` domain: TWRR,
+  IRR (Newton-Raphson with bisection fallback), annualize, and
+  S&P 500 benchmark from a static yearly-return table.
+  `/api/investments/performance` returns per-account + portfolio
+  numbers; `/investments` page gains a Performance section.
+  Caveat: beginning-of-period value is approximated from
+  cumulative prior-balance transactions — precise historical
+  TWRR needs daily holdings snapshots (follow-up).
+- **0.21.5** ✅ — **Scenario cash-flow forecasting** (commit
+  `c287400`). `/api/cash-flow` accepts `incomePct`,
+  `expensePct`, and `oneTime` query params and returns both
+  baseline and scenario series. New `/scenarios` page with
+  sliders (50–200%), one-time event rows, and a baseline-vs-
+  scenario chart in the Planning nav group.
+- **0.21.6** ✅ — **Subscription cancellation queue, scoped
+  down** (commit `a7f9b28`). After review of the original
+  Playwright-automation plan, scope was reduced to a manual
+  queue: `cancellation_queue` table with state machine
+  (`queued → in_progress → done | couldnt | abandoned`), no
+  vendor credentials, no outbound automation. `/cancellations`
+  page with per-row state-transition buttons + monthly-savings
+  rollup of completed rows.
+- **0.21.7** ✅ — **Portable .smrtcash data export + importer**
+  (commit `0c7de6b`). Renamed the user-facing extension to
+  `.smrtcash` (still gzipped tar under the hood) and added
+  `importTenantBundle()` to rehydrate categories (parents
+  first), accounts, and transactions with FK remapping.
+  `POST /api/portability/import` accepts multipart upload;
+  workspace page gains an Import section. Budgets / bills /
+  recurring_income / holdings / attachment file bodies are
+  returned in `skipped` — known follow-up work.
+- **0.21.8** ✅ — **Split Budgets into Monthly + Paycheck pages**
+  (UX restructure). The single `/budgets` page that mixed the
+  category-target table with the Paycheck-to-Paycheck plan
+  cards is now two URLs: `/monthly-budget` (categories vs.
+  month-to-date) and `/paycheck-budget` (plan / period cards
+  with the wizard). Old `/budgets` URL redirects to
+  `/monthly-budget` for compatibility. Nav under Planning
+  shows two entries: **Monthly budget** + **Paycheck budget**.
+
+### Verification
+
+Per-slice walk-throughs are in
+[docs/VERIFY_0.21.x.md](VERIFY_0.21.x.md) — set-up, click path,
+expected outcome for each slice. Use that doc to confirm the
+above shipped as designed before declaring the arc done.
+
+### Stretch (deferred from this arc)
+
+- **Cross-tenant invites** — was the third bullet of 0.21.3.
+  Existing tenant-membership flow already covers spouse/child
+  access; true cross-tenant linking deferred until there's a
+  concrete use case.
+- **Daily holdings snapshots** — needed for precise historical
+  TWRR in 0.21.4.
+- **Wide importer round-trip** — 0.21.7 covers categories /
+  accounts / transactions. Budgets, bills, recurring_income,
+  holdings, and attachment bodies still need importer work.
+- **Subscription cancellation automation** — the original
+  0.21.6 scope. Deferred pending legal review of the ToS /
+  unauthorized-access exposure.
 
 ### Stretch / TBD
 

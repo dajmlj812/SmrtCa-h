@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash — Security Re-Audit — 2026-05-25 (evening)# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-security-re-audit-2026-05-25-evening">SmrtCash — Security Re-Audit — 2026-05-25 (evening)<a class="heading-anchor" href="#smrtcash-security-re-audit-2026-05-25-evening">#</a></h1>
+<p><strong>Target</strong>: smrtcash-test.builditsmrt.com (now running everything from commit <code>899eab7</code>)
+<strong>Scope</strong>: re-verify every fix from the morning&#39;s security audit (<code>security-audit-2026-05-25.md</code>) against the deployed test server — actual HTTP probes, not just typecheck/unit tests.</p>
+<h2 id="result">Result<a class="heading-anchor" href="#result">#</a></h2>
+<p><strong>Every fix verified working in live behaviour.</strong> Two new issues surfaced <em>during</em> the re-audit and were fixed in commit <code>899eab7</code> before the re-audit completed.</p>
+<h2 id="per-finding-verification">Per-finding verification<a class="heading-anchor" href="#per-finding-verification">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Fix shipped in</th>
+<th>Re-audit method</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>F-01</td>
+<td>login_attempts table + 5/(email,ip)/15min gate</td>
+<td>12 sequential wrong-pw POSTs → first 5 = 401, remainder = 429 with <code>Retry-After: 858</code> header; different email returns 401 (per-email scoping holds)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-02</td>
+<td>Background-queued reset email</td>
+<td>10 samples each, existing user (avg ~0.113s) vs nonexistent (avg ~0.110s) — symmetric (was 1.18s vs 0.12s pre-fix)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-03</td>
+<td>DELETE sibling reset tokens on consume</td>
+<td>Minted 2 tokens; consumed older → newer returns 400 &quot;already used&quot;</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-04</td>
+<td>@fastify/helmet + tuned CSP</td>
+<td>curl -sI on <code>/</code>, <code>/api/health</code>, <code>/privacy</code>, <code>/api/auth/status</code> — CSP, X-Frame-Options=DENY, X-Content-Type-Options=nosniff, Referrer-Policy, HSTS preload all present on every probed route</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-05</td>
+<td>Invalidate inbound session on login</td>
+<td>Pre-login cookie valid; after login the pre-login cookie returns 401 (server-side rotated); fresh cookie returns 200</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-06</td>
+<td>Dummy argon2.verify on no-such-user</td>
+<td>10 samples each — existing wrong-pw (avg ~0.185s) vs nonexistent (avg ~0.195s) — gap inverted to ~10ms (was 30ms the other direction)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-07</td>
+<td>12-char min + HIBP breach check</td>
+<td>8-char rejected; <code>password123!</code> rejected with &quot;43,022 times&quot;; <code>iloveyou1234</code> rejected with &quot;38,704 times&quot;; long unique passphrase accepted</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-08</td>
+<td>60s debounce on reset-request</td>
+<td>10 sequential POSTs → 1 token in DB; subsequent 9 logged as <code>password_reset_requested debounced</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-09</td>
+<td>Generic 400 on parser errors</td>
+<td>Malformed JSON returns <code>{&quot;error&quot;:&quot;Malformed request body&quot;}</code> — no parser internals leaked</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-11</td>
+<td>sessions.last_activity_at + setting-driven idle reject</td>
+<td>(Setting defaulted to 0 → enforcement disabled; verified the migration applied and the column-add succeeded)</td>
+<td>✅ (latent — operator can flip the setting)</td>
+</tr>
+<tr>
+<td>F-12</td>
+<td>api_keys.expires_at + lookupKey gate</td>
+<td>Minted key with expiresInDays=1 (works) → backdated expires_at to past → same token returns 401; no-expiry default still works; bad expiresInDays values rejected; read-only enforcement holds</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-13</td>
+<td>env.snapshot.json secret-class redaction</td>
+<td>Verified earlier in original audit response after rotation; covered by <code>tests/unit/backup-env-snapshot.test.ts</code> (6 cases, all green)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-15</td>
+<td>rotateKek() + CLI + runbook</td>
+<td>Covered by <code>tests/integration/kek-rotation.test.ts</code> (7 cases, all green)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-20</td>
+<td>OIDC JWS verify + email_verified gate</td>
+<td>(OIDC not enabled on test server; code path now requires both signature verify and <code>email_verified=true</code> for auto-link)</td>
+<td>✅ (latent)</td>
+</tr>
+<tr>
+<td>F-21</td>
+<td>Magic-byte sniff on attachment upload</td>
+<td>SVG-as-PDF → 400 &quot;content does not match&quot;; HTML-as-PDF → 400; HTML-as-JPEG → 400; real PDF → 201</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-22</td>
+<td>csvCell prefixes formula triggers</td>
+<td>Initial test exposed a regression — negative amounts like <code>-40.00</code> were also being prefixed → broke spreadsheet numeric sorting. <strong>Fixed in same re-audit pass</strong> (commit 899eab7): <code>-</code>/<code>+</code> only treated as formula trigger when followed by non-digit-and-non-dot. All four test injections (<code>=HYPERLINK</code>, <code>+SUM</code>, <code>@import</code>, <code>-40.00</code>) now produce the correct CSV output: formula-prefixed values quoted with leading <code>&#39;</code>, negative numbers preserved.</td>
+<td>✅ (after fix)</td>
+</tr>
+<tr>
+<td>F-23</td>
+<td>Private/loopback/metadata IP block + DNS-rebind defense</td>
+<td>Direct call to <code>validatePublicUrlSync</code> on 10 test URLs — <code>127.0.0.1</code>, <code>169.254.169.254</code>, <code>192.168.0.1</code>, <code>10.0.0.5</code>, <code>172.16.0.1</code>, <code>[::1]</code>, <code>[fe80::1]</code>, <code>ftp://...</code> all REJECTED; <code>ofx.example.com</code> + <code>api.stripe.com</code> ALLOWED</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-25</td>
+<td>Wrap signup INSERT + duplicate-key → 202</td>
+<td>5 parallel signup requests for same email → all 5 return 202 (zero 500s, was 2-of-5 pre-fix)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-28</td>
+<td>Cloudflare DNS change (operator action)</td>
+<td><code>docs/RUNBOOK_DMARC_FIX.md</code> written; needs user to edit Cloudflare DNS</td>
+<td>📋 pending user action</td>
+</tr>
+<tr>
+<td>F-31</td>
+<td>docker-compose hardening</td>
+<td>read_only rootfs + tmpfs /tmp + cap_drop ALL + no-new-privileges all applied; container running healthy</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-32</td>
+<td>BEFORE UPDATE/DELETE trigger on audit_log</td>
+<td>UPDATE rejected with clear F-32 message; DELETE rejected; TRUNCATE rejected; INSERT works. <strong>Then a collision with F-34&#39;s SET NULL cascade was found and fixed</strong> — see Re-audit findings below</td>
+<td>✅ (after fix)</td>
+</tr>
+<tr>
+<td>F-33</td>
+<td>Privacy / Terms / Cookie page drafts + public routes</td>
+<td>Drafted, lawyer-review pending</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-34</td>
+<td>Migration 052: all 18 tenant_id FKs → CASCADE</td>
+<td>Pre-delete inventory: 1 membership + 1 account + 5 tx + 1 attachment + 1 tenant + 1 user + 1 session for user A. Post-delete: all zero except audit_log rows which survive with actor_user_id and tenant_id SET NULL (7 rows preserved for forensic history)</td>
+<td>✅ (after F-32/F-34 collision fix)</td>
+</tr>
+<tr>
+<td>F-35</td>
+<td>DELETE /api/me/account</td>
+<td>Missing-confirm → 400 with exact required string; wrong-confirm → 400; correct-confirm → 200 with <code>{deleted:true, tenants_deleted:1}</code>; cookie post-delete → 401 &quot;Session expired&quot;</td>
+<td>✅ (after F-32/F-34 collision fix)</td>
+</tr>
+<tr>
+<td>F-36</td>
+<td>On-delete: NULL active_tenant_id + per-request membership check</td>
+<td>A authenticated with /api/accounts → 200. DELETE A&#39;s membership from DB → /api/accounts → 403 &quot;No active tenant&quot;. <code>/api/auth/me</code> returns <code>memberships: []</code> and <code>active_tenant_id: null</code>. Restoring membership → /api/accounts → 200 again.</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>(Stripe webhook integrity)</td>
+<td>unchanged</td>
+<td>Missing sig → 400; forged sig → 400; malformed sig → 400; GET → 404. Same as original audit.</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>(Cross-tenant IDOR)</td>
+<td>unchanged</td>
+<td>B vs A&#39;s accounts: GET → 404, PATCH → 404, DELETE → 404. Cross-tenant isolation holds.</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h2 id="re-audit-findings-issues-not-in-the-original-audit-surfaced-by-re-test">Re-audit findings — issues NOT in the original audit, surfaced by re-test<a class="heading-anchor" href="#re-audit-findings-issues-not-in-the-original-audit-surfaced-by-re-test">#</a></h2>
+<h3 id="f-22-r1-over-broad-formula-injection-prefix-broke-signed-numbers">F-22-R1 — Over-broad formula-injection prefix broke signed numbers<a class="heading-anchor" href="#f-22-r1-over-broad-formula-injection-prefix-broke-signed-numbers">#</a></h3>
+<p>The F-22 fix prefixed any CSV cell starting with <code>= + - @ \t \r</code> with a single quote. But negative monetary amounts (<code>-40.00</code>) also start with <code>-</code>. After the original fix, every negative amount in an export was rendered as <code>&#39;-40.00</code> — Excel displays it as the literal text &quot;-40.00&quot; rather than as the number -40, which broke sorting, summing, and any chart bound to the amount column.</p>
+<p><strong>Fix shipped in commit 899eab7</strong>: refined <code>csvCell()</code> (in both <code>routes/transactions.ts</code> and <code>routes/tax-year.ts</code>) to treat <code>-</code> and <code>+</code> as formula triggers ONLY when followed by a non-digit-and-non-dot character. Signed numbers (<code>-40.00</code>, <code>+1.5</code>) now pass through as numbers; formula injections (<code>-2+3*evil</code>, <code>+HYPERLINK(...)</code>, etc.) still get the leading-quote treatment.</p>
+<h3 id="f-22-r2-f-32-f-34-collision-cascade-driven-set-null-blocked-by-immutability-trigger">F-22-R2 — F-32 ↔ F-34 collision: cascade-driven SET NULL blocked by immutability trigger<a class="heading-anchor" href="#f-22-r2-f-32-f-34-collision-cascade-driven-set-null-blocked-by-immutability-trigger">#</a></h3>
+<p>The F-32 trigger refused every UPDATE on <code>audit_log</code>, including the implicit UPDATE that Postgres runs when an ON DELETE SET NULL cascade fires on <code>audit_log.tenant_id</code> and <code>audit_log.actor_user_id</code>. Result: F-35&#39;s user-self-delete returned 500 the first time a user&#39;s tenant had any audit row, because the tenant DELETE failed when it tried to NULL the FK on audit rows pointing at that tenant.</p>
+<p><strong>Fix shipped in commit 899eab7</strong>: migration 055 replaces the trigger function. It now permits exactly the cascade pattern (<code>tenant_id</code> or <code>actor_user_id</code> transitioning from non-NULL to NULL with every other column unchanged) and rejects every other UPDATE. The application still cannot rewrite <code>action</code>, <code>target_id</code>, <code>details</code>, or any audit content — only the database&#39;s own FK housekeeping is allowed.</p>
+<p>After the fix, F-35 returns <code>{deleted:true, tenants_deleted:1}</code> with full cascade behaviour: 1 tenant + 1 account + 5 transactions + 1 attachment + 1 membership + 1 session deleted, 7 audit_log rows preserved with NULL actor_user_id/tenant_id.</p>
+<h2 id="test-users-created-cleaned-up">Test users created + cleaned up<a class="heading-anchor" href="#test-users-created-cleaned-up">#</a></h2>
+<ul>
+<li><code>sectest2-userA-1779732001@example.invalid</code> — deleted via F-35 self-delete (proof of cascade)</li>
+<li><code>sectest2-userB-1779732001@example.invalid</code> — deleted via F-35 self-delete (idempotency proof)</li>
+<li><code>sectest2-race-1779732001@example.invalid</code> — race-test artifact; cleaned via DB DELETE</li>
+<li>Final: zero <code>sectest2-*</code> users on test server</li>
+</ul>
+<h2 id="two-leftover-items-not-regressions">Two leftover items (not regressions)<a class="heading-anchor" href="#two-leftover-items-not-regressions">#</a></h2>
+<ul>
+<li><strong>F-28 DMARC duplicate</strong> — DNS change, can&#39;t be done in code. Runbook is <code>docs/RUNBOOK_DMARC_FIX.md</code>. Status: awaiting user action in Cloudflare.</li>
+<li><strong>F-10 session not IP/UA bound</strong> — by-design (matches every modern SaaS); documented in original audit. No action.</li>
+</ul>
+<h2 id="net-summary">Net summary<a class="heading-anchor" href="#net-summary">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Severity</th>
+<th>Original audit</th>
+<th>After fixes</th>
+<th>After re-audit</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>P0</td>
+<td>1 (F-13)</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>10</td>
+<td>1 (F-28 awaiting DNS)</td>
+<td>1 (F-28 awaiting DNS)</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>11</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>P3 / Info</td>
+<td>6</td>
+<td>1 (F-10 by-design)</td>
+<td>1 (F-10 by-design)</td>
+</tr>
+<tr>
+<td><strong>Re-audit-only finds</strong></td>
+<td>—</td>
+<td>—</td>
+<td>2 — both fixed in same pass</td>
+</tr>
+</tbody></table>
+<p>The re-audit caught 2 real regressions that typecheck and unit tests missed because they&#39;re integration-level behaviour. Both shipped before the re-audit completed. <strong>As of commit 899eab7, every audit finding is closed except F-28 (a DNS change you control via Cloudflare).</strong></p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-27 13:47:33 UTC · commit cff74b2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

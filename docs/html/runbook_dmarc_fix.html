@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runbook — Fix the duplicate DMARC record on builditsmrt.com# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="runbook-fix-the-duplicate-dmarc-record-on-builditsmrtcom">Runbook — Fix the duplicate DMARC record on <code>builditsmrt.com</code><a class="heading-anchor" href="#runbook-fix-the-duplicate-dmarc-record-on-builditsmrtcom">#</a></h1>
+<p>The 2026-05-25 security audit (F-28) found that <code>_dmarc.builditsmrt.com</code> has <strong>two</strong> TXT records:</p>
+<pre><code>v=DMARC1; p=none;
+v=DMARC1; p=reject;
+</code></pre>
+<p>RFC 7489 §6.6.3 says: when a Mail Receiver finds more than one DMARC record at the <code>_dmarc.&lt;domain&gt;</code> label, it <strong>MUST NOT</strong> apply DMARC policy. So today DMARC is <strong>effectively disabled</strong> for the domain. Verification, password-reset, and billing emails sent from <code>noreply@builditsmrt.com</code> (or any <code>@builditsmrt.com</code> address) are spoofable, and Gmail / Outlook will mostly tolerate the spoof.</p>
+<p>This isn&#39;t a code change — it&#39;s a DNS change you&#39;ll do in your domain registrar / Cloudflare DNS dashboard. The whole fix is ~5 minutes.</p>
+<h2 id="what-quotgoodquot-looks-like">What &quot;good&quot; looks like<a class="heading-anchor" href="#what-quotgoodquot-looks-like">#</a></h2>
+<p>A single TXT record at <code>_dmarc.builditsmrt.com</code> that:</p>
+<ol>
+<li>Starts with <code>v=DMARC1</code>.</li>
+<li>Sets a policy (<code>p=reject</code> for strongest; <code>p=quarantine</code> for &quot;send to spam&quot;; <code>p=none</code> for monitoring only).</li>
+<li>Optionally specifies an <code>rua=</code> (aggregate report) address so you find out about authentication failures.</li>
+</ol>
+<p>The recommended record:</p>
+<pre><code>v=DMARC1; p=reject; rua=mailto:dmarc-reports@builditsmrt.com; pct=100; adkim=s; aspf=s
+</code></pre>
+<p>Breakdown:</p>
+<ul>
+<li><code>p=reject</code> — receivers reject mail that fails DMARC. The strongest policy.</li>
+<li><code>pct=100</code> — apply the policy to 100% of failing mail (the default, but explicit is good).</li>
+<li><code>rua=mailto:…</code> — daily aggregate reports of who&#39;s authenticating as your domain. Use a mailbox you actually read (or a service like Postmark / Dmarcian).</li>
+<li><code>adkim=s aspf=s</code> — strict alignment for DKIM and SPF, matching the From-domain literally instead of relaxing to a parent domain.</li>
+</ul>
+<p>If you want to start cautious, swap <code>p=reject</code> for <code>p=quarantine</code> first; watch the rua reports for a week to confirm Maileroo is the only sender; then promote to <code>p=reject</code>.</p>
+<h2 id="step-by-step-cloudflare-dns">Step-by-step (Cloudflare DNS)<a class="heading-anchor" href="#step-by-step-cloudflare-dns">#</a></h2>
+<ol>
+<li>Log in to Cloudflare → select <code>builditsmrt.com</code> → DNS → Records.</li>
+<li>Filter by Name = <code>_dmarc</code>. You should see <strong>two</strong> TXT records.</li>
+<li>Click the row for the <code>v=DMARC1; p=none;</code> record → <strong>Edit</strong> → <strong>Delete</strong>. Confirm.</li>
+<li>Click the row for the <code>v=DMARC1; p=reject;</code> record → <strong>Edit</strong>. Replace the value with:<pre><code>v=DMARC1; p=reject; rua=mailto:dmarc-reports@builditsmrt.com; pct=100; adkim=s; aspf=s
+</code></pre>
+Or, if you want the cautious rollout, use <code>p=quarantine</code> for now and revisit in a week.</li>
+<li>Save.</li>
+<li>Wait 5-15 minutes for caches to clear, then verify (see below).</li>
+</ol>
+<h2 id="step-by-step-other-dns-providers">Step-by-step (other DNS providers)<a class="heading-anchor" href="#step-by-step-other-dns-providers">#</a></h2>
+<p>The dashboard wording varies but the change is the same: find both TXT records on the <code>_dmarc</code> subdomain, delete one, edit the other so the value matches what&#39;s recommended above.</p>
+<h2 id="verification">Verification<a class="heading-anchor" href="#verification">#</a></h2>
+<p>From any machine with <code>nslookup</code> or <code>dig</code>:</p>
+<pre><code class="language-sh"># Should return EXACTLY ONE line starting with &quot;v=DMARC1&quot;
+nslookup -type=TXT _dmarc.builditsmrt.com
+</code></pre>
+<p>Or from PowerShell on Windows:</p>
+<pre><code class="language-powershell">(Resolve-DnsName -Type TXT &quot;_dmarc.builditsmrt.com&quot;).Strings
+</code></pre>
+<p>Online verifiers:</p>
+<ul>
+<li><a href="https://mxtoolbox.com/dmarc.aspx">https://mxtoolbox.com/dmarc.aspx</a> (paste <code>builditsmrt.com</code>)</li>
+<li><a href="https://dmarcian.com/dmarc-inspector/">https://dmarcian.com/dmarc-inspector/</a></li>
+</ul>
+<p>A passing setup gets a single record + a green &quot;no record-set inconsistencies&quot; indicator.</p>
+<h2 id="confirm-spf-and-dkim-too">Confirm SPF and DKIM too<a class="heading-anchor" href="#confirm-spf-and-dkim-too">#</a></h2>
+<p>DMARC is the policy layer; SPF and DKIM are the authentication layers underneath. You already have SPF:</p>
+<pre><code>v=spf1 include:_spf.maileroo.com ~all
+</code></pre>
+<p>The <code>~all</code> (soft-fail) is fine for the transition; once you&#39;re confident Maileroo is the only sender, tighten to <code>-all</code> (hard-fail) for the strongest position.</p>
+<p>DKIM under the common <code>maileroo._domainkey</code> selector returned empty in the audit. Maileroo uses per-account selectors — log in to your Maileroo dashboard, navigate to Domains → builditsmrt.com → DKIM, copy the selector name + value they show, and add it as a TXT record at:</p>
+<pre><code>&lt;selector&gt;._domainkey.builditsmrt.com
+</code></pre>
+<p>Verify with:</p>
+<pre><code class="language-powershell">(Resolve-DnsName -Type TXT &quot;&lt;selector&gt;._domainkey.builditsmrt.com&quot;).Strings
+</code></pre>
+<h2 id="send-a-test-email-through-maileroo">Send a test email through Maileroo<a class="heading-anchor" href="#send-a-test-email-through-maileroo">#</a></h2>
+<p>After the records are in place, send a verification email from the test server (sign up a new test user, or click &quot;resend&quot; on an existing unverified account). Check the received-message headers in Gmail (View Original → expand &quot;Authentication-Results&quot;). You want:</p>
+<pre><code>Authentication-Results: mx.google.com;
+       dkim=pass header.i=@builditsmrt.com
+       spf=pass smtp.mailfrom=... smtp.helo=...
+       dmarc=pass header.from=builditsmrt.com
+</code></pre>
+<p>All three <code>pass</code>. If any fail, fix that record before declaring victory.</p>
+<h2 id="operational-tip">Operational tip<a class="heading-anchor" href="#operational-tip">#</a></h2>
+<p>Set a Cloudflare DNS-record audit reminder for once a year. DNS records grow like garden weeds — last year&#39;s DMARC migration / vendor experiment / Cloudflare Page Rules trial all leave TXT artifacts behind, and a stray duplicate is exactly how DMARC gets accidentally turned off again.</p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-27 13:47:33 UTC · commit cff74b2</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

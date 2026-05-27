@@ -9,12 +9,250 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.18.11 + 0.18.12 close out the 0.18.x competitive-parity series.
-0.18.11 ships the SaaS deploy walkthrough + an operator runbook
-entry for the verification-gate stuck-user case. 0.18.12 adds
-URL-shape validation on every URL-typed setting (with a
-specific catch for the `@`-instead-of-`.` typo that drove this
-whole slice)._
+_0.21.x arc is shipped end-to-end (0.21.0–0.21.7) plus 0.21.8
+budget-page split. See entries below for each slice. The
+post-arc verification walk-through lives at
+`docs/VERIFY_0.21.x.md`._
+
+---
+
+## [0.21.8] — 2026-05-27 — Split Budgets into Monthly + Paycheck pages
+
+The single `/budgets` page mixed two distinct workflows: a
+month-to-date category-target table and a Paycheck-to-Paycheck
+plan with per-period cards. They share categories conceptually
+but want very different chrome, so this slice splits them.
+
+**Frontend** (`web/src/pages/`):
+- New `MonthlyBudgetPage` — categories vs. month-to-date table,
+  month-picker, edit-target inline. URL `/monthly-budget`.
+- New `PaycheckBudgetPage` — plan / period cards, wizard
+  launcher, per-plan delete. URL `/paycheck-budget`.
+- Old `/budgets` URL redirects to `/monthly-budget` so any
+  existing bookmarks keep working.
+
+**Nav**: under Planning, **Budgets** replaced by two siblings —
+**Monthly budget** and **Paycheck budget**.
+
+---
+
+## [0.21.7] — 2026-05-27 — Portable .smrtcash data export + importer
+
+User-facing extension on the existing portability export changes
+from `.tar.gz` to `.smrtcash` (still a gzipped tarball). New
+`importTenantBundle()` rehydrates the core tables back into a
+fresh tenant.
+
+**Server** (`server/src/domain/portability.ts`,
+`server/src/routes/portability.ts`):
+- Renamed suggested filename to `.smrtcash`.
+- `importTenantBundle(targetTenantId, archivePath)` — extracts,
+  parses `tenant.json`, rehydrates `categories` (parents first
+  with child remapping), `accounts`, and `transactions` with FK
+  remapping. Returns counts + `skipped` list.
+- `POST /api/portability/import` — admin-only multipart upload
+  accepting the `.smrtcash` file. Imports into the CURRENT
+  tenant; caller is expected to use an empty tenant for clean
+  rehydration. Writes an audit log entry.
+
+**Frontend** (`web/src/pages/WorkspacePage.tsx`):
+- Data portability section gains an Import file picker, a
+  confirmation prompt, and a result summary banner.
+
+**Known follow-ups** (returned in `skipped`): budgets, bills,
+recurring income, holdings, and attachment file bodies are not
+yet rehydrated by the importer.
+
+---
+
+## [0.21.6] — 2026-05-27 — Manual subscription cancellation queue (scoped down)
+
+The roadmap entry described automated cancellations via
+Playwright. After review of the ToS / unauthorized-access
+exposure, scope was reduced to a manual queue.
+
+**Server** (`server/src/db/migrations/068_cancellation_queue.sql`,
+`server/src/routes/cancellation-queue.ts`):
+- New `cancellation_queue` table with a state machine
+  (`queued → in_progress → done | couldnt | abandoned`),
+  optional `bill_id` backref, `cancel_url`, `monthly_cents`,
+  `notes`. Partial index on open rows.
+- `/api/cancellation-queue` CRUD with status filter
+  (`open` / `closed` / specific state).
+
+**Frontend** (`web/src/pages/CancellationsPage.tsx`):
+- New `/cancellations` page in the Planning nav, per-row
+  state-transition buttons, monthly-savings rollup of completed
+  rows, add/edit modal.
+
+**Deliberately NOT in scope**: stored vendor credentials,
+outbound HTTP on the user's behalf, headless-browser flows.
+
+---
+
+## [0.21.5] — 2026-05-27 — Scenario cash-flow forecasting
+
+What-if overlay on top of the existing `/api/cash-flow` projection.
+
+**Server** (`server/src/routes/bills.ts`):
+- `/api/cash-flow` accepts optional `incomePct`, `expensePct`,
+  and `oneTime` (comma-separated `date:cents` pairs) query
+  params. Response gains a `scenario` block alongside the
+  baseline series.
+
+**Frontend** (`web/src/api.ts`,
+`web/src/pages/ScenarioPage.tsx`):
+- `api.cashFlow()` is now `({ days, scenario })`; legacy
+  positional `cashFlow(days)` callers updated.
+- New `/scenarios` page in the Planning nav. Two sliders
+  (50–200% on income / expense), repeatable one-time event
+  rows, side-by-side baseline-vs-scenario chart.
+
+---
+
+## [0.21.4] — 2026-05-27 — Investment performance: TWRR, IRR, vs benchmark
+
+Time-weighted and money-weighted returns plus a S&P 500
+benchmark comparison.
+
+**Server**
+(`server/src/domain/investment-performance.ts`,
+`server/src/routes/investments.ts`):
+- `twrr()` — sub-period multiplication across cash flows.
+- `irr()` — Newton-Raphson with bisection fallback.
+- `annualize()` — period-length → annualized rate.
+- `benchmarkCumulativeReturn()` — static yearly S&P 500
+  total-return table; accepts optional override.
+- `GET /api/investments/performance` returns per-account +
+  portfolio numbers over the requested window.
+
+**Frontend** (`web/src/pages/InvestmentsPage.tsx`):
+- New Performance section at the top with start/end pickers,
+  four metric cards (TWRR, IRR, benchmark, vs benchmark), and
+  a per-account table.
+
+**Caveats**: beginning-of-period account value is approximated
+from cumulative prior-balance transactions; precise historical
+TWRR needs daily holdings snapshots (follow-up).
+
+---
+
+## [0.21.3] — 2026-05-27 — Non-traditional household models
+
+Three new primitives for households that aren't "one couple,
+one shared account":
+
+**Server**
+(`server/src/db/migrations/067_household_participants.sql`,
+`server/src/routes/household.ts`):
+- `household_participants` — named people (spouse / child /
+  co_parent / roommate / dependent / other), optional email +
+  color.
+- `account_splits` — per-account percentage allocation across
+  participants. App-layer enforces sum == 100.
+- `custody_periods` — date-ranged "this account is 100% this
+  participant's" rules; latest start wins for overlaps.
+- `/api/household/participants/totals` — applies splits and
+  custody to produce per-participant year-to-date rollup.
+
+**Frontend** (`web/src/pages/HouseholdPage.tsx`):
+- `/household` page with sections for participants, account
+  splits, custody periods, and the rollup table.
+- Modal forms for add/edit/delete of each resource.
+
+**Out of scope**: cross-tenant invites — existing
+membership/role flow already covers spouse/child access.
+
+---
+
+## [0.21.2] — 2026-05-27 — Receipt → warranty tracking
+
+**Server**
+(`server/src/db/migrations/065_warranties.sql`,
+`server/src/db/migrations/066_insight_cards_warranty_kind.sql`,
+`server/src/routes/warranties.ts`):
+- `warranties` table (item / vendor / purchase + expiry dates,
+  optional `purchase_cents`, optional `transaction_id` +
+  `attachment_id` backrefs).
+- `/api/warranties` CRUD with status filter
+  (`active` / `expired` / `expiring`).
+- `findExpiringWarranties()` used by the daily insights
+  scheduler; `insight_cards.kind` CHECK extended with
+  `warranty_expiring`.
+- `insights-generator.ts` emits a card for any warranty within
+  30 days of expiry with severity escalating warn → critical.
+
+**Frontend** (`web/src/pages/WarrantiesPage.tsx`):
+- `/warranties` page in the Tools nav, status filter, add/edit
+  modal, summary cards (active / expiring / expired / covered
+  value).
+
+**Bug fix** (`cff74b2`): the original migration used
+`CURRENT_DATE` in an index `WHERE` clause — Postgres requires
+that to be `IMMUTABLE`. Dropped the partial-predicate; small
+warranty row counts make a full index fine.
+
+---
+
+## [0.21.1] — 2026-05-27 — Refund / chargeback tracking
+
+**Server** (`server/src/db/migrations/064_transactions_refund_status.sql`,
+`server/src/routes/transactions.ts`):
+- New columns on `transactions`: `refund_status`, `refund_note`,
+  `refund_updated_at`. Allowed states: `refund_pending`,
+  `refunded`, `chargeback_initiated`, `disputed`, `closed`.
+  Partial index on open (non-resolved) rows.
+- `PATCH /api/transactions/:id` accepts `refundStatus` +
+  `refundNote`; `refund_updated_at` auto-stamps on every change.
+- `/api/transactions` returns the three new fields per row.
+
+**Frontend** (`web/src/components/RefundStatusModal.tsx`,
+`web/src/components/TransactionTable.tsx`,
+`web/src/pages/TransactionsPage.tsx`):
+- TransactionTable shows a coloured `↩ {status}` pill in the
+  description meta when set.
+- A `↩` icon in the row's actions column opens the modal for
+  set / edit / clear.
+- Modal shows the transaction's merchant + amount + date and
+  the last-updated timestamp.
+
+---
+
+## [0.21.0] — 2026-05-27 — Real tax export: Schedule C, mileage, TXF
+
+Mint-class tax export — Schedule C grouping, IRS-compliant
+mileage log, TurboTax-importable TXF v042 file.
+
+**Server**
+(`server/src/db/migrations/063_mileage_log.sql`,
+`server/src/domain/tax-schedule-c.ts`,
+`server/src/routes/mileage.ts`,
+`server/src/routes/tax-year.ts`):
+- New `mileage_log` table with date / purpose / miles per trip,
+  optional vehicle + odometer + locations.
+- `SCHEDULE_C_LINES` table mapping line number → label → TXF
+  code with keyword fallbacks for the free-text `tax_category`
+  column. `matchScheduleCLine()` does exact-label / "Schedule C
+  - Line N" prefix / keyword matching.
+- `buildTxf()` emits TXF v042 records (V042 / ASmrtCash /
+  Dmm/dd/yyyy / per-line TD / N{code} / C1 / L1 / $amount /
+  P{description} / ^).
+- New endpoints:
+  - `/api/mileage` CRUD + `/api/mileage/summary/:year`.
+  - `/api/reports/tax-year/:year/schedule-c` JSON view that
+    rolls free-text `tax_category` labels into Schedule C
+    lines and folds business mileage onto line 9.
+  - `/api/reports/tax-year/:year.txf` — TurboTax-importable
+    file.
+  - `/api/reports/tax-year/:year/mileage.csv` — per-trip
+    substantiation log.
+
+**Frontend** (`web/src/pages/MileagePage.tsx`,
+`web/src/pages/TaxYearPage.tsx`):
+- New `/mileage` page in Insights nav with summary cards,
+  per-purpose breakdown table, trip table, add/edit modal.
+- `/tax` page gains a Summary / Schedule C tab toggle plus
+  Download TXF and Mileage CSV buttons in the header.
 
 ---
 
