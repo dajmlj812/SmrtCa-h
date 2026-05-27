@@ -197,6 +197,44 @@ export interface MileageSummary {
   total_deduction_cents: number;
 }
 
+export type ParticipantKind =
+  | 'spouse' | 'child' | 'co_parent' | 'roommate' | 'dependent' | 'other';
+
+export interface HouseholdParticipant {
+  id: string;
+  name: string;
+  kind: ParticipantKind;
+  email: string | null;
+  color: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface ParticipantInput {
+  name: string;
+  kind?: ParticipantKind;
+  email?: string | null;
+  color?: string | null;
+  active?: boolean;
+}
+
+export interface AccountSplit {
+  id: string;
+  account_id: string;
+  participant_id: string;
+  split_pct: number;
+  created_at: string;
+}
+
+export interface CustodyPeriod {
+  id: string;
+  account_id: string;
+  participant_id: string;
+  start_date: string;
+  end_date: string | null;
+  created_at: string;
+}
+
 export interface Warranty {
   id: string;
   transaction_id: string | null;
@@ -3460,6 +3498,76 @@ export const api = {
 
   deleteWarranty: (id: string) =>
     http<void>(`/api/warranties/${id}`, { method: 'DELETE' }),
+
+  // 0.21.3 — household
+  listParticipants: () =>
+    http<{ participants: HouseholdParticipant[] }>('/api/household/participants'),
+
+  createParticipant: (body: ParticipantInput) =>
+    http<{ participant: HouseholdParticipant }>('/api/household/participants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  updateParticipant: (id: string, body: Partial<ParticipantInput>) =>
+    http<{ participant: HouseholdParticipant }>(`/api/household/participants/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  deleteParticipant: (id: string) =>
+    http<void>(`/api/household/participants/${id}`, { method: 'DELETE' }),
+
+  listSplits: (accountId?: string) =>
+    http<{ splits: AccountSplit[] }>(
+      `/api/household/splits${accountId ? `?accountId=${accountId}` : ''}`,
+    ),
+
+  putSplits: (accountId: string, splits: Array<{ participantId: string; splitPct: number }>) =>
+    http<{ splits: AccountSplit[] }>(`/api/household/splits/${accountId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ splits }),
+    }),
+
+  listCustodyPeriods: (accountId?: string) =>
+    http<{ custodyPeriods: CustodyPeriod[] }>(
+      `/api/household/custody-periods${accountId ? `?accountId=${accountId}` : ''}`,
+    ),
+
+  createCustodyPeriod: (body: {
+    accountId: string;
+    participantId: string;
+    startDate: string;
+    endDate?: string | null;
+  }) =>
+    http<{ custodyPeriod: CustodyPeriod }>(`/api/household/custody-periods`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  deleteCustodyPeriod: (id: string) =>
+    http<void>(`/api/household/custody-periods/${id}`, { method: 'DELETE' }),
+
+  participantTotals: (params?: { startDate?: string; endDate?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', params.startDate);
+    if (params?.endDate) q.set('endDate', params.endDate);
+    const qs = q.toString();
+    return http<{
+      startDate: string;
+      endDate: string;
+      totals: Array<{
+        participant_id: string;
+        participant_name: string;
+        spend_cents: number;
+        income_cents: number;
+      }>;
+    }>(`/api/household/participants/totals${qs ? `?${qs}` : ''}`);
+  },
 
   // ── Anomaly alerts (backlog 0.13.2) ──────────────────────
   listAnomalies: (includeDismissed = false) =>
