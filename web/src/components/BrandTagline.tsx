@@ -23,14 +23,17 @@ export function BrandTagline({
   }
   return (
     <div className="brand-tagline">
-      SmrtCash · v{__APP_VERSION__} by{' '}
-      <a
-        href="https://builditsmrt.com"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        BuildITSmrt, LLC.
-      </a>
+      <div>SmrtCash · v{__APP_VERSION__}</div>
+      <div>
+        by{' '}
+        <a
+          href="https://builditsmrt.com"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          BuildITSmrt, LLC.
+        </a>
+      </div>
     </div>
   );
 }
