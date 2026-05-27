@@ -161,14 +161,23 @@ export const CANONICAL_CATEGORY_TREE: readonly CanonicalCategory[] = [
   },
 
   // ── Personal finance — NO tax mapping ─────────────────────
-  { name: 'Groceries' },
+  // 0.21.x — Food split into "at home" vs "out" so budgeting
+  // these two patterns is one click each. Food Delivery counts
+  // as "at home" because that's where it's consumed; Bars sit
+  // under "out" with restaurants and fast food.
   {
-    name: 'Dining & Restaurants',
+    name: 'Food at home',
+    children: [
+      { name: 'Groceries' },
+      { name: 'Food Delivery' },
+    ],
+  },
+  {
+    name: 'Food out',
     children: [
       { name: 'Restaurants' },
       { name: 'Fast Food' },
       { name: 'Coffee Shops' },
-      { name: 'Food Delivery' },
       { name: 'Bars & Nightlife' },
     ],
   },
