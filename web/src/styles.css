@@ -3434,6 +3434,21 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   border-bottom: 1px dashed var(--border);
 }
 
+/* 0.21.x — click-to-edit budget amount. */
+.budget-amount-edit {
+  background: transparent;
+  border: 1px dashed transparent;
+  border-radius: 4px;
+  padding: 1px 4px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.budget-amount-edit:hover {
+  border-color: var(--border);
+  background: var(--surface-3);
+}
+
 @media (max-width: 720px) {
   .budget-hero-stats { grid-template-columns: repeat(2, 1fr); }
 }

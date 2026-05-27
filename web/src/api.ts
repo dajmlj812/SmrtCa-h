@@ -858,6 +858,10 @@ export interface BudgetVsActualRow {
   id: string;
   category_id: string | null;
   category_name: string | null;
+  /** 0.21.x — populated when the budget row is tied to a specific bill. */
+  bill_id: string | null;
+  bill_name: string | null;
+  bill_next_due_date: string | null;
   period_type: BudgetPeriodType;
   period_start: string;
   period_end: string;

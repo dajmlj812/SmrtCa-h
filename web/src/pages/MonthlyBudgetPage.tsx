@@ -148,6 +148,15 @@ export function MonthlyBudgetPage() {
     }
   }
 
+  async function onAmountChange(id: string, amountCents: number) {
+    try {
+      await api.updateBudgetAmount(id, amountCents);
+      await load(month);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    }
+  }
+
   const hasFlex = rows.some((r) => r.category_id === null);
   const budgetedIds = new Set(
     rows.map((r) => r.category_id).filter((id): id is string => id !== null),
@@ -328,6 +337,7 @@ export function MonthlyBudgetPage() {
                         key={r.id}
                         row={r}
                         onDelete={() => void onDelete(r.id)}
+                        onAmountChange={(cents) => onAmountChange(r.id, cents)}
                       />
                     ))}
                   </div>
@@ -352,29 +362,91 @@ export function MonthlyBudgetPage() {
 function BudgetRow({
   row,
   onDelete,
+  onAmountChange,
 }: {
   row: BudgetVsActualRow;
   onDelete: () => void;
+  onAmountChange: (newCents: number) => Promise<void>;
 }) {
   const pct =
     row.budgeted_cents === 0
       ? 0
       : Math.min(100, (row.actual_cents / row.budgeted_cents) * 100);
   const over = row.actual_cents > row.budgeted_cents;
+  // 0.21.x — label preference: bill name first (each seeded bill is
+  // its own line and the bill name is the meaningful identifier),
+  // then category name, then the flex-pool fallback.
   const label =
-    row.category_id === null ? 'Flex pool (everything else)' : row.category_name;
+    row.bill_name ?? row.category_name ?? 'Flex pool (everything else)';
+
+  // 0.21.x — inline-editable budgeted amount. Click pencil → edit
+  // dollars → enter or blur to save. Esc cancels.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function commit() {
+    if (!editing) return;
+    setSaving(true);
+    const cents = Math.round(Number(draft) * 100);
+    if (Number.isFinite(cents) && cents > 0 && cents !== row.budgeted_cents) {
+      try {
+        await onAmountChange(cents);
+      } catch {
+        /* parent surfaces the error */
+      }
+    }
+    setSaving(false);
+    setEditing(false);
+  }
+
   return (
     <div className="budget-row">
       <div className="budget-row-head">
         <span className="budget-row-name">
           {label}
           <span className="pill period-pill">{PERIOD_LABELS[row.period_type]}</span>
+          {row.bill_name && row.category_name && (
+            <span className="muted small" style={{ marginLeft: 8 }}>
+              {row.category_name}
+            </span>
+          )}
         </span>
         <span className="budget-row-num">
           <span className={over ? 'neg' : ''}>
             {formatCents(row.actual_cents)}
           </span>
-          <span className="muted"> / {formatCents(row.budgeted_cents)}</span>
+          <span className="muted"> / </span>
+          {editing ? (
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              autoFocus
+              disabled={saving}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commit();
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              onBlur={() => void commit()}
+              style={{ width: 90, textAlign: 'right' }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="budget-amount-edit"
+              title="Click to edit the monthly budget for this row"
+              onClick={() => {
+                setDraft((row.budgeted_cents / 100).toFixed(2));
+                setEditing(true);
+              }}
+            >
+              {formatCents(row.budgeted_cents)}
+              <span aria-hidden style={{ marginLeft: 4, opacity: 0.5 }}>✎</span>
+            </button>
+          )}
         </span>
         <button className="btn-link danger" type="button" onClick={onDelete}>
           Remove
