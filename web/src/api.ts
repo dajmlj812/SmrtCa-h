@@ -1104,7 +1104,46 @@ export interface Bill {
   negotiate_email_template: string | null;
   negotiate_steps: string | null;
   negotiate_notes: string | null;
+  // 0.22.0 — matching engine config + state.
+  kind?: 'bill' | 'subscription';
+  amount_mode?: 'fixed' | 'drift' | 'variable';
+  amount_tolerance_cents?: number | null;
+  match_window_days?: number;
+  merchant_pattern?: string | null;
+  paused_until?: string | null;
+  overdue_grace_days?: number;
   created_at: string;
+}
+
+// 0.22.0 — matcher triage queue row.
+export interface BillTriageRow {
+  id: string;
+  bill_id: string;
+  transaction_id: string;
+  reason: 'ambiguous_vendor' | 'amount_edge' | 'date_edge' | 'out_of_tolerance';
+  amount_fit: number | null;
+  date_fit: number | null;
+  created_at: string;
+  bill_name: string;
+  bill_amount_cents: number;
+  bill_next_due_date: string;
+  bill_amount_mode: 'fixed' | 'drift' | 'variable';
+  txn_date: string;
+  txn_amount_cents: number;
+  raw_description: string;
+  normalized_merchant: string | null;
+}
+
+// 0.22.0 — per-cycle history for a bill.
+export interface BillPeriodRow {
+  period_anchor_date: string;
+  status: 'pending' | 'paid' | 'overdue' | 'skipped';
+  matched_txn_id: string | null;
+  marked_paid_at: string | null;
+  skipped_at: string | null;
+  txn_date: string | null;
+  amount_cents: number | null;
+  raw_description: string | null;
 }
 
 // 0.19.1 — bill negotiation library entry (mirror of
@@ -2787,6 +2826,13 @@ export const api = {
       negotiateEmailTemplate?: string | null;
       negotiateSteps?: string | null;
       negotiateNotes?: string | null;
+      // 0.22.0 — matching engine config.
+      kind?: 'bill' | 'subscription';
+      amountMode?: 'fixed' | 'drift' | 'variable';
+      amountToleranceCents?: number | null;
+      matchWindowDays?: number;
+      merchantPattern?: string | null;
+      overdueGraceDays?: number;
     },
   ) =>
     http<{ bill: Bill }>(`/api/bills/${id}`, {
@@ -2794,6 +2840,50 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }).then((r) => r.bill),
+
+  // 0.22.0 — matcher triage + skip/pause + rescan + per-bill history.
+  listBillTriage: () =>
+    http<{ triage: BillTriageRow[] }>('/api/bills/triage').then(
+      (r) => r.triage,
+    ),
+  resolveBillTriage: (
+    id: string,
+    resolution: 'accepted' | 'rejected' | 'reassigned',
+  ) =>
+    http<{ resolved: true; matched_bill_id: string | null }>(
+      `/api/bills/triage/${id}/resolve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution }),
+      },
+    ),
+  skipBillPeriod: (id: string) =>
+    http<{ skipped: true; advanced_to: string | null }>(
+      `/api/bills/${id}/skip-period`,
+      { method: 'POST' },
+    ),
+  pauseBill: (id: string, until: string) =>
+    http<{ paused_until: string }>(`/api/bills/${id}/pause`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ until }),
+    }),
+  unpauseBill: (id: string) =>
+    http<{ paused_until: null }>(`/api/bills/${id}/unpause`, {
+      method: 'POST',
+    }),
+  rescanBills: () =>
+    http<{ scanned: number; matched: number; triaged: number }>(
+      '/api/bills/rescan',
+      { method: 'POST' },
+    ),
+  sweepOverdueBills: () =>
+    http<{ flipped: number }>('/api/bills/sweep-overdue', { method: 'POST' }),
+  listBillPeriods: (id: string) =>
+    http<{ periods: BillPeriodRow[] }>(`/api/bills/${id}/periods`).then(
+      (r) => r.periods,
+    ),
 
   lookupCancellation: (name: string) =>
     http<{

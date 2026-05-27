@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BillsPage } from './BillsPage';
 import { SubscriptionsPage } from './SubscriptionsPage';
+import { BillTriageQueue } from '../components/BillTriageQueue';
 
 /**
  * 0.22.0 — Recurring (unified Bills + Subscriptions).
@@ -42,6 +43,7 @@ export function RecurringPage() {
 
   return (
     <div>
+      <BillTriageQueue />
       <div
         className="tab-strip"
         role="tablist"

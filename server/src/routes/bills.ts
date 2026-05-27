@@ -54,6 +54,8 @@ const BILL_COLUMNS = `id, name, amount_cents, frequency, next_due_date,
   last_reviewed_at,
   cancel_url, cancel_email_template, cancel_steps, cancel_notes,
   negotiate_url, negotiate_email_template, negotiate_steps, negotiate_notes,
+  kind, amount_mode, amount_tolerance_cents, match_window_days,
+  merchant_pattern, paused_until, overdue_grace_days,
   created_at`;
 const REVIEW_STATUSES = ['active', 'review', 'cancel', 'alter', 'keep'] as const;
 type ReviewStatus = (typeof REVIEW_STATUSES)[number];
@@ -143,10 +145,14 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
       accountId = body.accountId;
     }
 
+    // 0.22.0 — opportunistic matching by default: seed merchant_pattern
+    // with the bill name so the matcher does something useful from day
+    // one. The PATCH endpoint exposes the field for refinement when the
+    // bank's description differs from the bill name.
     const r = await query(
       `INSERT INTO bills (tenant_id, name, amount_cents, frequency, next_due_date,
-                          category_id, account_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+                          category_id, account_id, merchant_pattern)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $2)
        RETURNING ${BILL_COLUMNS}`,
       [tenantId, name, amount, freq, body.nextDueDate, categoryId, accountId],
     );
@@ -225,6 +231,8 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         ['negotiateEmailTemplate', 'negotiate_email_template'],
         ['negotiateSteps', 'negotiate_steps'],
         ['negotiateNotes', 'negotiate_notes'],
+        // 0.22.0 — merchant pattern (used by the matcher).
+        ['merchantPattern', 'merchant_pattern'],
       ] as const) {
         if (body[key] !== undefined) {
           const v = body[key];
@@ -241,6 +249,64 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
               .send({ error: `${key} must be a string or null` });
           }
         }
+      }
+      // 0.22.0 — matching engine config (typed columns).
+      if (body.kind !== undefined) {
+        if (body.kind !== 'bill' && body.kind !== 'subscription') {
+          return reply
+            .code(400)
+            .send({ error: 'kind must be bill or subscription' });
+        }
+        params.push(body.kind);
+        updates.push(`kind = $${params.length}`);
+      }
+      if (body.amountMode !== undefined) {
+        if (
+          body.amountMode !== 'fixed' &&
+          body.amountMode !== 'drift' &&
+          body.amountMode !== 'variable'
+        ) {
+          return reply
+            .code(400)
+            .send({ error: 'amountMode must be fixed|drift|variable' });
+        }
+        params.push(body.amountMode);
+        updates.push(`amount_mode = $${params.length}`);
+      }
+      if (body.amountToleranceCents !== undefined) {
+        if (body.amountToleranceCents === null) {
+          params.push(null);
+          updates.push(`amount_tolerance_cents = $${params.length}`);
+        } else {
+          const n = asPositiveInt(body.amountToleranceCents);
+          if (n === null) {
+            return reply.code(400).send({
+              error: 'amountToleranceCents must be a positive integer or null',
+            });
+          }
+          params.push(n);
+          updates.push(`amount_tolerance_cents = $${params.length}`);
+        }
+      }
+      if (body.matchWindowDays !== undefined) {
+        const n = asPositiveInt(body.matchWindowDays);
+        if (n === null || n > 30) {
+          return reply
+            .code(400)
+            .send({ error: 'matchWindowDays must be 1..30' });
+        }
+        params.push(n);
+        updates.push(`match_window_days = $${params.length}`);
+      }
+      if (body.overdueGraceDays !== undefined) {
+        const raw = Number(body.overdueGraceDays);
+        if (!Number.isInteger(raw) || raw < 0 || raw > 30) {
+          return reply
+            .code(400)
+            .send({ error: 'overdueGraceDays must be 0..30' });
+        }
+        params.push(raw);
+        updates.push(`overdue_grace_days = $${params.length}`);
       }
       if (updates.length === 0)
         return reply.code(400).send({ error: 'No updates' });
