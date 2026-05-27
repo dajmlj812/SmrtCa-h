@@ -111,7 +111,7 @@ export function TransactionTable({
     !!selection && allIds.some((id) => selection.selected.has(id)) && !allChecked;
   return (
     <div className="table-wrap">
-      <table className="txn-table">
+      <table className="txn-table txn-table-compact">
         <thead>
           <tr>
             {selection && (
@@ -248,8 +248,6 @@ function TransactionRow({
       <td className="desc">
         <span className="desc-main">
           {t.normalized_merchant ?? t.raw_description}
-        </span>
-        <span className="desc-meta">
           <StatusPill status={t.normalization_status} />
           {t.transfer_group_id && (
             <span
@@ -279,10 +277,15 @@ function TransactionRow({
               ↩ {REFUND_STATUS_LABELS[t.refund_status]}
             </button>
           )}
-          {t.normalized_merchant && (
-            <span className="desc-sub">{t.raw_description}</span>
-          )}
         </span>
+        {t.normalized_merchant && (
+          <span
+            className="desc-sub"
+            title={t.raw_description}
+          >
+            {t.raw_description}
+          </span>
+        )}
       </td>
       <td>
         {editable ? (

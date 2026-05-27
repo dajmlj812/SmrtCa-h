@@ -3328,6 +3328,50 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .txn-table .neg { color: var(--neg); font-weight: 600; }
 .txn-table .muted-row td { color: var(--dim); }
 
+/* 0.21.9 — compact transactions row. Scoped via .txn-table-compact
+ * so other tables (warranties, mileage, household, etc.) keep
+ * their existing breathing room. */
+.txn-table-compact tbody td {
+  padding: 5px 12px;
+  vertical-align: middle;
+}
+.txn-table-compact thead th {
+  padding: 6px 12px;
+}
+.txn-table-compact .desc-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 500;
+}
+.txn-table-compact .desc-main .pill {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+.txn-table-compact .desc-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.txn-table-compact .cell-select {
+  padding: 4px 6px;
+  font-size: 12.5px;
+}
+.txn-table-compact .attach-btn {
+  padding: 2px 6px;
+}
+.txn-table-compact .progress-track,
+.txn-table-compact .progress-fill {
+  height: 4px;
+}
+
 /* Banners */
 .banner {
   border-radius: var(--radius);
