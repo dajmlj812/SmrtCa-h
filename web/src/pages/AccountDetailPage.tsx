@@ -163,6 +163,12 @@ export function AccountDetailPage() {
                 <div className="kv-label">Transactions</div>
                 <div className="kv-value">{account.transaction_count}</div>
               </div>
+              {account.type === 'credit_card' && (
+                <CreditLimitField
+                  account={account}
+                  onSaved={(saved) => setAccount(saved)}
+                />
+              )}
               <div className="kv-item" style={{ alignSelf: 'center' }}>
                 <button
                   className="btn secondary"
@@ -356,5 +362,123 @@ function OpeningBalanceForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * 0.22.2 — inline editable credit limit for credit-card accounts.
+ * Shows the limit + current utilization in a kv-item that matches
+ * the surrounding Balance / Opening / Transactions layout. Saving
+ * PATCHes the account and bumps the parent's state without a full
+ * page reload.
+ */
+function CreditLimitField({
+  account,
+  onSaved,
+}: {
+  account: Account;
+  onSaved: (updated: Account) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(
+    account.credit_limit_cents != null
+      ? (account.credit_limit_cents / 100).toFixed(2)
+      : '',
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const owed = Math.abs(account.balance_cents);
+  const limit = account.credit_limit_cents ?? 0;
+  const utilization = limit > 0 ? Math.round((owed / limit) * 100) : null;
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const trimmed = value.trim();
+      const cents = trimmed === '' ? null : Math.round(Number(trimmed) * 100);
+      if (cents !== null && (!Number.isInteger(cents) || cents <= 0)) {
+        throw new Error('Enter a positive dollar amount, or leave blank to clear.');
+      }
+      const updated = await api.updateAccount(account.id, {
+        credit_limit_cents: cents,
+      });
+      onSaved(updated);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="kv-item">
+      <div className="kv-label">Credit limit</div>
+      {editing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="e.g. 10000.00"
+              style={{ width: 130 }}
+              autoFocus
+              disabled={saving}
+            />
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => void save()}
+              disabled={saving}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => {
+                setEditing(false);
+                setValue(
+                  account.credit_limit_cents != null
+                    ? (account.credit_limit_cents / 100).toFixed(2)
+                    : '',
+                );
+                setError(null);
+              }}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+          </div>
+          {error && (
+            <div className="muted small" style={{ color: 'var(--neg)' }}>
+              {error}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="kv-value">
+          {limit > 0 ? formatCents(limit) : <span className="muted">—</span>}
+          {utilization !== null && (
+            <span className="muted" style={{ marginLeft: 8 }}>
+              · {utilization}% used
+            </span>
+          )}
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => setEditing(true)}
+            style={{ marginLeft: 8 }}
+          >
+            {limit > 0 ? 'Edit' : 'Set limit'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
