@@ -484,15 +484,23 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
                             : p.bills.map((b) => `${b.name} · ${formatCents(b.amount_cents)}`).join(' · ')}
                         </td>
                       </tr>
-                      {/* 0.21.x — Groceries / Fuel / Tolls used to seed
-                          as leaf-level rows here. The plan now seeds
-                          parent-level categories instead: Food at home,
-                          Food out, Gas & Fuel, Parking, Taxi & Rideshare.
-                          Amounts are derived at commit time from each
-                          category's trailing 12-week spend rolled up
-                          across its children — they don't need to be
-                          editable here. Listed below the misc/savings
-                          rows as a single hint. */}
+                      {/* 0.21.x — five parent-level recurring categories
+                          (Food at home, Food out, Gas & Fuel, Parking,
+                          Taxi & Rideshare). Read-only: amounts derive
+                          from each category's trailing 12-week spend
+                          rolled up across its children. Editable on
+                          the budget page after commit. */}
+                      {p.recurring.map((r) => (
+                        <tr key={r.category_id}>
+                          <td className="muted">{r.category_name}</td>
+                          <td className="num neg">
+                            {formatCents(-r.amount_cents)}
+                          </td>
+                          <td className="muted small">
+                            12-week avg, scaled to {p.days} day{p.days === 1 ? '' : 's'}
+                          </td>
+                        </tr>
+                      ))}
                       <MiscRow
                         cents={p.miscCents}
                         note={p.miscNote}
@@ -517,13 +525,6 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
                       </tr>
                     </tbody>
                   </table>
-                  <div className="muted small" style={{ marginTop: 6 }}>
-                    Auto-seeded on commit: <strong>Food at home</strong>,{' '}
-                    <strong>Food out</strong>, <strong>Gas &amp; Fuel</strong>,{' '}
-                    <strong>Parking</strong>, <strong>Taxi &amp; Rideshare</strong>{' '}
-                    — each at its trailing 12-week spend, scaled to{' '}
-                    {p.days} day{p.days === 1 ? '' : 's'}.
-                  </div>
                 </div>
               ))}
             </div>

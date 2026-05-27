@@ -153,6 +153,19 @@ export interface PeriodPreview {
   savingsCents: number;
   savingsSuggestions: SavingsSuggestions;
   flexCents: number;
+  /**
+   * 0.21.x — parent-level recurring categories that auto-seed on
+   * commit (Food at home / Food out / Gas & Fuel / Parking /
+   * Taxi & Rideshare). Each entry's amount = the category's
+   * trailing 12-week weekly average, scaled to this period's day
+   * count and rolled up across its children. Read-only in the
+   * wizard; the user can edit on the budget page after commit.
+   */
+  recurring: Array<{
+    category_id: string;
+    category_name: string;
+    amount_cents: number;
+  }>;
 }
 
 export interface WizardPreview extends WizardInputSavings {
@@ -498,6 +511,23 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
     accountIds,
   );
 
+  // 0.21.x — resolve the five parent-level recurring categories
+  // + their trailing 12-week weekly averages (rolled up across
+  // children) so the preview can show what'll seed on commit.
+  const recurringResolved = await pool.query<{ id: string; name: string }>(
+    `SELECT DISTINCT ON (lower(name)) id, name FROM categories
+      WHERE lower(name) = ANY($1::text[])
+        AND (tenant_id = $2 OR tenant_id IS NULL)
+      ORDER BY lower(name), tenant_id NULLS LAST`,
+    [PAYCHECK_RECURRING_CATEGORIES.map((n) => n.toLowerCase()), input.tenantId],
+  );
+  const recurringCategoryRows = recurringResolved.rows;
+  const recurringWeeklyMap = await weeklyRecurringByCategory(
+    input.tenantId,
+    accountIds,
+    recurringCategoryRows.map((r) => r.id),
+  );
+
   // 0.17.22 — three leftover-pct chips, defaults 25/50/75. Each
   // can be overridden per wizard run; out-of-range values fall
   // back to the default. Global setting keys still consulted for
@@ -591,8 +621,21 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
       days,
       accountIds,
     );
+    // 0.21.x — recurring category amounts for this period.
+    const recurring = recurringCategoryRows
+      .map((cat) => {
+        const weekly = recurringWeeklyMap.get(cat.id) ?? 0;
+        return {
+          category_id: cat.id,
+          category_name: cat.name,
+          amount_cents: weekly > 0 ? scaleToPeriod(weekly, days) : 0,
+        };
+      })
+      .filter((r) => r.amount_cents > 0);
+    const recurringTotal = recurring.reduce((s, r) => s + r.amount_cents, 0);
+
     const preFlexCents =
-      incomeTotal - billsTotal - groceriesCents - fuelCents - tollsCents - miscCents;
+      incomeTotal - billsTotal - recurringTotal - miscCents;
     const positiveLeftover = preFlexCents > 0 ? preFlexCents : 0;
     const pctLowCents = Math.round(positiveLeftover * (savingsLowPct / 100));
     const pctMidCents = Math.round(positiveLeftover * (savingsMidPct / 100));
@@ -602,13 +645,7 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
     const savingsCents = input.savingsOverrideCents?.[i] ?? 0;
 
     const flexCents =
-      incomeTotal -
-      billsTotal -
-      groceriesCents -
-      fuelCents -
-      tollsCents -
-      miscCents -
-      savingsCents;
+      incomeTotal - billsTotal - recurringTotal - miscCents - savingsCents;
 
     periods.push({
       index: i,
@@ -631,6 +668,7 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
         maxCents,
       },
       flexCents,
+      recurring,
     });
   }
 

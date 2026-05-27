@@ -640,6 +640,12 @@ export interface WizardPeriodPreview {
   savingsCents: number;
   savingsSuggestions: WizardSavingsSuggestions;
   flexCents: number;
+  /** 0.21.x — parent-level recurring categories that auto-seed. */
+  recurring: Array<{
+    category_id: string;
+    category_name: string;
+    amount_cents: number;
+  }>;
 }
 
 export interface AppSetting {
