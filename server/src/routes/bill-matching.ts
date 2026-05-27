@@ -93,7 +93,7 @@ export async function billMatchingRoutes(app: FastifyInstance): Promise<void> {
       if (bill.rows.length === 0) {
         return reply.code(404).send({ error: 'not found' });
       }
-      const { next_due_date, frequency } = bill.rows[0];
+      const { next_due_date, frequency } = bill.rows[0]!;
       await query(
         `INSERT INTO bill_periods
            (bill_id, period_anchor_date, tenant_id, status, skipped_at)

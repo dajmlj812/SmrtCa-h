@@ -203,7 +203,7 @@ export async function tryMatchTransaction(
       [txnId],
     );
     if (txnRes.rows.length === 0) return { matched_bill_id: null, triaged: 0 };
-    const txn = txnRes.rows[0];
+    const txn = txnRes.rows[0]!;
     // Bills are expenses: txn must be a debit (negative). Income/transfer
     // signs would never match a bill anyway.
     if (txn.amount_cents >= 0) return { matched_bill_id: null, triaged: 0 };
@@ -279,7 +279,7 @@ export async function tryMatchTransaction(
     }
 
     // Exactly one candidate. If edge-zone, triage; otherwise auto-link.
-    const only = candidates[0];
+    const only = candidates[0]!;
     if (only.edge) {
       await insertTriage(
         client,
@@ -394,7 +394,7 @@ export async function sweepOverdueBills(today: string): Promise<{
         WHERE bill_id = $1 AND period_anchor_date = $2`,
       [bill.id, bill.next_due_date],
     );
-    if (existing.rows.length > 0 && existing.rows[0].status === 'paid') {
+    if (existing.rows.length > 0 && existing.rows[0]!.status === 'paid') {
       // Edge case: paid via triage but cursor never advanced. Advance now.
       const next = advanceByFrequency(bill.next_due_date, bill.frequency);
       if (next) {
@@ -490,7 +490,7 @@ export async function resolveTriage(
       [triageId],
     );
     if (r.rows.length === 0) return { matched_bill_id: null };
-    const row = r.rows[0];
+    const row = r.rows[0]!;
 
     await client.query(
       `UPDATE bill_match_triage
@@ -520,7 +520,7 @@ export async function resolveTriage(
       [row.transaction_id],
     );
     if (billRes.rows.length && txnRes.rows.length) {
-      await linkBillToTxn(client, billRes.rows[0], txnRes.rows[0]);
+      await linkBillToTxn(client, billRes.rows[0]!, txnRes.rows[0]!);
       // Also close any sibling triage rows for this txn (ambiguous set).
       await client.query(
         `UPDATE bill_match_triage
