@@ -37,20 +37,6 @@ export function AccountsPage() {
     void load();
   }, []);
 
-  // Sum in the global display currency when the server attached
-  // converted values; fall back to raw cents (single-currency case).
-  const netWorth = accounts.reduce(
-    (sum, a) =>
-      sum + (a.balance_display_cents !== undefined ? a.balance_display_cents : a.balance_cents),
-    0,
-  );
-  const displayCurrency = accounts[0]?.display_currency;
-  const hasMixedCurrency =
-    new Set(accounts.map((a) => a.currency)).size > 1;
-  const anyUnknownRate = accounts.some(
-    (a) => a.rate_known === false && a.currency !== displayCurrency,
-  );
-
   return (
     <div>
       <div className="page-header">
@@ -74,30 +60,6 @@ export function AccountsPage() {
         />
       )}
 
-      {!loading && accounts.length > 0 && (
-        <>
-          <div className="stat-row">
-            <div className="stat">
-              <div className="stat-label">
-                Net Worth {hasMixedCurrency && displayCurrency && `(in ${displayCurrency})`}
-              </div>
-              <div className="stat-value">{formatCents(netWorth)}</div>
-            </div>
-            <div className="stat">
-              <div className="stat-label">Accounts</div>
-              <div className="stat-value">{accounts.length}</div>
-            </div>
-          </div>
-          {anyUnknownRate && (
-            <div className="banner warning">
-              At least one account is in a currency with no exchange rate
-              configured — its value passes through into the total at 1:1.
-              A super admin can fix this on the System page.
-            </div>
-          )}
-        </>
-      )}
-
       {loading ? (
         <p className="empty">Loading…</p>
       ) : accounts.length === 0 ? (
@@ -108,32 +70,40 @@ export function AccountsPage() {
           </p>
         </div>
       ) : (
-        <div className="card-grid">
-          {accounts.map((a) => (
-            <Link
-              key={a.id}
-              to={`/accounts/${a.id}`}
-              className="card account-card"
-            >
-              <div className="acct-name">{a.name}</div>
-              <div className="acct-meta">
-                {a.institution ? `${a.institution} · ` : ''}
-                {accountTypeLabel(a.type)}
-                {a.last4 ? ` ····${a.last4}` : ''}
-              </div>
-              <div
-                className={`acct-balance ${
-                  a.balance_cents < 0 ? 'neg' : 'pos'
-                }`}
-              >
-                {formatCents(a.balance_cents)}
-              </div>
-              <div className="acct-count">
-                {a.transaction_count} transaction
-                {a.transaction_count === 1 ? '' : 's'}
-              </div>
-            </Link>
-          ))}
+        <div className="table-wrap">
+          <table className="txn-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Institution</th>
+                <th>Type</th>
+                <th className="num">Balance</th>
+                <th className="num">Transactions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((a) => (
+                <tr key={a.id} className="account-row">
+                  <td>
+                    <Link to={`/accounts/${a.id}`} className="account-link">
+                      <strong>{a.name}</strong>
+                      {a.last4 && (
+                        <span className="muted small" style={{ marginLeft: 8 }}>
+                          ····{a.last4}
+                        </span>
+                      )}
+                    </Link>
+                  </td>
+                  <td className="muted">{a.institution ?? '—'}</td>
+                  <td>{accountTypeLabel(a.type)}</td>
+                  <td className={`num ${a.balance_cents < 0 ? 'neg' : 'pos'}`}>
+                    {formatCents(a.balance_cents)}
+                  </td>
+                  <td className="num muted">{a.transaction_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

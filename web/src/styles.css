@@ -3332,6 +3332,16 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .txn-table .neg { color: var(--neg); font-weight: 600; }
 .txn-table .muted-row td { color: var(--dim); }
 
+/* 0.21.x — accounts list rows. The whole row is conceptually a
+ * link to /accounts/:id; the <a> is constrained to the first cell
+ * but hover styling matches the row for affordance. */
+.account-link {
+  color: inherit;
+  text-decoration: none;
+}
+.account-link:hover { text-decoration: underline; }
+.account-row { cursor: pointer; }
+
 /* 0.21.9 — compact transactions row. Scoped via .txn-table-compact
  * so other tables (warranties, mileage, household, etc.) keep
  * their existing breathing room. */
