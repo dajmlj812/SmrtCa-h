@@ -693,20 +693,79 @@ export async function ensureAccountsUnclaimed(
   }
 }
 
+/**
+ * 0.21.x — additional recurring spend categories that the paycheck
+ * wizard seeds alongside groceries/fuel/tolls. Same list the
+ * monthly-budget seed uses, minus the three the wizard already
+ * handles explicitly. The wizard scales each from a 3-month
+ * trailing weekly average down to per-period.
+ */
+const PAYCHECK_RECURRING_CATEGORIES = [
+  'Parking',
+  'Public Transit',
+  'Taxi & Rideshare',
+  'Restaurants',
+  'Fast Food',
+  'Coffee Shops',
+  'Food Delivery',
+];
+
+async function weeklyRecurringByCategory(
+  tenantId: string,
+  accountIds: string[] | null,
+  categoryIds: readonly string[],
+): Promise<Map<string, number>> {
+  // For each category id passed in, compute average weekly spend
+  // over the trailing 12 weeks (matches the wizard's groceries
+  // window). Returns a Map keyed by category_id.
+  if (categoryIds.length === 0) return new Map();
+  const r = await pool.query<{ category_id: string; weekly: string }>(
+    `SELECT category_id, ROUND(AVG(weekly_spend))::bigint::text AS weekly
+       FROM (
+         SELECT t.category_id,
+                date_trunc('week', t.txn_date) AS w,
+                SUM(-t.amount_cents)::bigint AS weekly_spend
+           FROM transactions t
+           JOIN accounts a ON a.id = t.account_id
+          WHERE a.tenant_id = $1
+            AND ($2::uuid[] IS NULL OR a.id = ANY($2::uuid[]))
+            AND t.category_id = ANY($3::uuid[])
+            AND t.amount_cents < 0
+            AND t.transfer_group_id IS NULL
+            AND t.txn_date >= (now()::date - interval '12 weeks')
+          GROUP BY t.category_id, date_trunc('week', t.txn_date)
+       ) m
+   GROUP BY category_id`,
+    [tenantId, accountIds, categoryIds],
+  );
+  const out = new Map<string, number>();
+  for (const row of r.rows) out.set(row.category_id, Number(row.weekly));
+  return out;
+}
+
 export async function commitWizard(
   preview: WizardPreview,
 ): Promise<CommitResult> {
   // 0.17.6 — categories.tenant_id may be NULL (system-seeded defaults)
-  // OR the tenant's own. We want either match. The seeded defaults are
-  // the common case (every tenant starts with them), but tenants can
-  // create custom categories of the same name; in that case we prefer
-  // the tenant's own.
+  // OR the tenant's own. We want either match.
+  // 0.21.x — extended with the PAYCHECK_RECURRING_CATEGORIES so the
+  // wizard seeds the same set of recurring spend rows the monthly
+  // budget does (Parking / Transit / Taxi / Restaurants / Fast
+  // Food / Coffee Shops / Food Delivery).
+  const wanted = [
+    'groceries',
+    'gas & fuel',
+    'tolls',
+    'miscellaneous',
+    'savings',
+    ...PAYCHECK_RECURRING_CATEGORIES.map((n) => n.toLowerCase()),
+  ];
   const catLookup = await pool.query<{ name: string; id: string }>(
     `SELECT DISTINCT ON (lower(name)) lower(name) AS name, id FROM categories
-      WHERE lower(name) IN ('groceries', 'gas & fuel', 'tolls', 'miscellaneous', 'savings')
+      WHERE lower(name) = ANY($2::text[])
         AND (tenant_id = $1 OR tenant_id IS NULL)
       ORDER BY lower(name), tenant_id NULLS LAST`,
-    [preview.tenantId],
+    [preview.tenantId, wanted],
   );
   const byName = new Map(catLookup.rows.map((r) => [r.name, r.id]));
   const groceriesCat = byName.get('groceries') ?? null;
@@ -714,6 +773,20 @@ export async function commitWizard(
   const tollsCat = byName.get('tolls') ?? null;
   const miscCat = byName.get('miscellaneous') ?? null;
   const savingsCat = byName.get('savings') ?? null;
+
+  // 0.21.x — recurring-spend category seeding (parking, transit,
+  // restaurants, etc.). Weekly trailing average per category,
+  // scaled to each period's day count below.
+  const recurringCatIds = PAYCHECK_RECURRING_CATEGORIES.map(
+    (n) => byName.get(n.toLowerCase()),
+  ).filter((id): id is string => Boolean(id));
+  const recurringWeekly = await weeklyRecurringByCategory(
+    preview.tenantId,
+    preview.accountIds && preview.accountIds.length > 0
+      ? preview.accountIds
+      : null,
+    recurringCatIds,
+  );
 
   // 0.17.16 — every wizard run creates its plan row first. The
   // per-period `budgets` rows then carry plan_id so the API
@@ -759,6 +832,22 @@ export async function commitWizard(
       { catId: miscCat, amount: p.miscCents, note: p.miscNote || null },
       { catId: savingsCat, amount: p.savingsCents, note: null },
     ];
+
+    // 0.21.x — extra recurring categories (Parking / Transit /
+    // Taxi / Restaurants / Fast Food / Coffee Shops / Food
+    // Delivery). Each one's amount is its weekly trailing avg
+    // scaled to this period's day count. Categories with zero
+    // trailing spend in the window contribute zero and get
+    // skipped by the amount > 0 guard below.
+    for (const catId of recurringCatIds) {
+      const weekly = recurringWeekly.get(catId) ?? 0;
+      if (weekly <= 0) continue;
+      editableInputs.push({
+        catId,
+        amount: scaleToPeriod(weekly, p.days),
+        note: null,
+      });
+    }
     for (const e of editableInputs) {
       if (e.amount <= 0 || e.catId === null) continue;
       // 0.17.16 — dup check is now plan-scoped. Each wizard run
