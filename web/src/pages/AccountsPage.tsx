@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { api, type Account, type CreateAccountInput } from '../api';
 import { accountTypeLabel, formatCents } from '../format';
 
+/** Account types whose balance represents money owed, not money you have. */
+const LIABILITY_TYPES = new Set(['credit_card', 'loan', 'manual_liability']);
+
 const ACCOUNT_TYPES: Array<{ value: string; label: string }> = [
   { value: 'checking', label: 'Checking' },
   { value: 'savings', label: 'Savings' },
@@ -82,26 +85,35 @@ export function AccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {accounts.map((a) => (
-                <tr key={a.id} className="account-row">
-                  <td>
-                    <Link to={`/accounts/${a.id}`} className="account-link">
-                      <strong>{a.name}</strong>
-                      {a.last4 && (
-                        <span className="muted small" style={{ marginLeft: 8 }}>
-                          ····{a.last4}
-                        </span>
-                      )}
-                    </Link>
-                  </td>
-                  <td className="muted">{a.institution ?? '—'}</td>
-                  <td>{accountTypeLabel(a.type)}</td>
-                  <td className={`num ${a.balance_cents < 0 ? 'neg' : 'pos'}`}>
-                    {formatCents(a.balance_cents)}
-                  </td>
-                  <td className="num muted">{a.transaction_count}</td>
-                </tr>
-              ))}
+              {accounts.map((a) => {
+                const isLiability = LIABILITY_TYPES.has(a.type);
+                // Liability balances are debt: always shown as a
+                // negative number in red, regardless of sign convention
+                // in the underlying row.
+                const displayCents = isLiability
+                  ? -Math.abs(a.balance_cents)
+                  : a.balance_cents;
+                return (
+                  <tr key={a.id} className="account-row">
+                    <td>
+                      <Link to={`/accounts/${a.id}`} className="account-link">
+                        <strong>{a.name}</strong>
+                        {a.last4 && (
+                          <span className="muted small" style={{ marginLeft: 8 }}>
+                            ····{a.last4}
+                          </span>
+                        )}
+                      </Link>
+                    </td>
+                    <td className="muted">{a.institution ?? '—'}</td>
+                    <td>{accountTypeLabel(a.type)}</td>
+                    <td className={`num ${displayCents < 0 ? 'neg' : 'pos'}`}>
+                      {formatCents(displayCents)}
+                    </td>
+                    <td className="num muted">{a.transaction_count}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
