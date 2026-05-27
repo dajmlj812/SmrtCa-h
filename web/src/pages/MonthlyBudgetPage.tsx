@@ -100,7 +100,7 @@ export function MonthlyBudgetPage() {
     try {
       const r = await api.seedBudgetFromBills(month, overwrite);
       if (r.bill_count === 0) {
-        alert('No active bills to seed from. Add bills on /bills first.');
+        alert('No active bills to seed from. Add bills on /recurring first.');
         return;
       }
       const recurring = r.recurring_category_count ?? 0;

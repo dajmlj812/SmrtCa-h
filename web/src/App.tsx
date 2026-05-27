@@ -24,8 +24,7 @@ import { MonthlyBudgetPage } from './pages/MonthlyBudgetPage';
 import { PaycheckBudgetPage } from './pages/PaycheckBudgetPage';
 import { BudgetRecapPage } from './pages/BudgetRecapPage';
 import { GoalsPage } from './pages/GoalsPage';
-import { BillsPage } from './pages/BillsPage';
-import { SubscriptionsPage } from './pages/SubscriptionsPage';
+import { RecurringPage } from './pages/RecurringPage';
 import { UncategorizedPage } from './pages/UncategorizedPage';
 import { VehiclesPage } from './pages/VehiclesPage';
 import { RoutesPage } from './pages/RoutesPage';
@@ -370,8 +369,7 @@ function AuthenticatedApp({
             <NavLink to="/monthly-budget">Monthly budget</NavLink>
             <NavLink to="/paycheck-budget">Paycheck budget</NavLink>
             <NavLink to="/goals">Goals</NavLink>
-            <NavLink to="/bills">Bills</NavLink>
-            <NavLink to="/subscriptions">Subscriptions</NavLink>
+            <NavLink to="/recurring">Recurring</NavLink>
             <NavLink to="/cancellations">Cancel queue</NavLink>
             <NavLink to="/retirement">Retirement</NavLink>
             <NavLink to="/investments">Investments</NavLink>
@@ -449,8 +447,12 @@ function AuthenticatedApp({
           <Route path="/retirement" element={<RetirementPage />} />
           <Route path="/investments" element={<InvestmentsPage />} />
           <Route path="/debt-payoff" element={<DebtPayoffPage />} />
-          <Route path="/bills" element={<BillsPage />} />
-          <Route path="/subscriptions" element={<SubscriptionsPage />} />
+          <Route path="/recurring" element={<RecurringPage />} />
+          <Route path="/bills" element={<Navigate to="/recurring" replace />} />
+          <Route
+            path="/subscriptions"
+            element={<Navigate to="/recurring?view=subscriptions" replace />}
+          />
           <Route path="/vehicles" element={<VehiclesPage />} />
           <Route path="/routes" element={<RoutesPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
