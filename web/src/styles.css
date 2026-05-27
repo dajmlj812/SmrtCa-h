@@ -3486,6 +3486,26 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   border-color: var(--border);
   background: var(--surface-3);
 }
+.budget-group-remove {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  margin-left: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.budget-group-remove:hover {
+  border-color: var(--neg);
+  color: var(--neg);
+  background: var(--surface-3);
+}
 
 @media (max-width: 720px) {
   .budget-hero-stats { grid-template-columns: repeat(2, 1fr); }

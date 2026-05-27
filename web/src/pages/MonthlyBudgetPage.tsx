@@ -148,6 +148,32 @@ export function MonthlyBudgetPage() {
     }
   }
 
+  /**
+   * 0.21.x — bulk remove every budget row in a category for the
+   * current month. Useful when the user no longer wants to track
+   * a category at all (or wants to start fresh and re-seed).
+   */
+  async function onDeleteGroup(group: {
+    categoryName: string;
+    rows: BudgetVsActualRow[];
+  }) {
+    if (
+      !confirm(
+        `Remove all ${group.rows.length} budget row(s) under "${group.categoryName}" for ${formatMonth(month)}?\n\n` +
+          'This deletes the budget entries only; transactions and bills are not affected.',
+      )
+    )
+      return;
+    try {
+      for (const r of group.rows) {
+        await api.deleteBudget(r.id);
+      }
+      await load(month);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  }
+
   async function onAmountChange(id: string, amountCents: number) {
     try {
       await api.updateBudgetAmount(id, amountCents);
@@ -384,6 +410,7 @@ export function MonthlyBudgetPage() {
                 month={month}
                 onAmountChange={onAmountChange}
                 onDelete={onDelete}
+                onDeleteGroup={onDeleteGroup}
                 onSetCategoryTotal={onSetCategoryTotal}
               />
             ))}
@@ -653,6 +680,7 @@ function CategoryGroupCard({
   month,
   onAmountChange,
   onDelete,
+  onDeleteGroup,
   onSetCategoryTotal,
 }: {
   group: {
@@ -663,6 +691,10 @@ function CategoryGroupCard({
   month: string;
   onAmountChange: (id: string, cents: number) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onDeleteGroup: (group: {
+    categoryName: string;
+    rows: BudgetVsActualRow[];
+  }) => Promise<void>;
   onSetCategoryTotal: (
     group: {
       categoryId: string | null;
@@ -759,6 +791,15 @@ function CategoryGroupCard({
               <span aria-hidden style={{ marginLeft: 4, opacity: 0.5 }}>✎</span>
             </button>
           )}
+          <button
+            type="button"
+            className="budget-group-remove"
+            title="Remove every budget row in this category for this month"
+            aria-label={`Remove ${group.categoryName}`}
+            onClick={() => void onDeleteGroup(group)}
+          >
+            ×
+          </button>
         </div>
       </div>
       <div className="budget-group-progress">
