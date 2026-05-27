@@ -152,6 +152,7 @@ export function TransactionTable({
               showAccount={showAccount}
               showRunningBalance={showRunningBalance}
               groups={groups}
+              categories={categories ?? []}
               hasCategories={categories !== undefined}
               onUpdate={onUpdate}
               onOpenAttachments={onOpenAttachments}
@@ -171,7 +172,8 @@ function TransactionRow({
   transaction,
   showAccount,
   showRunningBalance,
-  groups,
+  groups: _groups,
+  categories,
   hasCategories,
   onUpdate,
   onOpenAttachments,
@@ -184,6 +186,7 @@ function TransactionRow({
   showAccount: boolean;
   showRunningBalance: boolean;
   groups: CategoryGroup[];
+  categories: readonly Category[];
   hasCategories: boolean;
   onUpdate?: Props['onUpdate'];
   onOpenAttachments?: Props['onOpenAttachments'];
@@ -291,7 +294,7 @@ function TransactionRow({
       <td>
         {editable ? (
           <CategoryPicker
-            categories={categories ?? []}
+            categories={categories}
             value={t.category_id}
             disabled={saving}
             onChange={(id) => void handleCategoryChange(id ?? '')}
