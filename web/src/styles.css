@@ -1152,7 +1152,28 @@ select:focus {
 }
 .sidebar-footer .brand-tagline {
   margin-top: 0;
+  text-align: center;
+}
+/* Buttons that live inside .nav (e.g. "My profile" in the Account
+ * group) should look and feel like the NavLink anchors around them. */
+.nav .nav-link-btn {
+  display: block;
+  width: 100%;
   text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: #aab2c5;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.nav .nav-link-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
 }
 
 /* 0.18.1 — cancel-info modal */

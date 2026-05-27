@@ -387,20 +387,29 @@ function AuthenticatedApp({
             <NavLink to="/workspace">Workspace</NavLink>
             <NavLink to="/billing">Billing</NavLink>
           </div>
+          {(me || supportUrl) && (
+            <div className="nav-group">
+              <div className="nav-group-label">Account</div>
+              {me && (
+                <button
+                  className="nav-link-btn"
+                  type="button"
+                  onClick={() => setShowProfile(true)}
+                >
+                  My profile
+                </button>
+              )}
+              {supportUrl && (
+                <a href={supportUrl} target="_blank" rel="noreferrer">
+                  Help &amp; feature requests
+                </a>
+              )}
+            </div>
+          )}
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle />
           <BrandTagline />
-          <SupportLink supportUrl={supportUrl} />
-          {me && (
-            <button
-              className="btn-link"
-              type="button"
-              onClick={() => setShowProfile(true)}
-            >
-              My profile
-            </button>
-          )}
           <button
             className="btn secondary logout-btn"
             type="button"
@@ -475,13 +484,3 @@ function AuthenticatedApp({
  * channels, so we spell out that we want the wishlist input
  * as well.
  */
-function SupportLink({ supportUrl }: { supportUrl: string | null }) {
-  if (!supportUrl) return null;
-  return (
-    <div className="muted small" style={{ marginTop: 6 }}>
-      <a href={supportUrl} target="_blank" rel="noreferrer">
-        Help & feature requests
-      </a>
-    </div>
-  );
-}
