@@ -85,9 +85,15 @@ export function PaycheckBudgetPage() {
     }
   }
 
+  // 0.21.x — paycheck budget only renders paycheck-cadence
+  // periods. Monthly-cadence periods belong on /monthly-budget;
+  // they used to leak in when a plan was misconfigured as
+  // "monthly" in the wizard.
+  const paycheckPeriods = periods.filter((p) => p.period.type !== 'monthly');
+
   // Group periods by plan_id (null = legacy / empty placeholder).
   const byPlan = new Map<string, BudgetPeriodSummary[]>();
-  for (const p of periods) {
+  for (const p of paycheckPeriods) {
     const key = p.plan_id ?? '__none__';
     const arr = byPlan.get(key) ?? [];
     arr.push(p);
