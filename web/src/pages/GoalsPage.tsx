@@ -93,6 +93,13 @@ export function GoalsPage() {
         />
       )}
 
+      <div className="banner info" role="status" style={{ marginBottom: 12 }}>
+        <strong>Heads up:</strong> Savings goals are a work in progress. You can
+        create, edit, and contribute today, but auto-funding from linked
+        accounts, milestone reminders, and richer progress charts are still in
+        development — targeting the <strong>0.22.x</strong> release.
+      </div>
+
       {error && <div className="banner error">{error}</div>}
 
       {loading ? (
