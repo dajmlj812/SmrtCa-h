@@ -2596,6 +2596,13 @@ export const api = {
   deleteBudget: (id: string) =>
     http<void>(`/api/budgets/${id}`, { method: 'DELETE' }),
 
+  // 0.21.x — delete every budget row in a single (plan, period).
+  deletePaycheckPeriod: (planId: string, periodMonth: string) =>
+    http<{ deleted: number }>(
+      `/api/budgets/by-period?planId=${encodeURIComponent(planId)}&periodMonth=${encodeURIComponent(periodMonth)}`,
+      { method: 'DELETE' },
+    ),
+
   copyBudgets: (fromMonth: string, toMonth: string) =>
     http<{ copied: number }>('/api/budgets/copy', {
       method: 'POST',

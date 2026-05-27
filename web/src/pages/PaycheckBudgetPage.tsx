@@ -71,6 +71,20 @@ export function PaycheckBudgetPage() {
     }
   }
 
+  async function onDeletePeriod(planId: string, periodStart: string, label: string) {
+    if (!confirm(
+      `Delete this period (${label})?\n\nEvery budget row for this period in the plan will be removed. ` +
+        `The plan itself and its other periods stay intact. ` +
+        `Re-run the AutoMagic wizard with the same plan name to repopulate when new data is in.`,
+    )) return;
+    try {
+      await api.deletePaycheckPeriod(planId, periodStart);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Period delete failed');
+    }
+  }
+
   // Group periods by plan_id (null = legacy / empty placeholder).
   const byPlan = new Map<string, BudgetPeriodSummary[]>();
   for (const p of periods) {
@@ -228,6 +242,7 @@ function PlanBlock({
           summary={p}
           accounts={accounts}
           onRunWizard={onRunWizard}
+          onDeletePeriod={onDeletePeriod}
         />
       ))}
     </div>
@@ -238,10 +253,16 @@ function PeriodOverview({
   summary,
   accounts,
   onRunWizard,
+  onDeletePeriod,
 }: {
   summary: BudgetPeriodSummary;
   accounts: Account[];
   onRunWizard: () => void;
+  onDeletePeriod: (
+    planId: string,
+    periodStart: string,
+    label: string,
+  ) => Promise<void>;
 }) {
   const { period, income, bills, editable, totals } = summary;
   const periodLabel = PERIOD_LABELS[period.type];
@@ -254,9 +275,27 @@ function PeriodOverview({
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="page-section-head">
         <h2 style={{ margin: 0 }}>Period overview</h2>
-        <span className="muted small">
-          {periodLabel} · {formatDate(period.start)} → {formatDate(period.end)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className="muted small">
+            {periodLabel} · {formatDate(period.start)} → {formatDate(period.end)}
+          </span>
+          {summary.plan_id && (
+            <button
+              type="button"
+              className="btn-link danger"
+              onClick={() =>
+                void onDeletePeriod(
+                  summary.plan_id!,
+                  period.start,
+                  `${formatDate(period.start)} → ${formatDate(period.end)}`,
+                )
+              }
+              title="Remove every budget row for this period (the plan itself stays)"
+            >
+              Delete period
+            </button>
+          )}
+        </div>
       </div>
       {scopedAccountNames && scopedAccountNames.length > 0 && (
         <div className="muted small" style={{ marginTop: 4 }}>

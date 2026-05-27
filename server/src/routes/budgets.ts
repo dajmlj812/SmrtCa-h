@@ -499,6 +499,37 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  /**
+   * 0.21.x — delete every budget row belonging to a single
+   * (plan, period_month) on the Paycheck Budget. Lets the user
+   * blow away an outdated period and re-seed once new data comes
+   * in, without dropping the whole plan.
+   */
+  app.delete<{
+    Querystring: { planId?: string; periodMonth?: string };
+  }>('/api/budgets/by-period', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const planId = req.query.planId?.trim();
+    const periodMonth = req.query.periodMonth?.trim();
+    if (!planId || !isUuid(planId)) {
+      return reply.code(400).send({ error: 'planId must be a UUID' });
+    }
+    if (!periodMonth || !YMD.test(periodMonth)) {
+      return reply
+        .code(400)
+        .send({ error: 'periodMonth must be a YYYY-MM-DD date' });
+    }
+    const r = await query(
+      `DELETE FROM budgets
+        WHERE tenant_id = $1
+          AND plan_id = $2
+          AND period_month = $3::date`,
+      [tenantId, planId, periodMonth],
+    );
+    return { deleted: r.rowCount ?? 0 };
+  });
+
   // Copy monthly budgets from one month to another. Tenant-scoped on
   // both source and destination — copying across tenants is impossible.
   app.post<{ Body: { fromMonth?: unknown; toMonth?: unknown } }>(
