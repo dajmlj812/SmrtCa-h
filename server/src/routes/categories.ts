@@ -44,17 +44,32 @@ export const SUGGESTED_TAX_CATEGORIES: string[] = [
 
 export async function categoryRoutes(app: FastifyInstance): Promise<void> {
   // List categories, with how many transactions reference each.
-  // Returns canonical (tenant_id NULL) + the caller's tenant-specific
-  // customs combined; is_system flags the canonical ones.
+  //
+  // 0.21.x — when the tenant has any tenant-scoped rows, return
+  // ONLY those (their seed is authoritative). Otherwise fall back
+  // to the global NULL-tenant seed. This stops the
+  // "tenant copy + legacy global = duplicates" effect that
+  // happened after a "Reset to canonical" when the global seed
+  // hadn't been rebuilt for the new structure.
   app.get('/api/categories', async (req) => {
     const tenantId = req.user?.tenantId ?? null;
+    const hasOwn = tenantId
+      ? await query<{ n: number }>(
+          `SELECT 1::int AS n FROM categories
+            WHERE tenant_id = $1::uuid LIMIT 1`,
+          [tenantId],
+        )
+      : { rowCount: 0, rows: [] as { n: number }[] };
+    const where =
+      tenantId && (hasOwn.rowCount ?? 0) > 0
+        ? 'c.tenant_id = $1::uuid'
+        : 'c.tenant_id IS NULL OR c.tenant_id = $1::uuid';
     const result = await query(
       `SELECT c.id, c.name, c.parent_id, c.tax_category, c.is_system, c.created_at,
               COUNT(t.id)::bigint AS transaction_count
          FROM categories c
     LEFT JOIN transactions t ON t.category_id = c.id
-        WHERE c.tenant_id IS NULL
-           OR c.tenant_id = $1::uuid
+        WHERE ${where}
      GROUP BY c.id
      ORDER BY c.is_system DESC, c.name`,
       [tenantId],
