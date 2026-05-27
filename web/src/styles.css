@@ -60,9 +60,16 @@
   --card-border: var(--border);
   --sidebar: #0b1020;
   --sidebar-muted: #9aa3b8;
+  /* 0.22.1 — drive native form-control chrome (date picker icon,
+   * spinner, scrollbars, etc.) from the active theme. Without this,
+   * Chrome paints date inputs with light-mode chrome regardless of
+   * our data-theme attribute, so the calendar-picker indicator is
+   * a dark icon on a dark background in dark mode and hard to see. */
+  color-scheme: light;
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --surface-1: #0d1117;
   --surface-2: #161b22;
   --surface-3: #21262d;
@@ -407,6 +414,54 @@ input:focus,
 select:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
+}
+
+/* 0.22.1 — date / time inputs.
+ *
+ * The native calendar-picker indicator (Chromium) is a tiny dark icon
+ * that disappears against the page in dark mode and is barely visible
+ * even in light mode against our off-white card surface. Force a
+ * larger hit area, full opacity, and the right tint per theme so the
+ * icon is unambiguously clickable.
+ *
+ * color-scheme on :root already cues Chromium to draw the dark
+ * variant of the icon in dark mode; the filter line below is a
+ * belt-and-braces nudge to lift it off the surface a little more
+ * than the default. */
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='datetime-local']::-webkit-calendar-picker-indicator,
+input[type='month']::-webkit-calendar-picker-indicator,
+input[type='time']::-webkit-calendar-picker-indicator,
+input[type='week']::-webkit-calendar-picker-indicator {
+  opacity: 0.9;
+  cursor: pointer;
+  padding: 2px;
+  margin-left: 4px;
+  filter: contrast(1.15);
+}
+input[type='date']::-webkit-calendar-picker-indicator:hover,
+input[type='datetime-local']::-webkit-calendar-picker-indicator:hover,
+input[type='month']::-webkit-calendar-picker-indicator:hover,
+input[type='time']::-webkit-calendar-picker-indicator:hover,
+input[type='week']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+/* Dark mode: invert the dark glyph the OS hands us so it reads as a
+ * light icon against the dark surface. color-scheme alone gets us
+ * most of the way on modern Chromium, but Edge and some Linux
+ * Chromiums still serve the light-mode glyph; explicit invert is
+ * the only reliable fix across browsers. */
+:root[data-theme='dark']
+  input[type='date']::-webkit-calendar-picker-indicator,
+:root[data-theme='dark']
+  input[type='datetime-local']::-webkit-calendar-picker-indicator,
+:root[data-theme='dark']
+  input[type='month']::-webkit-calendar-picker-indicator,
+:root[data-theme='dark']
+  input[type='time']::-webkit-calendar-picker-indicator,
+:root[data-theme='dark']
+  input[type='week']::-webkit-calendar-picker-indicator {
+  filter: invert(0.85) contrast(1.15);
 }
 
 /* ── Tables ──────────────────────────────────────────────── */
