@@ -67,7 +67,6 @@ export function CalendarPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [dayTxns, setDayTxns] = useState<Transaction[]>([]);
   const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
   // 0.21.x — account multi-select
@@ -149,12 +148,18 @@ export function CalendarPage() {
     };
   }, [compareToPrev, monthKey, selectedAccountIds]);
 
+  // 0.21.x — show transfers + refunded rows in the day drilldown.
+  // Off by default so the day-detail count matches the calendar
+  // cell, which excludes those rows.
+  const [showTransfersAndRefunds, setShowTransfersAndRefunds] = useState(false);
+  const [dayTxnsRaw, setDayTxnsRaw] = useState<Transaction[]>([]);
+
   // Whenever the selected day changes, load that day's transactions.
   // Same filter (selectedAccountIds) so the drill-down stays
   // consistent with the calendar aggregates.
   useEffect(() => {
     if (!selectedDay) {
-      setDayTxns([]);
+      setDayTxnsRaw([]);
       return;
     }
     let cancelled = false;
@@ -170,13 +175,27 @@ export function CalendarPage() {
           selectedAccountIds.length === 0
             ? r.transactions
             : r.transactions.filter((t) => selectedAccountIds.includes(t.account_id));
-        setDayTxns(filtered);
+        setDayTxnsRaw(filtered);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, [selectedDay, selectedAccountIds]);
+
+  // The cell's txn_count and the spend/income totals exclude
+  // transfers (transfer_group_id NOT NULL) and refunded rows
+  // (refund_status = 'refunded'). To make the day drilldown
+  // reconcile with the cell, hide those rows here by default.
+  // The "Show transfers + refunds" toggle restores them.
+  const hiddenCount = dayTxnsRaw.filter(
+    (t) => t.transfer_group_id !== null || t.refund_status === 'refunded',
+  ).length;
+  const dayTxns = showTransfersAndRefunds
+    ? dayTxnsRaw
+    : dayTxnsRaw.filter(
+        (t) => t.transfer_group_id === null && t.refund_status !== 'refunded',
+      );
 
   const firstWeekday = useMemo(() => {
     if (!data) return 0;
@@ -498,7 +517,34 @@ export function CalendarPage() {
               from a calendar drilldown. */}
           {selectedDay && (
             <>
-              <h2 style={{ marginTop: 24 }}>{formatDate(selectedDay)}</h2>
+              <div
+                style={{
+                  marginTop: 24,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                  gap: 12,
+                }}
+              >
+                <h2 style={{ margin: 0 }}>{formatDate(selectedDay)}</h2>
+                {hiddenCount > 0 && (
+                  <label
+                    className="muted small"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                    title="Transfers between your own accounts and rows marked refunded don't add to the day's spend or income — they're hidden here by default to keep the count consistent with the calendar cell."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showTransfersAndRefunds}
+                      onChange={(e) =>
+                        setShowTransfersAndRefunds(e.target.checked)
+                      }
+                    />
+                    Show {hiddenCount} transfer/refund
+                    {hiddenCount === 1 ? '' : 's'}
+                  </label>
+                )}
+              </div>
               {dayTxns.length === 0 ? (
                 <p className="empty">No transactions on this day.</p>
               ) : (
@@ -508,7 +554,7 @@ export function CalendarPage() {
                   categories={categories}
                   onUpdate={async (id, updates) => {
                     const updated = await api.updateTransaction(id, updates);
-                    setDayTxns((prev) =>
+                    setDayTxnsRaw((prev) =>
                       prev.map((t) => (t.id === id ? updated : t)),
                     );
                   }}
@@ -525,7 +571,7 @@ export function CalendarPage() {
               transaction={attachmentsFor}
               onClose={() => setAttachmentsFor(null)}
               onCountChange={(count) =>
-                setDayTxns((prev) =>
+                setDayTxnsRaw((prev) =>
                   prev.map((t) =>
                     t.id === attachmentsFor.id
                       ? { ...t, attachment_count: count }
@@ -548,7 +594,7 @@ export function CalendarPage() {
               transaction={refundingFor}
               onClose={() => setRefundingFor(null)}
               onSaved={(updated) =>
-                setDayTxns((prev) =>
+                setDayTxnsRaw((prev) =>
                   prev.map((t) => (t.id === updated.id ? updated : t)),
                 )
               }
