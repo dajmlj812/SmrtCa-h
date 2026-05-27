@@ -197,6 +197,35 @@ export interface MileageSummary {
   total_deduction_cents: number;
 }
 
+export interface InvestmentPerformanceAccount {
+  account_id: string;
+  account_name: string;
+  start_value_cents: number;
+  end_value_cents: number;
+  flows_in_cents: number;
+  flows_out_cents: number;
+  twrr_cumulative: number;
+  twrr_annualized: number;
+  irr_annualized: number;
+  benchmark_cumulative: number;
+  benchmark_annualized: number;
+}
+
+export interface InvestmentPerformance {
+  startDate: string;
+  endDate: string;
+  accounts: InvestmentPerformanceAccount[];
+  portfolio: {
+    start_value_cents: number;
+    end_value_cents: number;
+    twrr_cumulative: number;
+    twrr_annualized: number;
+    irr_annualized: number;
+    benchmark_cumulative: number;
+    benchmark_annualized: number;
+  };
+}
+
 export type ParticipantKind =
   | 'spouse' | 'child' | 'co_parent' | 'roommate' | 'dependent' | 'other';
 
@@ -3551,6 +3580,22 @@ export const api = {
 
   deleteCustodyPeriod: (id: string) =>
     http<void>(`/api/household/custody-periods/${id}`, { method: 'DELETE' }),
+
+  // 0.21.4 — Investment performance
+  investmentPerformance: (params?: {
+    startDate?: string;
+    endDate?: string;
+    benchmarkRate?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', params.startDate);
+    if (params?.endDate) q.set('endDate', params.endDate);
+    if (params?.benchmarkRate != null) q.set('benchmarkRate', String(params.benchmarkRate));
+    const qs = q.toString();
+    return http<InvestmentPerformance>(
+      `/api/investments/performance${qs ? `?${qs}` : ''}`,
+    );
+  },
 
   participantTotals: (params?: { startDate?: string; endDate?: string }) => {
     const q = new URLSearchParams();

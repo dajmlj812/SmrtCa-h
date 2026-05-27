@@ -16,6 +16,7 @@ import {
   api,
   type AssetClass,
   type InvestmentAnalysis,
+  type InvestmentPerformance,
   type MonteCarloResult,
 } from '../api';
 import { formatCents } from '../format';
@@ -58,22 +59,51 @@ export function InvestmentsPage() {
   const [mc, setMc] = useState<MonteCarloResult | null>(null);
   const [mcLoading, setMcLoading] = useState(false);
 
+  // 0.21.4 — performance
+  const [perf, setPerf] = useState<InvestmentPerformance | null>(null);
+  const [perfStart, setPerfStart] = useState<string>(() => {
+    const d = new Date();
+    d.setUTCFullYear(d.getUTCFullYear() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [perfEnd, setPerfEnd] = useState<string>(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+
+  async function loadPerf() {
+    try {
+      const r = await api.investmentPerformance({
+        startDate: perfStart,
+        endDate: perfEnd,
+      });
+      setPerf(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Performance load failed');
+    }
+  }
+
   useEffect(() => {
     void (async () => {
       try {
-        const [a, p] = await Promise.all([
+        const [a, p, perf] = await Promise.all([
           api.getInvestmentAnalysis(),
           api.listProjections(),
+          api.investmentPerformance({
+            startDate: perfStart,
+            endDate: perfEnd,
+          }),
         ]);
         setAnalysis(a);
         setProjections(p.map((proj) => ({ id: proj.id, name: proj.name })));
         if (p.length > 0) setSelectedProjId(p[0]!.id);
+        setPerf(perf);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load analysis');
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function runMc() {
@@ -134,6 +164,125 @@ export function InvestmentsPage() {
       </header>
 
       {error && <div className="banner error">{error}</div>}
+
+      {/* ── 0.21.4 Performance (TWRR / IRR / vs benchmark) ── */}
+      <section className="card" style={{ marginBottom: 16 }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h2>Performance</h2>
+            <p className="muted small">
+              Time-weighted return strips out the timing of your
+              deposits, so it can be compared cleanly against the
+              benchmark. IRR (money-weighted) reflects your actual
+              cash. Benchmark is annualized S&amp;P 500 total return
+              over the same window.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div className="field">
+              <label>From</label>
+              <input
+                type="date"
+                value={perfStart}
+                onChange={(e) => setPerfStart(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>To</label>
+              <input
+                type="date"
+                value={perfEnd}
+                onChange={(e) => setPerfEnd(e.target.value)}
+              />
+            </div>
+            <button className="btn secondary" type="button" onClick={() => void loadPerf()}>
+              Reload
+            </button>
+          </div>
+        </header>
+
+        {perf && (
+          <>
+            <div
+              className="card-grid"
+              style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginTop: 12 }}
+            >
+              <Metric
+                label="TWRR (annualized)"
+                value={(perf.portfolio.twrr_annualized * 100).toFixed(2) + '%'}
+                tone={perf.portfolio.twrr_annualized >= 0 ? 'pos' : 'neg'}
+              />
+              <Metric
+                label="IRR (annualized)"
+                value={(perf.portfolio.irr_annualized * 100).toFixed(2) + '%'}
+                tone={perf.portfolio.irr_annualized >= 0 ? 'pos' : 'neg'}
+              />
+              <Metric
+                label="Benchmark (S&P 500)"
+                value={(perf.portfolio.benchmark_annualized * 100).toFixed(2) + '%'}
+              />
+              <Metric
+                label="vs Benchmark"
+                value={
+                  ((perf.portfolio.twrr_annualized -
+                    perf.portfolio.benchmark_annualized) *
+                    100).toFixed(2) + '%'
+                }
+                tone={
+                  perf.portfolio.twrr_annualized >=
+                  perf.portfolio.benchmark_annualized
+                    ? 'pos'
+                    : 'neg'
+                }
+              />
+            </div>
+
+            {perf.accounts.length > 0 && (
+              <div className="table-wrap" style={{ marginTop: 16 }}>
+                <table className="txn-table">
+                  <thead>
+                    <tr>
+                      <th>Account</th>
+                      <th className="num">Start value</th>
+                      <th className="num">End value</th>
+                      <th className="num">TWRR (ann)</th>
+                      <th className="num">IRR (ann)</th>
+                      <th className="num">vs S&P 500</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {perf.accounts.map((a) => {
+                      const diff = a.twrr_annualized - a.benchmark_annualized;
+                      return (
+                        <tr key={a.account_id}>
+                          <td><strong>{a.account_name}</strong></td>
+                          <td className="num">{formatCents(a.start_value_cents)}</td>
+                          <td className="num">{formatCents(a.end_value_cents)}</td>
+                          <td className={`num ${a.twrr_annualized >= 0 ? 'pos' : 'neg'}`}>
+                            {(a.twrr_annualized * 100).toFixed(2)}%
+                          </td>
+                          <td className={`num ${a.irr_annualized >= 0 ? 'pos' : 'neg'}`}>
+                            {(a.irr_annualized * 100).toFixed(2)}%
+                          </td>
+                          <td className={`num ${diff >= 0 ? 'pos' : 'neg'}`}>
+                            {diff >= 0 ? '+' : ''}{(diff * 100).toFixed(2)}%
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {perf.accounts.length === 0 && (
+              <p className="empty">
+                No investment-type accounts found. Mark an account as
+                type "investment" to see its performance here.
+              </p>
+            )}
+          </>
+        )}
+      </section>
 
       {/* ── Fee analyzer ──────────────────────────── */}
       <section className="card">
@@ -392,6 +541,28 @@ export function InvestmentsPage() {
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'pos' | 'neg';
+}) {
+  return (
+    <div className="card">
+      <div className="muted" style={{ fontSize: 13 }}>{label}</div>
+      <div
+        style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}
+        className={tone === 'pos' ? 'pos' : tone === 'neg' ? 'neg' : ''}
+      >
+        {value}
+      </div>
     </div>
   );
 }
