@@ -415,8 +415,16 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     // month so user edits aren't clobbered.
     const ALWAYS_BUDGET_CATEGORIES = [
       'Groceries',
+      // Transportation — covers both car-owner and transit-rider
+      // households. Categories with zero 3-month spend get skipped
+      // automatically, so non-applicable ones don't clutter the
+      // resulting budget.
       'Gas & Fuel',
       'Tolls',
+      'Parking',
+      'Public Transit',
+      'Taxi & Rideshare',
+      // Eating-out spend — split out so users see each line item.
       'Restaurants',
       'Fast Food',
       'Coffee Shops',
