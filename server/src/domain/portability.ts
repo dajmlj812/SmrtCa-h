@@ -284,7 +284,11 @@ export async function exportTenantData(
 
   return {
     archivePath,
-    suggestedFilename: `smrtcash-${tenantId.slice(0, 8)}-${stamp}.tar.gz`,
+    // 0.21.7 — single-file .smrtcash extension. The archive is still
+    // a gzipped tar under the hood, but the importer recognises the
+    // user-facing extension and the operator's file manager doesn't
+    // bury it among "is this a tarball I should extract?" questions.
+    suggestedFilename: `smrtcash-${tenantId.slice(0, 8)}-${stamp}.smrtcash`,
     bytes: archiveStat.size,
     counts,
     cleanup: async () => {
@@ -304,3 +308,220 @@ export async function exportTenantData(
 
 // Exported for tests.
 export const __testing = { TABLES };
+
+/**
+ * 0.21.7 — Import a `.smrtcash` bundle into the supplied tenant.
+ *
+ * The bundle is a gzipped tar (.smrtcash extension for clarity).
+ * We extract it to a temp dir, parse tenant.json, then rehydrate
+ * core tables in dependency order with ID remapping so old UUIDs
+ * never reach the new database.
+ *
+ * Scope of this MVP:
+ *   • categories (parent before child)
+ *   • accounts
+ *   • transactions
+ *   • transaction_splits (best-effort)
+ *
+ * Out of scope (left for a follow-up): budgets, bills, recurring
+ * income, holdings, attachments file bodies, sharing splits.
+ * Counts come back in `imported` so the caller knows what landed.
+ *
+ * Idempotent under the same source bundle: the import only ever
+ * INSERTs into the target tenant; it doesn't UPDATE rows already
+ * there. Run it against an EMPTY tenant for clean results.
+ */
+export interface ImportResult {
+  schema_version: number;
+  source_smrtcash_version: string;
+  source_tenant_id: string;
+  source_exported_at: string;
+  imported: Record<string, number>;
+  skipped: Record<string, string>;
+  errors: string[];
+}
+
+export async function importTenantBundle(
+  targetTenantId: string,
+  archivePath: string,
+): Promise<ImportResult> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const workDir = join(tmpdir(), `smrtcash-import-${stamp}`);
+  await mkdir(workDir, { recursive: true });
+  try {
+    // Extract.
+    await exec('tar', [
+      '--force-local',
+      '-xzf', archivePath,
+      '-C', workDir,
+    ]);
+    // The bundle's root is the timestamped workdir from export.
+    // Find tenant.json by walking one level deep.
+    const { readdir, readFile } = await import('node:fs/promises');
+    const entries = await readdir(workDir, { withFileTypes: true });
+    const root = entries.find((e) => e.isDirectory());
+    if (!root) throw new Error('Bundle has no root directory');
+    const tenantJsonPath = join(workDir, root.name, 'tenant.json');
+    const raw = await readFile(tenantJsonPath, 'utf-8');
+    const bundle = JSON.parse(raw) as {
+      manifest: {
+        schema_version: number;
+        smrtcash_version: string;
+        tenant_id: string;
+        exported_at: string;
+      };
+      categories?: Array<{
+        id: string; name: string; parent_id: string | null; tax_category?: string | null;
+      }>;
+      accounts?: Array<{
+        id: string; name: string; institution: string | null; type: string;
+        last4: string | null; currency: string;
+        opening_balance_cents: number; opening_balance_date: string | null;
+      }>;
+      transactions?: Array<{
+        id: string; account_id: string; category_id: string | null;
+        txn_date: string; post_date: string | null; amount_cents: number;
+        raw_description: string; source_category: string | null;
+        source_type: string | null; memo: string | null;
+        normalized_merchant: string | null;
+      }>;
+    };
+
+    const manifest = bundle.manifest;
+    if (manifest.schema_version !== 1) {
+      throw new Error(
+        `Unsupported bundle schema_version ${manifest.schema_version}`,
+      );
+    }
+
+    const imported: Record<string, number> = {};
+    const skipped: Record<string, string> = {};
+    const errors: string[] = [];
+
+    // ── Categories: parents first so child FK validates. ───
+    const categoryIdMap = new Map<string, string>();
+    if (bundle.categories) {
+      // Insert parents (parent_id == null) first.
+      const parents = bundle.categories.filter((c) => c.parent_id === null);
+      const children = bundle.categories.filter((c) => c.parent_id !== null);
+      let n = 0;
+      for (const c of parents) {
+        const r = await pool.query<{ id: string }>(
+          `INSERT INTO categories (tenant_id, name, parent_id, tax_category)
+           VALUES ($1, $2, NULL, $3)
+           ON CONFLICT (tenant_id, name) WHERE parent_id IS NULL DO UPDATE
+             SET tax_category = EXCLUDED.tax_category
+           RETURNING id`,
+          [targetTenantId, c.name, c.tax_category ?? null],
+        );
+        if (r.rowCount && r.rows[0]) {
+          categoryIdMap.set(c.id, r.rows[0].id);
+          n++;
+        }
+      }
+      for (const c of children) {
+        const newParent = c.parent_id ? categoryIdMap.get(c.parent_id) : null;
+        if (!newParent) {
+          errors.push(`category ${c.name}: parent_id ${c.parent_id} not remapped`);
+          continue;
+        }
+        const r = await pool.query<{ id: string }>(
+          `INSERT INTO categories (tenant_id, name, parent_id, tax_category)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT DO NOTHING
+           RETURNING id`,
+          [targetTenantId, c.name, newParent, c.tax_category ?? null],
+        );
+        if (r.rowCount && r.rows[0]) {
+          categoryIdMap.set(c.id, r.rows[0].id);
+          n++;
+        } else {
+          // Already exists — fetch the existing id so transactions
+          // referencing it still map cleanly.
+          const ex = await pool.query<{ id: string }>(
+            `SELECT id FROM categories
+              WHERE tenant_id = $1 AND name = $2 AND parent_id = $3`,
+            [targetTenantId, c.name, newParent],
+          );
+          if (ex.rows[0]) categoryIdMap.set(c.id, ex.rows[0].id);
+        }
+      }
+      imported.categories = n;
+    }
+
+    // ── Accounts. ──────────────────────────────────────────
+    const accountIdMap = new Map<string, string>();
+    if (bundle.accounts) {
+      let n = 0;
+      for (const a of bundle.accounts) {
+        const r = await pool.query<{ id: string }>(
+          `INSERT INTO accounts
+             (tenant_id, name, institution, type, last4, currency,
+              opening_balance_cents, opening_balance_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING id`,
+          [
+            targetTenantId, a.name, a.institution, a.type, a.last4,
+            a.currency || 'USD',
+            a.opening_balance_cents ?? 0,
+            a.opening_balance_date,
+          ],
+        );
+        if (r.rowCount && r.rows[0]) {
+          accountIdMap.set(a.id, r.rows[0].id);
+          n++;
+        }
+      }
+      imported.accounts = n;
+    }
+
+    // ── Transactions. ──────────────────────────────────────
+    if (bundle.transactions) {
+      let n = 0;
+      for (const t of bundle.transactions) {
+        const newAcct = accountIdMap.get(t.account_id);
+        if (!newAcct) {
+          errors.push(`transaction ${t.id}: account_id ${t.account_id} not remapped`);
+          continue;
+        }
+        const newCat = t.category_id ? categoryIdMap.get(t.category_id) ?? null : null;
+        await pool.query(
+          `INSERT INTO transactions
+             (account_id, category_id, txn_date, post_date, amount_cents,
+              raw_description, source_category, source_type, memo,
+              normalized_merchant)
+           VALUES ($1, $2, $3::date, $4::date, $5, $6, $7, $8, $9, $10)`,
+          [
+            newAcct, newCat, t.txn_date, t.post_date, t.amount_cents,
+            t.raw_description, t.source_category, t.source_type, t.memo,
+            t.normalized_merchant,
+          ],
+        );
+        n++;
+      }
+      imported.transactions = n;
+    }
+
+    skipped.budgets = 'not yet supported by importer';
+    skipped.bills = 'not yet supported by importer';
+    skipped.recurring_income = 'not yet supported by importer';
+    skipped.holdings = 'not yet supported by importer';
+    skipped.attachments = 'attachment file bodies not yet rehydrated';
+
+    return {
+      schema_version: manifest.schema_version,
+      source_smrtcash_version: manifest.smrtcash_version,
+      source_tenant_id: manifest.tenant_id,
+      source_exported_at: manifest.exported_at,
+      imported,
+      skipped,
+      errors,
+    };
+  } finally {
+    try {
+      await rm(workDir, { recursive: true, force: true });
+    } catch {
+      /* tolerate */
+    }
+  }
+}

@@ -545,6 +545,15 @@ function PortabilitySection() {
   );
   const [lastBytes, setLastBytes] = useState<number | null>(null);
 
+  // 0.21.7 — import state
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    imported: Record<string, number>;
+    skipped: Record<string, string>;
+    errors: string[];
+  } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
   async function runExport() {
     setBusy(true);
     setError(null);
@@ -565,7 +574,7 @@ function PortabilitySection() {
         : null;
       const dispo = res.headers.get('Content-Disposition') ?? '';
       const filename =
-        dispo.match(/filename="([^"]+)"/)?.[1] ?? 'smrtcash-export.tar.gz';
+        dispo.match(/filename="([^"]+)"/)?.[1] ?? 'smrtcash-export.smrtcash';
       const blob = await res.blob();
       setLastBytes(blob.size);
       const url = URL.createObjectURL(blob);
@@ -584,15 +593,49 @@ function PortabilitySection() {
     }
   }
 
+  async function runImport(file: File) {
+    if (!confirm(
+      'Importing rehydrates categories, accounts, and transactions ' +
+        'into the CURRENT tenant. Run against an empty tenant for clean ' +
+        'results. Continue?',
+    )) return;
+    setImporting(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append('bundle', file);
+      const res = await fetch('/api/portability/import', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { error?: string }).error || `Import failed (${res.status})`);
+      }
+      setImportResult(data as {
+        imported: Record<string, number>;
+        skipped: Record<string, string>;
+        errors: string[];
+      });
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="card row-gap" style={{ marginTop: 24 }}>
       <div className="section-title">Data portability</div>
       <p className="muted">
-        Download a portable archive of <strong>everything</strong> in this
-        tenant — accounts, transactions, categories, budgets, goals, bills,
-        holdings, attachments. Structured JSON inside a <code>.tar.gz</code>{' '}
-        you can re-import or open in any tool. Encrypted credentials
-        (OFX-DC, Plaid tokens) are stripped — secrets don't travel.
+        Download a portable <code>.smrtcash</code> archive of{' '}
+        <strong>everything</strong> in this tenant — accounts, transactions,
+        categories, budgets, goals, bills, holdings, attachments. Structured
+        JSON inside a gzipped tarball you can re-import below or open in any
+        tool. Encrypted credentials (OFX-DC, Plaid tokens) are stripped —
+        secrets don't travel.
       </p>
       {error && <div className="banner error">{error}</div>}
       {lastCounts && (
@@ -609,6 +652,44 @@ function PortabilitySection() {
         <button className="btn" onClick={() => void runExport()} disabled={busy}>
           {busy ? 'Exporting…' : 'Export all my data'}
         </button>
+      </div>
+
+      <hr style={{ margin: '16px 0' }} />
+
+      <div className="section-title">Import a .smrtcash bundle (0.21.7)</div>
+      <p className="muted small">
+        Rehydrates categories, accounts, and transactions from a previously
+        exported bundle into the <strong>current</strong> tenant. Run against
+        an empty tenant for clean results — the importer doesn't dedupe
+        against existing rows. Budgets, bills, recurring income, holdings,
+        and attachment bodies aren't restored yet (follow-up work).
+      </p>
+      {importError && <div className="banner error">{importError}</div>}
+      {importResult && (
+        <div className="banner info">
+          Imported{' '}
+          {Object.entries(importResult.imported)
+            .map(([k, v]) => `${v} ${k}`)
+            .join(', ')}
+          {importResult.errors.length > 0 && (
+            <>
+              {' '}— with {importResult.errors.length} error(s):{' '}
+              {importResult.errors.slice(0, 3).join('; ')}
+            </>
+          )}
+        </div>
+      )}
+      <div>
+        <input
+          type="file"
+          accept=".smrtcash,.tar.gz,application/gzip"
+          disabled={importing}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void runImport(file);
+            e.target.value = '';
+          }}
+        />
       </div>
     </div>
   );
