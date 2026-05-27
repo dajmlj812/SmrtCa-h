@@ -127,13 +127,26 @@ export function AccountDetailPage() {
             <div className="kv">
               <div className="kv-item">
                 <div className="kv-label">Balance</div>
-                <div
-                  className={`kv-value ${
-                    account.balance_cents < 0 ? 'neg' : 'pos'
-                  }`}
-                >
-                  {formatCents(account.balance_cents)}
-                </div>
+                {(() => {
+                  // Liability balances (credit_card / loan /
+                  // manual_liability) are debt — display as a
+                  // negative red number to match the accounts list +
+                  // net-worth conventions used everywhere else.
+                  const isLiability =
+                    account.type === 'credit_card' ||
+                    account.type === 'loan' ||
+                    account.type === 'manual_liability';
+                  const displayCents = isLiability
+                    ? -Math.abs(account.balance_cents)
+                    : account.balance_cents;
+                  return (
+                    <div
+                      className={`kv-value ${displayCents < 0 ? 'neg' : 'pos'}`}
+                    >
+                      {formatCents(displayCents)}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="kv-item">
                 <div className="kv-label">Opening</div>
