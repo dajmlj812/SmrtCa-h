@@ -240,23 +240,44 @@ export function MonthlyBudgetPage() {
     rows.map((r) => r.category_id).filter((id): id is string => id !== null),
   );
 
-  // 0.21.x — group rows by category. Each category becomes one
-  // collapsible card; bills nested as children show only when
-  // expanded.
+  // 0.21.x — group rows by their TOP-LEVEL parent category. A
+  // budget row for "Groceries" (child of Food at home) clusters
+  // into the same card as "Food Delivery" (also under Food at
+  // home), so the user sees "Food at home" once with both inside.
+  const categoryById = useMemo(() => {
+    const m = new Map<string, Category>();
+    for (const c of categories) m.set(c.id, c);
+    return m;
+  }, [categories]);
+  function rollUpToTopLevel(catId: string | null): {
+    id: string | null;
+    name: string;
+  } {
+    if (!catId) return { id: null, name: 'Flex pool (everything else)' };
+    let current = categoryById.get(catId);
+    if (!current) return { id: catId, name: 'Unknown' };
+    while (current.parent_id) {
+      const parent = categoryById.get(current.parent_id);
+      if (!parent) break;
+      current = parent;
+    }
+    return { id: current.id, name: current.name };
+  }
   const grouped = useMemo(() => {
     const map = new Map<
       string,
       { categoryId: string | null; categoryName: string; rows: BudgetVsActualRow[] }
     >();
     for (const r of rows) {
-      const key = r.category_id ?? '__flex';
+      const top = rollUpToTopLevel(r.category_id);
+      const key = top.id ?? '__flex';
       const existing = map.get(key);
       if (existing) {
         existing.rows.push(r);
       } else {
         map.set(key, {
-          categoryId: r.category_id,
-          categoryName: r.category_name ?? 'Flex pool (everything else)',
+          categoryId: top.id,
+          categoryName: top.name,
           rows: [r],
         });
       }
@@ -264,7 +285,8 @@ export function MonthlyBudgetPage() {
     return [...map.values()].sort((a, b) =>
       a.categoryName.localeCompare(b.categoryName),
     );
-  }, [rows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, categoryById]);
 
   const consumedPct =
     totals.budgeted_cents > 0
