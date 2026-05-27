@@ -1200,6 +1200,8 @@ export interface ImportResult {
   skippedCount: number;
   errorCount: number;
   errors: RowError[];
+  /** 0.21.x — count of liability rows whose sign was auto-flipped. */
+  signFlipped?: number;
 }
 
 export interface TransactionPage {

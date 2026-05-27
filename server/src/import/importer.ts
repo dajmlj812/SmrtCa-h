@@ -33,6 +33,13 @@ export interface ImportResult {
   skippedCount: number; // duplicates skipped via ON CONFLICT
   errorCount: number;
   errors: RowError[];
+  /**
+   * 0.21.x — number of rows whose sign was flipped because the
+   * target account is a liability and the source file used the
+   * "positive = charge" convention. 0 for asset accounts and for
+   * liability batches that were already negative-dominant.
+   */
+  signFlipped?: number;
 }
 
 interface MapResult {
@@ -172,14 +179,51 @@ export async function persistBatch(
   const rowCount = totalRows ?? transactions.length + errors.length;
 
   const result = await withTransaction(async (client) => {
-    const account = await client.query<{ tenant_id: string | null }>(
-      'SELECT tenant_id FROM accounts WHERE id = $1',
+    const account = await client.query<{
+      tenant_id: string | null;
+      type: string;
+    }>(
+      'SELECT tenant_id, type FROM accounts WHERE id = $1',
       [accountId],
     );
     if (account.rowCount === 0) {
       throw new ImportError(`Account ${accountId} not found`);
     }
     const tenantId = account.rows[0]!.tenant_id;
+    const accountType = account.rows[0]!.type;
+
+    // 0.21.x — liability-sign normalization.
+    //
+    // Asset accounts use the convention "money out = negative amount."
+    // Liability accounts (credit_card / loan / manual_liability) have
+    // two source conventions in the wild:
+    //   • Some exporters use "positive = charge / spend" (Chase CSV,
+    //     most credit-card statements).
+    //   • Others use "positive = payment from you, negative = charge"
+    //     (OFX from many issuers).
+    // Net worth and the calendar both assume "negative = spend."
+    // For liability accounts we detect the dominant sign of the batch
+    // and, if positives dominate, flip every row so charges store as
+    // negative. The flip count is surfaced in the import result.
+    const isLiability =
+      accountType === 'credit_card' ||
+      accountType === 'loan' ||
+      accountType === 'manual_liability';
+    let signFlipped = 0;
+    if (isLiability && transactions.length > 0) {
+      let pos = 0;
+      let neg = 0;
+      for (const t of transactions) {
+        if (t.amountCents > 0) pos++;
+        else if (t.amountCents < 0) neg++;
+      }
+      if (pos > neg) {
+        for (const t of transactions) {
+          t.amountCents = -t.amountCents;
+        }
+        signFlipped = transactions.length;
+      }
+    }
 
     const batch = await client.query<{ id: string }>(
       `INSERT INTO import_batches (account_id, filename, format_id, row_count)
@@ -238,6 +282,7 @@ export async function persistBatch(
         skippedCount,
         errorCount: errors.length,
         errors: errors.slice(0, 25),
+        signFlipped,
       },
     };
   });

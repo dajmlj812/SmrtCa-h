@@ -132,8 +132,11 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
     const { days_in_month: daysInMonth, month_end: monthEnd } = meta.rows[0]!;
 
     // Per-day transaction aggregates. Account filter applies if
-    // accountIds were supplied. Transfers are excluded so internal
-    // moves between own accounts don't double-count.
+    // accountIds were supplied. Transfers excluded so internal
+    // moves between own accounts don't double-count. 0.21.x:
+    // refunded rows are also excluded — once a transaction is
+    // marked refunded, counting its original outflow would
+    // double-count the spend against the credit that's coming.
     const txns = await pool.query<{
       d: string;
       spend_cents: string;
@@ -151,6 +154,7 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
         WHERE a.tenant_id = $1
           AND t.txn_date BETWEEN $2::date AND $3::date
           AND t.transfer_group_id IS NULL
+          AND (t.refund_status IS DISTINCT FROM 'refunded')
           AND ($4::uuid[] IS NULL OR t.account_id = ANY($4::uuid[]))
         GROUP BY t.txn_date`,
       [tenantId, monthStart, monthEnd, accountIds],

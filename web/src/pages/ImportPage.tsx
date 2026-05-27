@@ -250,6 +250,18 @@ function ResultPanel({ result }: { result: ImportResult }) {
         skipped as duplicates
         {result.errorCount > 0 ? `, ${result.errorCount} errors` : ''}.
       </div>
+      {(result.signFlipped ?? 0) > 0 && (
+        <div className="banner warn" style={{ marginTop: 8 }}>
+          <strong>Sign convention auto-fixed.</strong>{' '}
+          This liability account's file used the "positive = charge"
+          convention, so {result.signFlipped} row{result.signFlipped === 1 ? '' : 's'}{' '}
+          had their amount sign flipped on import. Charges are now stored
+          as negative numbers (matching every other downstream view —
+          calendar, net worth, cash flow). Spot-check{' '}
+          <Link to="/transactions">a few rows</Link> to confirm the
+          direction looks right.
+        </div>
+      )}
       <Link to="/transactions" className="btn secondary">
         View transactions
       </Link>

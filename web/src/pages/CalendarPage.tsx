@@ -4,9 +4,14 @@ import {
   isUpgradeRequired,
   type Account,
   type CalendarMonthResponse,
+  type Category,
   type Transaction,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { TransactionTable } from '../components/TransactionTable';
+import { AttachmentsModal } from '../components/AttachmentsModal';
+import { RefundStatusModal } from '../components/RefundStatusModal';
+import { SplitsModal } from '../components/SplitsModal';
 import { UpgradePrompt } from '../components/UpgradePrompt';
 
 /**
@@ -79,8 +84,19 @@ export function CalendarPage() {
   const [upcomingUnit, setUpcomingUnit] = useState<UpcomingUnit>('day');
   const upcomingDays = unitToDays(upcomingCount, upcomingUnit);
 
+  // 0.21.x — compare to last month
+  const [compareToPrev, setCompareToPrev] = useState(false);
+  const [prevData, setPrevData] = useState<CalendarMonthResponse | null>(null);
+
+  // 0.21.x — categories + transaction action modals
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [attachmentsFor, setAttachmentsFor] = useState<Transaction | null>(null);
+  const [splittingFor, setSplittingFor] = useState<Transaction | null>(null);
+  const [refundingFor, setRefundingFor] = useState<Transaction | null>(null);
+
   useEffect(() => {
     void api.listAccounts().then(setAccounts).catch(() => undefined);
+    void api.listCategories().then(setCategories).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -113,6 +129,25 @@ export function CalendarPage() {
       cancelled = true;
     };
   }, [monthKey, selectedAccountIds, upcomingDays]);
+
+  // 0.21.x — fetch previous month when compare is on.
+  useEffect(() => {
+    if (!compareToPrev) {
+      setPrevData(null);
+      return;
+    }
+    const prevKey = shiftMonth(monthKey, -1);
+    let cancelled = false;
+    void api
+      .calendarMonth(prevKey, { accountIds: selectedAccountIds })
+      .then((r) => {
+        if (!cancelled) setPrevData(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [compareToPrev, monthKey, selectedAccountIds]);
 
   // Whenever the selected day changes, load that day's transactions.
   // Same filter (selectedAccountIds) so the drill-down stays
@@ -284,11 +319,23 @@ export function CalendarPage() {
               label={`${MONTH_LABELS[data.month - 1]} ${data.year} — spent`}
               value={formatCents(-data.totals.spend_cents)}
               tone="neg"
+              delta={
+                prevData
+                  ? deltaPct(data.totals.spend_cents, prevData.totals.spend_cents)
+                  : null
+              }
+              deltaTone="lower-is-good"
             />
             <SummaryCard
               label="Income"
               value={formatCents(data.totals.income_cents)}
               tone="pos"
+              delta={
+                prevData
+                  ? deltaPct(data.totals.income_cents, prevData.totals.income_cents)
+                  : null
+              }
+              deltaTone="higher-is-good"
             />
             <SummaryCard
               label="Budgeted"
@@ -304,16 +351,31 @@ export function CalendarPage() {
                 pace === null ? '—' : `${(pace * 100).toFixed(0)}% of budget pace`
               }
               tone={pace !== null && pace > 1.0 ? 'neg' : 'pos'}
+              footnote={
+                data.totals.budget_cents > 0
+                  ? 'Based on Monthly budget targets'
+                  : 'No Monthly budget set'
+              }
             />
           </div>
 
           <div
             style={{
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               margin: '12px 0',
+              gap: 12,
             }}
           >
+            <label className="muted small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={compareToPrev}
+                onChange={(e) => setCompareToPrev(e.target.checked)}
+              />
+              Compare to last month
+            </label>
             <button
               className="btn secondary"
               type="button"
@@ -412,40 +474,67 @@ export function CalendarPage() {
             })}
           </div>
 
-          {/* 0.21.x — selected-day transactions ABOVE upcoming list */}
+          {/* 0.21.x — selected-day transactions ABOVE upcoming list.
+              Uses the full TransactionTable so the user can open
+              attachments / splits / refund-status modals directly
+              from a calendar drilldown. */}
           {selectedDay && (
             <>
               <h2 style={{ marginTop: 24 }}>{formatDate(selectedDay)}</h2>
               {dayTxns.length === 0 ? (
                 <p className="empty">No transactions on this day.</p>
               ) : (
-                <div className="table-wrap">
-                  <table className="txn-table">
-                    <thead>
-                      <tr>
-                        <th>Description</th>
-                        <th>Account</th>
-                        <th>Category</th>
-                        <th className="num">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dayTxns.map((t) => (
-                        <tr key={t.id}>
-                          <td>{t.normalized_merchant ?? t.raw_description}</td>
-                          <td className="muted small">{t.account_name}</td>
-                          <td>{t.category_name ?? <span className="muted">—</span>}</td>
-                          <td className={`num ${t.amount_cents < 0 ? 'neg' : 'pos'}`}>
-                            {t.amount_cents > 0 ? '+' : ''}
-                            {formatCents(t.amount_cents)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <TransactionTable
+                  transactions={dayTxns}
+                  showAccount
+                  categories={categories}
+                  onUpdate={async (id, updates) => {
+                    const updated = await api.updateTransaction(id, updates);
+                    setDayTxns((prev) =>
+                      prev.map((t) => (t.id === id ? updated : t)),
+                    );
+                  }}
+                  onOpenAttachments={setAttachmentsFor}
+                  onOpenSplits={setSplittingFor}
+                  onOpenRefund={setRefundingFor}
+                />
               )}
             </>
+          )}
+
+          {attachmentsFor && (
+            <AttachmentsModal
+              transaction={attachmentsFor}
+              onClose={() => setAttachmentsFor(null)}
+              onCountChange={(count) =>
+                setDayTxns((prev) =>
+                  prev.map((t) =>
+                    t.id === attachmentsFor.id
+                      ? { ...t, attachment_count: count }
+                      : t,
+                  ),
+                )
+              }
+            />
+          )}
+          {splittingFor && (
+            <SplitsModal
+              transaction={splittingFor}
+              categories={categories}
+              onClose={() => setSplittingFor(null)}
+              onSaved={() => setSplittingFor(null)}
+            />
+          )}
+          {refundingFor && (
+            <RefundStatusModal
+              transaction={refundingFor}
+              onClose={() => setRefundingFor(null)}
+              onSaved={(updated) =>
+                setDayTxns((prev) =>
+                  prev.map((t) => (t.id === updated.id ? updated : t)),
+                )
+              }
+            />
           )}
 
           {/* 0.21.x — upcoming activity with selectable window */}
@@ -531,15 +620,43 @@ export function CalendarPage() {
   );
 }
 
+function deltaPct(current: number, previous: number): number | null {
+  if (previous === 0) {
+    if (current === 0) return 0;
+    return null;
+  }
+  return (current - previous) / Math.abs(previous);
+}
+
 function SummaryCard({
   label,
   value,
   tone,
+  delta,
+  deltaTone,
+  footnote,
 }: {
   label: string;
   value: string;
   tone?: 'pos' | 'neg';
+  /** Fractional delta vs prior month (0.10 = +10%). */
+  delta?: number | null;
+  /** Direction that's "good" — used to colour the delta. */
+  deltaTone?: 'lower-is-good' | 'higher-is-good';
+  footnote?: string;
 }) {
+  let deltaText: string | null = null;
+  let deltaClass = '';
+  if (delta !== null && delta !== undefined) {
+    const sign = delta > 0 ? '+' : '';
+    deltaText = `${sign}${(delta * 100).toFixed(0)}% vs last month`;
+    if (deltaTone) {
+      const good =
+        (deltaTone === 'lower-is-good' && delta <= 0) ||
+        (deltaTone === 'higher-is-good' && delta >= 0);
+      deltaClass = good ? 'pos' : 'neg';
+    }
+  }
   return (
     <div className="card">
       <div className="muted" style={{ fontSize: 13 }}>{label}</div>
@@ -549,6 +666,16 @@ function SummaryCard({
       >
         {value}
       </div>
+      {deltaText && (
+        <div className={`small ${deltaClass}`} style={{ marginTop: 4 }}>
+          {deltaText}
+        </div>
+      )}
+      {footnote && (
+        <div className="muted small" style={{ marginTop: 4 }}>
+          {footnote}
+        </div>
+      )}
     </div>
   );
 }
