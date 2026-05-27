@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { query } from '../db/pool.js';
+import { query, withTransaction } from '../db/pool.js';
 import { isUuid } from '../util.js';
+import { resetCanonicalCategories, seedDefaultCategories } from '../domain/categories.js';
+import { canManageMembers, loadUserContext, requireTenant } from '../auth/rbac.js';
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -42,16 +44,49 @@ export const SUGGESTED_TAX_CATEGORIES: string[] = [
 
 export async function categoryRoutes(app: FastifyInstance): Promise<void> {
   // List categories, with how many transactions reference each.
-  app.get('/api/categories', async () => {
-    const result = await query(`
-      SELECT c.id, c.name, c.parent_id, c.tax_category, c.created_at,
-             COUNT(t.id)::bigint AS transaction_count
-        FROM categories c
-   LEFT JOIN transactions t ON t.category_id = c.id
-    GROUP BY c.id
-    ORDER BY c.name
-    `);
+  // Returns canonical (tenant_id NULL) + the caller's tenant-specific
+  // customs combined; is_system flags the canonical ones.
+  app.get('/api/categories', async (req) => {
+    const tenantId = req.user?.tenantId ?? null;
+    const result = await query(
+      `SELECT c.id, c.name, c.parent_id, c.tax_category, c.is_system, c.created_at,
+              COUNT(t.id)::bigint AS transaction_count
+         FROM categories c
+    LEFT JOIN transactions t ON t.category_id = c.id
+        WHERE c.tenant_id IS NULL
+           OR c.tenant_id = $1::uuid
+     GROUP BY c.id
+     ORDER BY c.is_system DESC, c.name`,
+      [tenantId],
+    );
     return { categories: result.rows };
+  });
+
+  /**
+   * 0.21.x — Hard reset to canonical.
+   *
+   * Wipes every category in the caller's tenant (preserving
+   * canonical NULL-tenant rows), nulls out category_id on
+   * dependent rows that allow it, then reseeds canonical for the
+   * tenant. Budgets cascade-delete with their category — the UI
+   * warns about this before invoking.
+   */
+  app.post('/api/categories/reset', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const ctx = await loadUserContext(req.user!.id, tenantId);
+    if (!canManageMembers(ctx)) {
+      return reply
+        .code(403)
+        .send({ error: 'Only tenant admins may reset categories' });
+    }
+    const result = await withTransaction(async (client) => {
+      // First, make sure the global canonical rows exist (idempotent).
+      await seedDefaultCategories(client, null);
+      // Then reset the tenant's customs and reseed scoped copies.
+      return resetCanonicalCategories(client, tenantId);
+    });
+    return { ...result, ok: true };
   });
 
   app.get('/api/categories/tax-vocabulary', async () => ({

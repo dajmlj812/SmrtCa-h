@@ -1154,6 +1154,8 @@ export interface Category {
   name: string;
   parent_id: string | null;
   tax_category: string | null;
+  /** 0.21.x — true when the row came from the canonical IRS-aware seed. */
+  is_system?: boolean;
   created_at: string;
   transaction_count: number;
 }
@@ -1897,6 +1899,11 @@ export const api = {
 
   deleteCategory: (id: string) =>
     http<void>(`/api/categories/${id}`, { method: 'DELETE' }),
+
+  resetCategories: () =>
+    http<{ ok: true; deleted: number }>('/api/categories/reset', {
+      method: 'POST',
+    }),
 
   listFormats: () =>
     http<{ formats: ImportFormat[] }>('/api/imports/formats').then(

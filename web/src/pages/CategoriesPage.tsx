@@ -162,6 +162,36 @@ export function CategoriesPage() {
             The taxonomy your AI normalizer and manual edits choose from
           </div>
         </div>
+        <div>
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={async () => {
+              if (
+                !confirm(
+                  'Reset categories to the canonical IRS-aware list?\n\n' +
+                    "This will WIPE every category in this tenant and reseed the canonical taxonomy.\n\n" +
+                    'Existing transactions, splits, bills, and rules will have their category_id set to NULL ' +
+                    'so you\'ll need to re-categorise them. Budgets that referenced the wiped categories will be deleted.\n\n' +
+                    'Continue?',
+                )
+              )
+                return;
+              try {
+                const r = await api.resetCategories();
+                alert(
+                  `Reset complete. Removed ${r.deleted} categories, reseeded canonical.`,
+                );
+                await load();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Reset failed');
+              }
+            }}
+            title="Wipe everything and rebuild from the canonical IRS-aware taxonomy"
+          >
+            Reset to canonical
+          </button>
+        </div>
       </div>
 
       {error && <div className="banner error">{error}</div>}

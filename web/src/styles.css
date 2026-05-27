@@ -3342,6 +3342,59 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .account-link:hover { text-decoration: underline; }
 .account-row { cursor: pointer; }
 
+/* 0.21.x — fuzzy category picker combobox. */
+.cat-picker { display: inline-block; width: 100%; max-width: 280px; }
+.cat-picker input.cell-select { width: 100%; }
+.cat-picker-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.cat-picker-clear:hover { color: var(--text); }
+.cat-picker-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  margin-top: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-lg, 0 6px 16px rgba(0,0,0,0.15));
+  min-width: 320px;
+}
+.cat-picker-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--text);
+}
+.cat-picker-row:hover,
+.cat-picker-row.hl {
+  background: var(--surface-3);
+}
+.cat-picker-name { flex: 1; }
+.cat-picker-tax { white-space: nowrap; }
+.cat-picker-empty { padding: 10px; }
+
 /* 0.21.9 — compact transactions row. Scoped via .txn-table-compact
  * so other tables (warranties, mileage, household, etc.) keep
  * their existing breathing room. */

@@ -6,6 +6,7 @@ import {
   type Category,
 } from '../api';
 import { formatCents, formatDate } from '../format';
+import { CategoryPicker } from '../components/CategoryPicker';
 
 /**
  * 0.21.8 — Monthly Budget (one of two pages the previous /budgets
@@ -320,21 +321,14 @@ function BudgetAddForm({
       <div className="form-grid">
         <div className="field">
           <label htmlFor="budget-cat">Category</label>
-          <select
-            id="budget-cat"
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-          >
-            <option value="">— Pick one —</option>
-            {!hasFlex && (
-              <option value="__flex">Flex pool (everything else)</option>
-            )}
-            {available.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <CategoryPicker
+            categories={available}
+            value={categoryId === '' || categoryId === '__flex' ? null : categoryId}
+            allowFlex={!hasFlex}
+            onChange={(id) =>
+              setCategoryId(id === null ? (hasFlex ? '' : '__flex') : id)
+            }
+          />
         </div>
         <div className="field">
           <label htmlFor="budget-amt">Amount ($)</label>

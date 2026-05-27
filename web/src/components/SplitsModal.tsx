@@ -7,6 +7,7 @@ import {
 } from '../api';
 import { formatCents, formatDate } from '../format';
 import { AttachmentPreviewPane } from './AttachmentPreviewPane';
+import { CategoryPicker } from './CategoryPicker';
 
 interface Props {
   transaction: Transaction;
@@ -194,25 +195,12 @@ export function SplitsModal({ transaction, categories, onClose, onSaved }: Props
             <div className="split-rows">
               {splits.map((s) => (
                 <div key={s.key} className="split-row">
-                  <select
-                    className="cell-select"
-                    value={s.categoryId ?? ''}
-                    onChange={(e) =>
-                      updateSplit(s.key, {
-                        categoryId: e.target.value === '' ? null : e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">— Uncategorized —</option>
-                    {categories
-                      .filter((c) => c.parent_id !== null)
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                  </select>
+                  <CategoryPicker
+                    categories={categories}
+                    value={s.categoryId}
+                    onChange={(id) => updateSplit(s.key, { categoryId: id })}
+                    placeholder="— Uncategorized —"
+                  />
                   <input
                     type="number"
                     step="0.01"

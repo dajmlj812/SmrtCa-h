@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Category, RefundStatus, Transaction } from '../api';
 import { REFUND_STATUS_LABELS } from '../api';
 import { formatCents, formatDate } from '../format';
+import { CategoryPicker } from './CategoryPicker';
 
 const REFUND_PILL_TONE: Record<RefundStatus, string> = {
   refund_pending: 'warn',
@@ -289,30 +290,12 @@ function TransactionRow({
       </td>
       <td>
         {editable ? (
-          <select
-            className="cell-select"
-            value={t.category_id ?? ''}
+          <CategoryPicker
+            categories={categories ?? []}
+            value={t.category_id}
             disabled={saving}
-            onChange={(e) => void handleCategoryChange(e.target.value)}
-          >
-            <option value="">— None —</option>
-            {groups.map((g) =>
-              g.children.length === 0 ? (
-                <option key={g.parent.id} value={g.parent.id}>
-                  {g.parent.name}
-                </option>
-              ) : (
-                <optgroup key={g.parent.id} label={g.parent.name}>
-                  <option value={g.parent.id}>{g.parent.name} (general)</option>
-                  {g.children.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ),
-            )}
-          </select>
+            onChange={(id) => void handleCategoryChange(id ?? '')}
+          />
         ) : (
           (t.category_name ?? t.source_category ?? (
             <span className="muted">—</span>
