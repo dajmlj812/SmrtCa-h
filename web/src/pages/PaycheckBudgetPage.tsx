@@ -243,78 +243,183 @@ function PlanBlock({
           </button>
         </div>
       )}
-      {/* 0.21.x — replaced the verbose PeriodOverview card with a
-          compact summary line per period. The old card showed
-          "Monthly" labels + income/bills/set-aside data that
-          didn't match a paycheck plan's reality. The new line
-          just shows the period window, total income / bills /
-          set-aside, and a delete-period link. */}
-      {periods.length > 0 && (
-        <div className="card" style={{ padding: 8 }}>
-          <table className="txn-table" style={{ marginBottom: 0 }}>
-            <thead>
-              <tr>
-                <th>Window</th>
-                <th className="num">Income</th>
-                <th className="num">Bills</th>
-                <th className="num">Set-aside</th>
-                <th className="num">Net</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {periods.map((p) => {
-                const net = p.totals.net_cents;
-                const label = `${formatDate(p.period.start)} → ${formatDate(p.period.end)}`;
-                return (
-                  <tr
-                    key={`${p.period.start}-${p.period.end}-${p.period.type}`}
-                  >
-                    <td className="nowrap">{label}</td>
-                    <td className="num pos">
-                      +{formatCents(p.totals.income_cents)}
-                    </td>
-                    <td className="num neg">
-                      −{formatCents(p.totals.bills_cents)}
-                    </td>
-                    <td className="num neg">
-                      −{formatCents(p.totals.editable_cents)}
-                    </td>
-                    <td className={`num ${net < 0 ? 'neg' : 'pos'}`}>
-                      {net < 0 ? '−' : '+'}
-                      {formatCents(Math.abs(net))}
-                    </td>
-                    <td>
-                      {p.plan_id && (
-                        <button
-                          type="button"
-                          className="btn-link danger"
-                          onClick={() =>
-                            void onDeletePeriod(
-                              p.plan_id!,
-                              p.period.start,
-                              label,
-                            )
-                          }
-                          title="Remove every budget row for this period"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
       {periods.length === 0 && (
         <p className="muted small" style={{ marginTop: 8 }}>
           No periods committed for this plan yet — run AutoMagic setup
           to populate.
         </p>
       )}
+      {periods.map((p) => (
+        <PeriodBreakdown
+          key={`${p.period.start}-${p.period.end}-${p.period.type}`}
+          summary={p}
+          onDeletePeriod={onDeletePeriod}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 0.21.x — full-detail period card for the paycheck budget. Shows
+ * income, bills, and set-aside categories for the period plus the
+ * net at the bottom. Replaces the old "Period overview" card
+ * (which mislabelled cadence) and the compact one-line summary
+ * (which hid useful detail).
+ */
+function PeriodBreakdown({
+  summary,
+  onDeletePeriod,
+}: {
+  summary: BudgetPeriodSummary;
+  onDeletePeriod: (
+    planId: string,
+    periodStart: string,
+    label: string,
+  ) => Promise<void>;
+}) {
+  const { period, income, bills, editable, totals } = summary;
+  const net = totals.net_cents;
+  const overextended = net < 0;
+  const label = `${formatDate(period.start)} → ${formatDate(period.end)}`;
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          gap: 12,
+        }}
+      >
+        <strong>{label}</strong>
+        {summary.plan_id && (
+          <button
+            type="button"
+            className="btn-link danger"
+            onClick={() =>
+              void onDeletePeriod(summary.plan_id!, period.start, label)
+            }
+            title="Remove every budget row for this period"
+          >
+            Delete period
+          </button>
+        )}
+      </div>
+
+      {/* Income */}
+      <h3 style={{ marginTop: 14, marginBottom: 6 }}>
+        Income — <strong className="pos">+{formatCents(totals.income_cents)}</strong>
+      </h3>
+      {income.length === 0 ? (
+        <p className="muted small">No income events in this period.</p>
+      ) : (
+        <table className="txn-table">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th className="nowrap">Expected</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {income.map((i) => (
+              <tr key={i.id + i.date}>
+                <td>{i.name}</td>
+                <td className="nowrap">{formatDate(i.date)}</td>
+                <td className="num pos">+{formatCents(i.amount_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Bills */}
+      <h3 style={{ marginTop: 14, marginBottom: 6 }}>
+        Bills — <strong className="neg">−{formatCents(totals.bills_cents)}</strong>
+      </h3>
+      {bills.length === 0 ? (
+        <p className="muted small">No bills due in this period.</p>
+      ) : (
+        <table className="txn-table">
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th className="nowrap">Due</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bills.map((b) => (
+              <tr key={b.budget_id}>
+                <td>{b.name}</td>
+                <td className="nowrap">
+                  {b.date ? formatDate(b.date) : <span className="muted">—</span>}
+                </td>
+                <td className="num neg">−{formatCents(b.amount_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Editable / set-aside categories */}
+      <h3 style={{ marginTop: 14, marginBottom: 6 }}>
+        Set aside —{' '}
+        <strong className="neg">−{formatCents(totals.editable_cents)}</strong>
+      </h3>
+      {editable.length === 0 ? (
+        <p className="muted small">No category allowances for this period.</p>
+      ) : (
+        <table className="txn-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Action</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {editable.map((e) => (
+              <tr key={e.budget_id}>
+                <td>{e.category_name}</td>
+                <td className="muted small">
+                  {e.requires_manual_action
+                    ? 'Manually transfer to savings'
+                    : 'Spending allowance'}
+                </td>
+                <td className="num neg">−{formatCents(e.amount_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Net */}
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 10,
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+        }}
+      >
+        <span>
+          <strong>{overextended ? 'Overextended by' : 'Leftover'}</strong>
+          <div className="muted small">
+            Income − bills − set-aside
+          </div>
+        </span>
+        <strong
+          className={overextended ? 'neg' : 'pos'}
+          style={{ fontSize: '1.2em' }}
+        >
+          {overextended ? '−' : '+'}
+          {formatCents(Math.abs(net))}
+        </strong>
+      </div>
     </div>
   );
 }
