@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { api, type MeResponse } from './api';
 import { setUserTimezone } from './format';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
@@ -20,7 +20,8 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import { CookieNoticePage } from './pages/CookieNoticePage';
-import { BudgetsPage } from './pages/BudgetsPage';
+import { MonthlyBudgetPage } from './pages/MonthlyBudgetPage';
+import { PaycheckBudgetPage } from './pages/PaycheckBudgetPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
@@ -365,7 +366,8 @@ function AuthenticatedApp({
           </div>
           <div className="nav-group">
             <div className="nav-group-label">Planning</div>
-            <NavLink to="/budgets">Budgets</NavLink>
+            <NavLink to="/monthly-budget">Monthly budget</NavLink>
+            <NavLink to="/paycheck-budget">Paycheck budget</NavLink>
             <NavLink to="/goals">Goals</NavLink>
             <NavLink to="/bills">Bills</NavLink>
             <NavLink to="/subscriptions">Subscriptions</NavLink>
@@ -438,7 +440,9 @@ function AuthenticatedApp({
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/uncategorized" element={<UncategorizedPage />} />
           <Route path="/transfers" element={<TransfersPage />} />
-          <Route path="/budgets" element={<BudgetsPage />} />
+          <Route path="/budgets" element={<Navigate to="/monthly-budget" replace />} />
+          <Route path="/monthly-budget" element={<MonthlyBudgetPage />} />
+          <Route path="/paycheck-budget" element={<PaycheckBudgetPage />} />
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/retirement" element={<RetirementPage />} />
           <Route path="/investments" element={<InvestmentsPage />} />
