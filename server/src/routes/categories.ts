@@ -45,31 +45,27 @@ export const SUGGESTED_TAX_CATEGORIES: string[] = [
 export async function categoryRoutes(app: FastifyInstance): Promise<void> {
   // List categories, with how many transactions reference each.
   //
-  // 0.21.x — when the tenant has any tenant-scoped rows, return
-  // ONLY those (their seed is authoritative). Otherwise fall back
-  // to the global NULL-tenant seed. This stops the
-  // "tenant copy + legacy global = duplicates" effect that
-  // happened after a "Reset to canonical" when the global seed
-  // hadn't been rebuilt for the new structure.
+  // 0.21.x — per-name override semantics. Every tenant row is
+  // returned; global rows are only returned if their name isn't
+  // already present in the tenant. This way a single stray tenant
+  // row doesn't hide the entire global canonical taxonomy — only
+  // the names the tenant has customised get overridden.
   app.get('/api/categories', async (req) => {
     const tenantId = req.user?.tenantId ?? null;
-    const hasOwn = tenantId
-      ? await query<{ n: number }>(
-          `SELECT 1::int AS n FROM categories
-            WHERE tenant_id = $1::uuid LIMIT 1`,
-          [tenantId],
-        )
-      : { rowCount: 0, rows: [] as { n: number }[] };
-    const where =
-      tenantId && (hasOwn.rowCount ?? 0) > 0
-        ? 'c.tenant_id = $1::uuid'
-        : 'c.tenant_id IS NULL OR c.tenant_id = $1::uuid';
     const result = await query(
       `SELECT c.id, c.name, c.parent_id, c.tax_category, c.is_system, c.created_at,
               COUNT(t.id)::bigint AS transaction_count
          FROM categories c
     LEFT JOIN transactions t ON t.category_id = c.id
-        WHERE ${where}
+        WHERE c.tenant_id = $1::uuid
+           OR (
+             c.tenant_id IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM categories ct
+                WHERE ct.tenant_id = $1::uuid
+                  AND lower(ct.name) = lower(c.name)
+             )
+           )
      GROUP BY c.id
      ORDER BY c.is_system DESC, c.name`,
       [tenantId],
