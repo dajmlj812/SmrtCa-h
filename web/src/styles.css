@@ -3535,6 +3535,23 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .budget-hero-stats { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* 0.21.x — goal-template picker row. */
+.goal-template-row {
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.goal-template-row:hover {
+  border-color: var(--accent);
+  background: var(--surface-3);
+}
+
 /* 0.21.x — fuzzy category picker combobox. */
 .cat-picker { display: inline-block; width: 100%; max-width: 280px; }
 .cat-picker input.cell-select { width: 100%; }

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type Account, type SavingsGoal } from '../api';
 import { formatCents, formatDate } from '../format';
+import { GoalTemplatePicker } from '../components/GoalTemplatePicker';
 
 function daysUntil(dateStr: string): number {
   const today = new Date();
@@ -19,6 +20,8 @@ export function GoalsPage() {
   const [showCreate, setShowCreate] = useState(false);
   // 0.18.5 — inline contribute target.
   const [contributing, setContributing] = useState<SavingsGoal | null>(null);
+  // 0.21.x — drop-in template picker.
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -67,10 +70,28 @@ export function GoalsPage() {
             manually as you move money in.
           </div>
         </div>
-        <button className="btn" onClick={() => setShowCreate(true)}>
-          New goal
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn secondary"
+            onClick={() => setShowTemplatePicker(true)}
+          >
+            ✨ From template
+          </button>
+          <button className="btn" onClick={() => setShowCreate(true)}>
+            New goal
+          </button>
+        </div>
       </div>
+
+      {showTemplatePicker && (
+        <GoalTemplatePicker
+          onClose={() => setShowTemplatePicker(false)}
+          onCreated={() => {
+            setShowTemplatePicker(false);
+            void load();
+          }}
+        />
+      )}
 
       {error && <div className="banner error">{error}</div>}
 
