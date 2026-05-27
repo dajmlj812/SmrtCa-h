@@ -3403,16 +3403,34 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   background: var(--card, var(--surface-2));
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 14px 18px;
+  padding: 12px 18px;
   box-shadow: var(--shadow, none);
 }
 .budget-group-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  gap: 12px;
+}
+.budget-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.budget-group-toggle:disabled { cursor: default; opacity: 0.85; }
+.budget-group-toggle .chev {
+  display: inline-block;
+  width: 12px;
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform 0.15s ease;
 }
 .budget-group-head h3 {
   margin: 0;
@@ -3423,8 +3441,28 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .budget-group-total {
   font-size: 14px;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
-.budget-group-total.neg { color: var(--neg); }
+.budget-group-progress {
+  margin-top: 8px;
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.budget-group-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--pos));
+  transition: width 0.2s ease;
+}
+.budget-group-progress-fill.over {
+  background: linear-gradient(90deg, var(--accent), var(--neg));
+}
+.budget-group.expanded {
+  background: var(--surface-3);
+}
 
 /* Tighten the row layout inside grouped cards. */
 .budget-group .budget-row {

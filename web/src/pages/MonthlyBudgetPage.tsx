@@ -157,23 +157,87 @@ export function MonthlyBudgetPage() {
     }
   }
 
+  /**
+   * 0.21.x — change the *category-level* total. The change is
+   * applied to the category-only row (no bill_id): patch its
+   * amount, create it if it doesn't exist, or delete it if the
+   * new total would push it ≤ 0.
+   */
+  async function onSetCategoryTotal(
+    group: {
+      categoryId: string | null;
+      categoryName: string;
+      rows: BudgetVsActualRow[];
+    },
+    newTotalCents: number,
+  ) {
+    if (!group.categoryId) {
+      setError(
+        'Editing the flex-pool total isn\'t supported here — edit the row directly.',
+      );
+      return;
+    }
+    const currentTotal = group.rows.reduce((s, r) => s + r.budgeted_cents, 0);
+    const delta = newTotalCents - currentTotal;
+    if (delta === 0) return;
+    const categoryOnlyRow = group.rows.find((r) => r.bill_id === null);
+    try {
+      if (categoryOnlyRow) {
+        const next = categoryOnlyRow.budgeted_cents + delta;
+        if (next <= 0) {
+          await api.deleteBudget(categoryOnlyRow.id);
+        } else {
+          await api.updateBudgetAmount(categoryOnlyRow.id, next);
+        }
+      } else {
+        if (delta <= 0) {
+          setError(
+            `Can't lower ${group.categoryName} below its bill total. Edit individual bills instead.`,
+          );
+          return;
+        }
+        await api.upsertBudget({
+          periodStart: month,
+          periodType: 'monthly',
+          categoryId: group.categoryId,
+          amountCents: delta,
+        });
+      }
+      await load(month);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    }
+  }
+
   const hasFlex = rows.some((r) => r.category_id === null);
   const budgetedIds = new Set(
     rows.map((r) => r.category_id).filter((id): id is string => id !== null),
   );
 
-  // 0.21.x — group rows by parent category for the new layout so
-  // bills sit under their category heading and the user can read
-  // the page top-down by "where my money goes."
+  // 0.21.x — group rows by category. Each category becomes one
+  // collapsible card; bills nested as children show only when
+  // expanded.
   const grouped = useMemo(() => {
-    const map = new Map<string, BudgetVsActualRow[]>();
+    const map = new Map<
+      string,
+      { categoryId: string | null; categoryName: string; rows: BudgetVsActualRow[] }
+    >();
     for (const r of rows) {
-      const key = r.category_name ?? 'Flex pool (everything else)';
-      const arr = map.get(key) ?? [];
-      arr.push(r);
-      map.set(key, arr);
+      const key = r.category_id ?? '__flex';
+      const existing = map.get(key);
+      if (existing) {
+        existing.rows.push(r);
+      } else {
+        map.set(key, {
+          categoryId: r.category_id,
+          categoryName: r.category_name ?? 'Flex pool (everything else)',
+          rows: [r],
+        });
+      }
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return [...map.values()].sort((a, b) =>
+      a.categoryName.localeCompare(b.categoryName),
+    );
   }, [rows]);
 
   const consumedPct =
@@ -308,42 +372,21 @@ export function MonthlyBudgetPage() {
             </div>
           )}
 
-          {/* Category-grouped budget list. Each parent name is its
-              own subheading; bills sit under their parent so the
-              user reads top-down by where their money goes. */}
+          {/* Category-grouped budget list. Collapsed by default;
+              chevron expands to per-bill detail. Category total is
+              editable directly (delta flows onto the category-only
+              row or creates one). */}
           <div className="budget-groups">
-            {grouped.map(([categoryName, groupRows]) => {
-              const groupBudget = groupRows.reduce(
-                (s, r) => s + r.budgeted_cents,
-                0,
-              );
-              const groupActual = groupRows.reduce(
-                (s, r) => s + r.actual_cents,
-                0,
-              );
-              const groupOver = groupActual > groupBudget;
-              return (
-                <div key={categoryName} className="budget-group">
-                  <div className="budget-group-head">
-                    <h3>{categoryName}</h3>
-                    <span className={`budget-group-total ${groupOver ? 'neg' : ''}`}>
-                      {formatCents(groupActual)}{' '}
-                      <span className="muted">of {formatCents(groupBudget)}</span>
-                    </span>
-                  </div>
-                  <div className="budget-list">
-                    {groupRows.map((r) => (
-                      <BudgetRow
-                        key={r.id}
-                        row={r}
-                        onDelete={() => void onDelete(r.id)}
-                        onAmountChange={(cents) => onAmountChange(r.id, cents)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+            {grouped.map((g) => (
+              <CategoryGroupCard
+                key={g.categoryId ?? '__flex'}
+                group={g}
+                month={month}
+                onAmountChange={onAmountChange}
+                onDelete={onDelete}
+                onSetCategoryTotal={onSetCategoryTotal}
+              />
+            ))}
           </div>
         </>
       )}
@@ -602,6 +645,141 @@ function BudgetAddForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function CategoryGroupCard({
+  group,
+  month,
+  onAmountChange,
+  onDelete,
+  onSetCategoryTotal,
+}: {
+  group: {
+    categoryId: string | null;
+    categoryName: string;
+    rows: BudgetVsActualRow[];
+  };
+  month: string;
+  onAmountChange: (id: string, cents: number) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onSetCategoryTotal: (
+    group: {
+      categoryId: string | null;
+      categoryName: string;
+      rows: BudgetVsActualRow[];
+    },
+    newTotalCents: number,
+  ) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const groupBudget = group.rows.reduce((s, r) => s + r.budgeted_cents, 0);
+  const groupActual = group.rows.reduce((s, r) => s + r.actual_cents, 0);
+  const over = groupActual > groupBudget;
+  const pct =
+    groupBudget === 0 ? 0 : Math.min(100, (groupActual / groupBudget) * 100);
+  const childCount = group.rows.length;
+  const hasChildren = childCount > 1 || group.rows.some((r) => r.bill_id);
+  void month; // referenced for parent reload context
+
+  async function commit() {
+    if (!editing) return;
+    setSaving(true);
+    const cents = Math.round(Number(draft) * 100);
+    if (Number.isFinite(cents) && cents >= 0 && cents !== groupBudget) {
+      try {
+        await onSetCategoryTotal(group, cents);
+      } catch {
+        /* parent surfaces error */
+      }
+    }
+    setSaving(false);
+    setEditing(false);
+  }
+
+  return (
+    <div className={`budget-group ${expanded ? 'expanded' : ''}`}>
+      <div className="budget-group-head">
+        <button
+          type="button"
+          className="budget-group-toggle"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+          disabled={!hasChildren}
+          title={
+            hasChildren
+              ? `${expanded ? 'Hide' : 'Show'} ${childCount} item${childCount === 1 ? '' : 's'}`
+              : ''
+          }
+        >
+          <span className="chev" aria-hidden>
+            {hasChildren ? (expanded ? '▼' : '▶') : ''}
+          </span>
+          <h3>{group.categoryName}</h3>
+          {hasChildren && (
+            <span className="muted small">
+              {childCount} item{childCount === 1 ? '' : 's'}
+            </span>
+          )}
+        </button>
+        <div className="budget-group-total">
+          <span className={over ? 'neg' : ''}>{formatCents(groupActual)}</span>
+          <span className="muted"> / </span>
+          {editing ? (
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              autoFocus
+              disabled={saving}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commit();
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              onBlur={() => void commit()}
+              style={{ width: 100, textAlign: 'right' }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="budget-amount-edit"
+              title="Click to edit the category total. Change flows onto the category-only row (no bill)."
+              onClick={() => {
+                setDraft((groupBudget / 100).toFixed(2));
+                setEditing(true);
+              }}
+            >
+              {formatCents(groupBudget)}
+              <span aria-hidden style={{ marginLeft: 4, opacity: 0.5 }}>✎</span>
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="budget-group-progress">
+        <div
+          className={`budget-group-progress-fill ${over ? 'over' : ''}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {expanded && (
+        <div className="budget-list" style={{ marginTop: 8 }}>
+          {group.rows.map((r) => (
+            <BudgetRow
+              key={r.id}
+              row={r}
+              onDelete={() => void onDelete(r.id)}
+              onAmountChange={(cents) => onAmountChange(r.id, cents)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
