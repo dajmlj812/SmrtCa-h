@@ -43,6 +43,7 @@ import { SharingPage } from './pages/SharingPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TaxYearPage } from './pages/TaxYearPage';
 import { MileagePage } from './pages/MileagePage';
+import { WarrantiesPage } from './pages/WarrantiesPage';
 import { AnomaliesPage } from './pages/AnomaliesPage';
 import { BillingPage } from './pages/BillingPage';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -382,6 +383,7 @@ function AuthenticatedApp({
             <NavLink to="/connections">Connections</NavLink>
             <NavLink to="/vehicles">Vehicles</NavLink>
             <NavLink to="/routes">Routes</NavLink>
+            <NavLink to="/warranties">Warranties</NavLink>
           </div>
           <div className="nav-group">
             <div className="nav-group-label">Household</div>
@@ -447,6 +449,7 @@ function AuthenticatedApp({
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/tax" element={<TaxYearPage />} />
           <Route path="/mileage" element={<MileagePage />} />
+          <Route path="/warranties" element={<WarrantiesPage />} />
           <Route path="/anomalies" element={<AnomaliesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />

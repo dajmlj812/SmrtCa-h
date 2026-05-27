@@ -197,6 +197,32 @@ export interface MileageSummary {
   total_deduction_cents: number;
 }
 
+export interface Warranty {
+  id: string;
+  transaction_id: string | null;
+  attachment_id: string | null;
+  item: string;
+  vendor: string | null;
+  purchase_date: string;
+  warranty_until: string;
+  purchase_cents: number | null;
+  notes: string | null;
+  created_at: string;
+  expired: boolean;
+  expiring_soon: boolean;
+}
+
+export interface WarrantyInput {
+  item: string;
+  vendor?: string | null;
+  purchaseDate: string;
+  warrantyUntil: string;
+  purchaseCents?: number | null;
+  notes?: string | null;
+  transactionId?: string | null;
+  attachmentId?: string | null;
+}
+
 export interface MileageTripInput {
   vehicleId: string | null;
   tripDate: string;
@@ -3411,6 +3437,29 @@ export const api = {
 
   mileageSummary: (year: number) =>
     http<MileageSummary>(`/api/mileage/summary/${year}`),
+
+  // 0.21.2 — warranties
+  listWarranties: (status?: 'active' | 'expired' | 'expiring') => {
+    const qs = status ? `?status=${status}` : '';
+    return http<{ warranties: Warranty[] }>(`/api/warranties${qs}`);
+  },
+
+  createWarranty: (body: WarrantyInput) =>
+    http<{ warranty: Warranty }>(`/api/warranties`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  updateWarranty: (id: string, body: WarrantyInput) =>
+    http<{ warranty: Warranty }>(`/api/warranties/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  deleteWarranty: (id: string) =>
+    http<void>(`/api/warranties/${id}`, { method: 'DELETE' }),
 
   // ── Anomaly alerts (backlog 0.13.2) ──────────────────────
   listAnomalies: (includeDismissed = false) =>

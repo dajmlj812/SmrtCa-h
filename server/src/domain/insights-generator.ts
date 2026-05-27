@@ -24,7 +24,8 @@ export type InsightKind =
   | 'goal_pace_slipping'
   | 'unusual_recurring_charge'
   | 'cash_flow_warning'
-  | 'fee_drag';
+  | 'fee_drag'
+  | 'warranty_expiring';
 
 export type InsightSeverity = 'info' | 'warn' | 'critical';
 
@@ -245,6 +246,45 @@ export async function generateInsights(
         source_id: top.holding_id,
       });
     }
+  }
+
+  // ── 7. Warranty expiring (0.21.2) ────────────────────────
+  // Anything covered for ≤ 30 more days gets one card per item.
+  // Severity escalates as the date approaches.
+  const warranties = await query<{
+    id: string;
+    item: string;
+    vendor: string | null;
+    warranty_until: string;
+    days_remaining: string;
+  }>(
+    `SELECT id, item, vendor,
+            warranty_until::text AS warranty_until,
+            (warranty_until - CURRENT_DATE)::int::text AS days_remaining
+       FROM warranties
+      WHERE tenant_id = $1
+        AND warranty_until >= CURRENT_DATE
+        AND warranty_until <= CURRENT_DATE + INTERVAL '30 days'
+      ORDER BY warranty_until ASC
+      LIMIT 5`,
+    [tenantId],
+  );
+  for (const w of warranties.rows) {
+    const days = Number(w.days_remaining);
+    const sev: InsightSeverity = days <= 3 ? 'critical' : days <= 14 ? 'warn' : 'info';
+    proposed.push({
+      kind: 'warranty_expiring',
+      severity: sev,
+      title: `Warranty ending soon: ${w.item}`,
+      body:
+        `Your ${w.item}${w.vendor ? ` (${w.vendor})` : ''} warranty expires ` +
+        `on ${w.warranty_until} (${days} day${days === 1 ? '' : 's'} from today). ` +
+        `If it has issues, file the claim before coverage lapses.`,
+      action_label: 'Open warranty',
+      action_url: `/warranties`,
+      source_kind: 'warranty',
+      source_id: w.id,
+    });
   }
 
   return proposed;
