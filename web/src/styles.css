@@ -3636,9 +3636,39 @@ code {
   font-weight: 600;
   color: var(--neg);
 }
+.calendar-income {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pos);
+}
+.calendar-bill-total {
+  font-size: 11px;
+  margin-top: 2px;
+  color: var(--neg);
+}
 .calendar-count {
   font-size: 11px;
   margin-top: 2px;
+}
+
+/* 0.21.x — inline-expanded day cell. The cell grows downward and
+ * pushes the grid row taller (CSS grid will adopt the tallest cell
+ * in each row). Detail rows are flex so name + amount sit on one
+ * line each. */
+.calendar-day.expanded {
+  min-height: 0;
+}
+.calendar-day-detail {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px;
+  cursor: default;
+}
+.calendar-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 /* ─────────────────────────────────────────────────────────────

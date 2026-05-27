@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   api,
   isUpgradeRequired,
+  type Account,
   type CalendarMonthResponse,
   type Transaction,
 } from '../api';
@@ -9,12 +10,23 @@ import { formatCents, formatDate } from '../format';
 import { UpgradePrompt } from '../components/UpgradePrompt';
 
 /**
- * Phase 9.3 (0.12.3) — Calendar budget view.
+ * Phase 9.3 (0.12.3) + 0.21.x — Calendar budget view.
  *
- * Month grid that shows per-day spending + bill-due markers, plus
- * a month summary card with spend / income / budget / pace. Clicking
- * a day pulls that day's transactions on demand and shows them in a
- * side drawer.
+ * Month grid that shows per-day spend / income / bill-due, plus a
+ * month summary card and an upcoming-activity window combining
+ * bills (expense) and recurring income.
+ *
+ * 0.21.x additions:
+ *   • Account multi-select filter; aggregates and budget total
+ *     scope to the picked accounts.
+ *   • Inline day expansion: click a day to expand the cell in
+ *     place with its bills + transactions; "Expand all" toggles
+ *     every day at once.
+ *   • Past / present / future days render identically — bills due
+ *     and totals always show, no special chrome for "today".
+ *   • Selected-day detail moves above the upcoming list.
+ *   • Upcoming window: user picks count + unit (days/weeks/months).
+ *   • Amounts colored by direction (income green, expense red).
  */
 
 const MONTH_LABELS = [
@@ -29,18 +41,19 @@ function currentMonthKey(d = new Date()): string {
 
 function shiftMonth(key: string, delta: number): string {
   const [y, m] = key.split('-').map((s) => Number(s));
-  // Avoid Date's local-vs-UTC mess by doing the math manually.
   let nm = (m ?? 1) + delta;
   let ny = y ?? new Date().getUTCFullYear();
-  while (nm < 1) {
-    nm += 12;
-    ny -= 1;
-  }
-  while (nm > 12) {
-    nm -= 12;
-    ny += 1;
-  }
+  while (nm < 1) { nm += 12; ny -= 1; }
+  while (nm > 12) { nm -= 12; ny += 1; }
   return `${ny}-${String(nm).padStart(2, '0')}`;
+}
+
+type UpcomingUnit = 'day' | 'week' | 'month';
+
+function unitToDays(count: number, unit: UpcomingUnit): number {
+  if (unit === 'day') return count;
+  if (unit === 'week') return count * 7;
+  return count * 30;
 }
 
 export function CalendarPage() {
@@ -52,12 +65,33 @@ export function CalendarPage() {
   const [dayTxns, setDayTxns] = useState<Transaction[]>([]);
   const [needsUpgrade, setNeedsUpgrade] = useState(false);
 
+  // 0.21.x — account multi-select
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+
+  // 0.21.x — inline day expansion
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const allExpanded =
+    data != null && data.days.length > 0 && expandedDays.size === data.days.length;
+
+  // 0.21.x — upcoming window
+  const [upcomingCount, setUpcomingCount] = useState<number>(14);
+  const [upcomingUnit, setUpcomingUnit] = useState<UpcomingUnit>('day');
+  const upcomingDays = unitToDays(upcomingCount, upcomingUnit);
+
+  useEffect(() => {
+    void api.listAccounts().then(setAccounts).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setNeedsUpgrade(false);
     api
-      .calendarMonth(monthKey)
+      .calendarMonth(monthKey, {
+        accountIds: selectedAccountIds,
+        upcomingDays,
+      })
       .then((r) => {
         if (!cancelled) {
           setData(r);
@@ -78,26 +112,39 @@ export function CalendarPage() {
     return () => {
       cancelled = true;
     };
-  }, [monthKey]);
+  }, [monthKey, selectedAccountIds, upcomingDays]);
 
-  async function loadDayTxns(date: string) {
-    setSelectedDay(date);
-    try {
-      const r = await api.listTransactions({
-        startDate: date,
-        endDate: date,
-        limit: 100,
-      });
-      setDayTxns(r.transactions);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load day');
+  // Whenever the selected day changes, load that day's transactions.
+  // Same filter (selectedAccountIds) so the drill-down stays
+  // consistent with the calendar aggregates.
+  useEffect(() => {
+    if (!selectedDay) {
+      setDayTxns([]);
+      return;
     }
-  }
+    let cancelled = false;
+    void api
+      .listTransactions({
+        startDate: selectedDay,
+        endDate: selectedDay,
+        limit: 200,
+      })
+      .then((r) => {
+        if (cancelled) return;
+        const filtered =
+          selectedAccountIds.length === 0
+            ? r.transactions
+            : r.transactions.filter((t) => selectedAccountIds.includes(t.account_id));
+        setDayTxns(filtered);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDay, selectedAccountIds]);
 
-  // First-of-month weekday for the grid layout.
   const firstWeekday = useMemo(() => {
     if (!data) return 0;
-    // Day-of-week for the YYYY-MM-01 date, in UTC. Sunday = 0.
     const d = new Date(data.monthStart + 'T00:00:00Z');
     return d.getUTCDay();
   }, [data]);
@@ -109,14 +156,11 @@ export function CalendarPage() {
 
   const pace = useMemo(() => {
     if (!data || data.totals.today_position === null) return null;
-    // Spent / Budgeted vs. Day-of-month / DaysInMonth. 1.0 = on pace,
-    // > 1.0 = ahead of schedule (over-spending), < 1.0 = under.
     if (data.totals.budget_cents === 0) return null;
     const spentPct = data.totals.spend_cents / data.totals.budget_cents;
     return spentPct / data.totals.today_position;
   }, [data]);
 
-  // Build the grid: leading blanks (Sun-aligned) + days.
   const cells = useMemo(() => {
     if (!data) return [];
     const out: Array<{ kind: 'blank' } | { kind: 'day'; idx: number }> = [];
@@ -125,6 +169,31 @@ export function CalendarPage() {
     while (out.length % 7 !== 0) out.push({ kind: 'blank' });
     return out;
   }, [data, firstWeekday]);
+
+  function toggleAccount(id: string) {
+    setSelectedAccountIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function toggleDay(date: string) {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+    setSelectedDay(date);
+  }
+
+  function toggleExpandAll() {
+    if (!data) return;
+    if (allExpanded) {
+      setExpandedDays(new Set());
+    } else {
+      setExpandedDays(new Set(data.days.map((d) => d.date)));
+    }
+  }
 
   if (needsUpgrade) {
     return (
@@ -141,7 +210,8 @@ export function CalendarPage() {
         <div>
           <h1>Calendar</h1>
           <div className="subtitle">
-            Per-day spending with bill-due markers + month pace.
+            Per-day spend + bills due, with month pace. Click a day
+            to expand inline.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -166,8 +236,46 @@ export function CalendarPage() {
         </div>
       </div>
 
+      {/* 0.21.x — account filter chips */}
+      {accounts.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="section-title" style={{ marginTop: 0 }}>
+            Accounts ({selectedAccountIds.length === 0 ? 'all' : `${selectedAccountIds.length} selected`})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {accounts.map((a) => {
+              const on = selectedAccountIds.includes(a.id);
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`pill ${on ? 'pos' : ''}`}
+                  style={{ cursor: 'pointer', border: 0 }}
+                  onClick={() => toggleAccount(a.id)}
+                >
+                  {on ? '✓ ' : ''}{a.name}
+                </button>
+              );
+            })}
+            {selectedAccountIds.length > 0 && (
+              <button
+                type="button"
+                className="btn-link"
+                onClick={() => setSelectedAccountIds([])}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="muted small" style={{ marginTop: 6 }}>
+            Filters transactions, bills, and the budget total. Budgets
+            with no account scope still apply.
+          </div>
+        </div>
+      )}
+
       {error && <div className="banner error">{error}</div>}
-      {loading && <p className="empty">Loading…</p>}
+      {loading && !data && <p className="empty">Loading…</p>}
 
       {data && (
         <>
@@ -193,59 +301,110 @@ export function CalendarPage() {
             <SummaryCard
               label="Pace"
               value={
-                pace === null
-                  ? '—'
-                  : `${(pace * 100).toFixed(0)}% of budget pace`
+                pace === null ? '—' : `${(pace * 100).toFixed(0)}% of budget pace`
               }
               tone={pace !== null && pace > 1.0 ? 'neg' : 'pos'}
             />
           </div>
 
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              margin: '12px 0',
+            }}
+          >
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={toggleExpandAll}
+            >
+              {allExpanded ? 'Collapse all' : 'Expand all'}
+            </button>
+          </div>
+
           <div className="calendar-grid">
             {WEEKDAYS_SHORT.map((d) => (
-              <div key={d} className="calendar-weekday">
-                {d}
-              </div>
+              <div key={d} className="calendar-weekday">{d}</div>
             ))}
             {cells.map((c, i) => {
-              if (c.kind === 'blank') return <div key={i} className="calendar-blank" />;
+              if (c.kind === 'blank') {
+                return <div key={i} className="calendar-blank" />;
+              }
               const day = data.days[c.idx]!;
               const intensity =
                 maxSpend > 0 ? Math.min(1, day.spend_cents / maxSpend) : 0;
+              const isExpanded = expandedDays.has(day.date);
               const isSelected = day.date === selectedDay;
+              const billsTotal = day.bills_due.reduce(
+                (s, b) => s + b.amount_cents,
+                0,
+              );
               return (
                 <button
                   key={day.date}
-                  className={`calendar-day ${isSelected ? 'selected' : ''}`}
-                  onClick={() => void loadDayTxns(day.date)}
-                  style={
-                    {
-                      // Intensity-driven background, behind a translucent surface.
-                      '--day-intensity': intensity.toFixed(2),
-                    } as React.CSSProperties
-                  }
+                  className={`calendar-day ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}`}
+                  onClick={() => toggleDay(day.date)}
+                  style={{
+                    '--day-intensity': intensity.toFixed(2),
+                  } as CSSProperties}
                 >
                   <div className="calendar-day-head">
                     <span className="calendar-day-num">
                       {Number(day.date.slice(-2))}
                     </span>
-                    {day.bill_due_ids.length > 0 && (
+                    {day.bills_due.length > 0 && (
                       <span
                         className="calendar-bill-marker"
-                        title={`${day.bill_due_ids.length} bill(s) due`}
+                        title={`${day.bills_due.length} bill(s) due`}
                       >
-                        ▲
+                        ▲ {day.bills_due.length}
                       </span>
                     )}
                   </div>
                   {day.spend_cents > 0 && (
-                    <div className="calendar-spend">
+                    <div className="calendar-spend neg">
                       {formatCents(-day.spend_cents)}
                     </div>
                   )}
-                  {day.txn_count > 1 && (
+                  {day.income_cents > 0 && (
+                    <div className="calendar-income pos">
+                      +{formatCents(day.income_cents)}
+                    </div>
+                  )}
+                  {billsTotal > 0 && (
+                    <div className="calendar-bill-total neg">
+                      Bills: {formatCents(-billsTotal)}
+                    </div>
+                  )}
+                  {day.txn_count > 1 && !isExpanded && (
                     <div className="calendar-count muted">
                       {day.txn_count} txns
+                    </div>
+                  )}
+                  {isExpanded && (
+                    <div
+                      className="calendar-day-detail"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {day.bills_due.length > 0 && (
+                        <>
+                          <div className="muted small">Bills due</div>
+                          {day.bills_due.map((b) => (
+                            <div key={b.id} className="calendar-detail-row">
+                              <span>{b.name}</span>
+                              <span className="num neg">
+                                {formatCents(-b.amount_cents)}
+                              </span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      {day.spend_cents === 0
+                        && day.income_cents === 0
+                        && day.bills_due.length === 0 && (
+                        <div className="muted small">No activity</div>
+                      )}
                     </div>
                   )}
                 </button>
@@ -253,34 +412,7 @@ export function CalendarPage() {
             })}
           </div>
 
-          {data.upcoming_bills.length > 0 && (
-            <>
-              <h2 style={{ marginTop: 24 }}>Upcoming bills (next 14 days)</h2>
-              <div className="table-wrap">
-                <table className="txn-table">
-                  <thead>
-                    <tr>
-                      <th>Due</th>
-                      <th>Name</th>
-                      <th>Frequency</th>
-                      <th className="num">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.upcoming_bills.map((b) => (
-                      <tr key={b.id}>
-                        <td className="nowrap">{formatDate(b.next_due_date)}</td>
-                        <td>{b.name}</td>
-                        <td>{b.frequency}</td>
-                        <td className="num">{formatCents(-b.amount_cents)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
+          {/* 0.21.x — selected-day transactions ABOVE upcoming list */}
           {selectedDay && (
             <>
               <h2 style={{ marginTop: 24 }}>{formatDate(selectedDay)}</h2>
@@ -292,6 +424,7 @@ export function CalendarPage() {
                     <thead>
                       <tr>
                         <th>Description</th>
+                        <th>Account</th>
                         <th>Category</th>
                         <th className="num">Amount</th>
                       </tr>
@@ -300,10 +433,10 @@ export function CalendarPage() {
                       {dayTxns.map((t) => (
                         <tr key={t.id}>
                           <td>{t.normalized_merchant ?? t.raw_description}</td>
-                          <td>
-                            {t.category_name ?? <span className="muted">—</span>}
-                          </td>
+                          <td className="muted small">{t.account_name}</td>
+                          <td>{t.category_name ?? <span className="muted">—</span>}</td>
                           <td className={`num ${t.amount_cents < 0 ? 'neg' : 'pos'}`}>
+                            {t.amount_cents > 0 ? '+' : ''}
                             {formatCents(t.amount_cents)}
                           </td>
                         </tr>
@@ -313,6 +446,84 @@ export function CalendarPage() {
                 </div>
               )}
             </>
+          )}
+
+          {/* 0.21.x — upcoming activity with selectable window */}
+          <div
+            style={{
+              marginTop: 24,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <h2 style={{ margin: 0 }}>Upcoming activity</h2>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Next</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={upcomingCount}
+                  onChange={(e) =>
+                    setUpcomingCount(Math.max(1, Number(e.target.value) || 1))
+                  }
+                  style={{ width: 80 }}
+                />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>&nbsp;</label>
+                <select
+                  value={upcomingUnit}
+                  onChange={(e) => setUpcomingUnit(e.target.value as UpcomingUnit)}
+                >
+                  <option value="day">Day(s)</option>
+                  <option value="week">Week(s)</option>
+                  <option value="month">Month(s)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          {data.upcoming.length === 0 ? (
+            <p className="empty">
+              Nothing in the next {upcomingCount} {upcomingUnit}
+              {upcomingCount === 1 ? '' : 's'}.
+            </p>
+          ) : (
+            <div className="table-wrap">
+              <table className="txn-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Frequency</th>
+                    <th className="num">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.upcoming.map((u) => (
+                    <tr key={`${u.direction}-${u.id}-${u.date}`}>
+                      <td className="nowrap">{formatDate(u.date)}</td>
+                      <td>{u.name}</td>
+                      <td>
+                        <span className={`pill ${u.direction === 'income' ? 'pos' : 'neg'}`}>
+                          {u.direction === 'income' ? 'Income' : 'Bill'}
+                        </span>
+                      </td>
+                      <td className="muted small">{u.frequency ?? '—'}</td>
+                      <td className={`num ${u.direction === 'income' ? 'pos' : 'neg'}`}>
+                        {u.direction === 'income' ? '+' : '−'}
+                        {formatCents(u.amount_cents)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}
@@ -331,9 +542,7 @@ function SummaryCard({
 }) {
   return (
     <div className="card">
-      <div className="muted" style={{ fontSize: 13 }}>
-        {label}
-      </div>
+      <div className="muted" style={{ fontSize: 13 }}>{label}</div>
       <div
         style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}
         className={tone === 'pos' ? 'pos' : tone === 'neg' ? 'neg' : ''}

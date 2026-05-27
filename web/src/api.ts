@@ -358,12 +358,27 @@ export interface MileageTripInput {
   description?: string | null;
 }
 
+export interface CalendarDayBill {
+  id: string;
+  name: string;
+  amount_cents: number;
+}
+
 export interface CalendarDay {
   date: string;
   spend_cents: number;
   income_cents: number;
   txn_count: number;
-  bill_due_ids: string[];
+  bills_due: CalendarDayBill[];
+}
+
+export interface CalendarUpcomingItem {
+  id: string;
+  name: string;
+  date: string;
+  amount_cents: number;
+  direction: 'income' | 'expense';
+  frequency: string | null;
 }
 
 export interface CalendarMonthResponse {
@@ -379,13 +394,8 @@ export interface CalendarMonthResponse {
     budget_cents: number;
     today_position: number | null;
   };
-  upcoming_bills: Array<{
-    id: string;
-    name: string;
-    next_due_date: string;
-    amount_cents: number;
-    frequency: string;
-  }>;
+  upcoming: CalendarUpcomingItem[];
+  upcoming_days: number;
 }
 
 export interface SplitParticipant {
@@ -3512,8 +3522,20 @@ export const api = {
     }),
 
   // ── Calendar (Phase 9.3 / 0.12.3) ────────────────────────
-  calendarMonth: (month: string) =>
-    http<CalendarMonthResponse>(`/api/calendar/${month}`),
+  calendarMonth: (
+    month: string,
+    opts: { accountIds?: string[]; upcomingDays?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (opts.accountIds && opts.accountIds.length > 0) {
+      q.set('accountIds', opts.accountIds.join(','));
+    }
+    if (opts.upcomingDays != null) q.set('upcomingDays', String(opts.upcomingDays));
+    const qs = q.toString();
+    return http<CalendarMonthResponse>(
+      `/api/calendar/${month}${qs ? `?${qs}` : ''}`,
+    );
+  },
 
   // ── Tax year (backlog 0.13.1) ────────────────────────────
   taxVocabulary: () =>
