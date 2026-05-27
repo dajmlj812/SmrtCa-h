@@ -174,6 +174,7 @@ export function PaycheckBudgetPage() {
           accounts={accountsList}
           onRunWizard={() => setShowWizard(true)}
           onDeletePlan={onDeletePlan}
+          onDeletePeriod={onDeletePeriod}
         />
       ))}
     </div>
@@ -186,12 +187,18 @@ function PlanBlock({
   accounts,
   onRunWizard,
   onDeletePlan,
+  onDeletePeriod,
 }: {
   plan: BudgetPlan | null;
   periods: BudgetPeriodSummary[];
   accounts: Account[];
   onRunWizard: () => void;
   onDeletePlan: (plan: BudgetPlan) => void;
+  onDeletePeriod: (
+    planId: string,
+    periodStart: string,
+    label: string,
+  ) => Promise<void>;
 }) {
   const planAccountNames = plan
     ? plan.account_ids.map(
