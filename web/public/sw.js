@@ -14,10 +14,12 @@
  *     yesterday-balance.
  *   - For /manifest.webmanifest, /icons/*, /favicon.svg: cache-first.
  *
- * Bump CACHE_VERSION on every release whose static assets change so
- * the activate handler can purge older caches.
+ * CACHE_VERSION is rewritten at build time to the current package
+ * version (see web/vite.config.ts `swVersion` plugin), so every
+ * release automatically rotates the cache and the activate handler
+ * purges any older caches.
  */
-const CACHE_VERSION = 'smrtcash-v0.17.25';
+const CACHE_VERSION = 'smrtcash-v__APP_VERSION__';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

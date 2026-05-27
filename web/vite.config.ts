@@ -1,6 +1,7 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // The API proxy target and dev-server port are env-driven so that the
@@ -15,8 +16,26 @@ const pkg = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
 ) as { version: string };
 
+// Vite copies web/public/sw.js into dist/ as-is. This plugin runs
+// once the copy is done and substitutes the literal `__APP_VERSION__`
+// placeholder in dist/sw.js with the current package version, so
+// every release rotates the SW's CACHE_VERSION key and the SW's
+// activate handler purges any stale caches from prior versions.
+function swVersionPlugin(version: string): Plugin {
+  return {
+    name: 'smrtcash-sw-version',
+    apply: 'build',
+    closeBundle() {
+      const swPath = resolve(__dirname, 'dist', 'sw.js');
+      const original = readFileSync(swPath, 'utf-8');
+      const replaced = original.replace(/__APP_VERSION__/g, version);
+      if (replaced !== original) writeFileSync(swPath, replaced);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), swVersionPlugin(pkg.version)],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
