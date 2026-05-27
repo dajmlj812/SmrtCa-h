@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   api,
   type Account,
@@ -8,6 +8,41 @@ import {
 } from '../api';
 import { formatCents, formatDate } from '../format';
 import { BudgetWizard } from '../components/BudgetWizard';
+
+// 0.22.0 — periods on this page are collapsible. We persist the set
+// of expanded period keys in localStorage so the user's choices
+// survive reloads. Stored as a JSON array of `${period.start}` keys.
+// On first visit (no stored value) we auto-expand only the period
+// containing today; all others start collapsed.
+const COLLAPSE_KEY = 'smrtcash:paycheck:expanded';
+
+function loadExpanded(): Set<string> | null {
+  try {
+    const raw = localStorage.getItem(COLLAPSE_KEY);
+    if (!raw) return null;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return null;
+    return new Set(arr.filter((x) => typeof x === 'string'));
+  } catch {
+    return null;
+  }
+}
+
+function saveExpanded(set: Set<string>): void {
+  try {
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set]));
+  } catch {
+    // localStorage full or disabled — fall back to in-memory only.
+  }
+}
+
+function periodKey(p: BudgetPeriodSummary): string {
+  return `${p.period.start}|${p.period.end}|${p.period.type}`;
+}
+
+function isCurrent(p: BudgetPeriodSummary, todayIso: string): boolean {
+  return p.period.start <= todayIso && p.period.end >= todayIso;
+}
 
 /**
  * 0.21.8 — Paycheck-to-Paycheck Budget (the second of two pages
@@ -35,6 +70,22 @@ export function PaycheckBudgetPage() {
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [wizardSummary, setWizardSummary] = useState<string | null>(null);
+  // 0.22.0 — collapsible periods. `expanded` is null until either
+  // localStorage gives us a starting set, or the loaded periods give
+  // us a "today" period to auto-expand.
+  const [expanded, setExpanded] = useState<Set<string> | null>(null);
+
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const toggleExpanded = useCallback((key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev ?? []);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      saveExpanded(next);
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +109,24 @@ export function PaycheckBudgetPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Initialize `expanded` once periods are loaded. Prefer the user's
+  // previously persisted set; if there isn't one, auto-expand the
+  // single period containing today (or none, if no period matches).
+  useEffect(() => {
+    if (expanded !== null) return;
+    if (periods.length === 0) return;
+    const stored = loadExpanded();
+    if (stored) {
+      setExpanded(stored);
+      return;
+    }
+    const auto = new Set<string>();
+    for (const p of periods) {
+      if (isCurrent(p, todayIso)) auto.add(periodKey(p));
+    }
+    setExpanded(auto);
+  }, [periods, todayIso, expanded]);
 
   async function onDeletePlan(plan: BudgetPlan) {
     if (!confirm(
@@ -181,6 +250,9 @@ export function PaycheckBudgetPage() {
           onRunWizard={() => setShowWizard(true)}
           onDeletePlan={onDeletePlan}
           onDeletePeriod={onDeletePeriod}
+          expanded={expanded ?? new Set()}
+          onToggleExpanded={toggleExpanded}
+          todayIso={todayIso}
         />
       ))}
     </div>
@@ -194,6 +266,9 @@ function PlanBlock({
   onRunWizard,
   onDeletePlan,
   onDeletePeriod,
+  expanded,
+  onToggleExpanded,
+  todayIso,
 }: {
   plan: BudgetPlan | null;
   periods: BudgetPeriodSummary[];
@@ -205,6 +280,9 @@ function PlanBlock({
     periodStart: string,
     label: string,
   ) => Promise<void>;
+  expanded: Set<string>;
+  onToggleExpanded: (key: string) => void;
+  todayIso: string;
 }) {
   const planAccountNames = plan
     ? plan.account_ids.map(
@@ -255,13 +333,19 @@ function PlanBlock({
           to populate.
         </p>
       )}
-      {periods.map((p) => (
-        <PeriodBreakdown
-          key={`${p.period.start}-${p.period.end}-${p.period.type}`}
-          summary={p}
-          onDeletePeriod={onDeletePeriod}
-        />
-      ))}
+      {periods.map((p) => {
+        const key = periodKey(p);
+        return (
+          <PeriodBreakdown
+            key={key}
+            summary={p}
+            onDeletePeriod={onDeletePeriod}
+            isExpanded={expanded.has(key)}
+            isCurrent={isCurrent(p, todayIso)}
+            onToggle={() => onToggleExpanded(key)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -276,6 +360,9 @@ function PlanBlock({
 function PeriodBreakdown({
   summary,
   onDeletePeriod,
+  isExpanded,
+  isCurrent: currentPeriod,
+  onToggle,
 }: {
   summary: BudgetPeriodSummary;
   onDeletePeriod: (
@@ -283,35 +370,99 @@ function PeriodBreakdown({
     periodStart: string,
     label: string,
   ) => Promise<void>;
+  isExpanded: boolean;
+  isCurrent: boolean;
+  onToggle: () => void;
 }) {
   const { period, income, bills, editable, totals } = summary;
   const net = totals.net_cents;
   const overextended = net < 0;
   const label = `${formatDate(period.start)} → ${formatDate(period.end)}`;
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div
+    <div className="card" style={{ marginBottom: 12 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
         style={{
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          width: '100%',
+          textAlign: 'left',
+          cursor: 'pointer',
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'baseline',
+          alignItems: 'center',
           gap: 12,
+          color: 'inherit',
+          font: 'inherit',
         }}
+        title={isExpanded ? 'Collapse this period' : 'Expand this period'}
       >
-        <strong>{label}</strong>
-        {summary.plan_id && (
-          <button
-            type="button"
-            className="btn-link danger"
-            onClick={() =>
-              void onDeletePeriod(summary.plan_id!, period.start, label)
-            }
-            title="Remove every budget row for this period"
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            aria-hidden
+            style={{
+              display: 'inline-block',
+              width: 14,
+              transition: 'transform 120ms ease',
+              transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+              opacity: 0.6,
+            }}
           >
-            Delete period
-          </button>
-        )}
-      </div>
+            ▶
+          </span>
+          <strong>{label}</strong>
+          {currentPeriod && (
+            <span
+              className="pill"
+              style={{
+                fontSize: '0.7em',
+                padding: '2px 8px',
+                background: 'var(--info-soft)',
+                color: 'var(--info)',
+                borderRadius: 999,
+              }}
+            >
+              Current
+            </span>
+          )}
+        </span>
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          <span className="muted small">
+            Net{' '}
+            <strong className={overextended ? 'neg' : 'pos'}>
+              {overextended ? '−' : '+'}
+              {formatCents(Math.abs(net))}
+            </strong>
+          </span>
+          {summary.plan_id && (
+            <span
+              role="button"
+              tabIndex={0}
+              className="btn-link danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                void onDeletePeriod(summary.plan_id!, period.start, label);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  void onDeletePeriod(summary.plan_id!, period.start, label);
+                }
+              }}
+              title="Remove every budget row for this period"
+            >
+              Delete period
+            </span>
+          )}
+        </span>
+      </button>
+
+      {!isExpanded && null}
+      {isExpanded && (
+        <>
 
       {/* Income */}
       <h3 style={{ marginTop: 14, marginBottom: 6 }}>
@@ -426,6 +577,8 @@ function PeriodBreakdown({
           {formatCents(Math.abs(net))}
         </strong>
       </div>
+        </>
+      )}
     </div>
   );
 }
