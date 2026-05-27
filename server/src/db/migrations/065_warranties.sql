@@ -23,9 +23,11 @@ CREATE TABLE warranties (
   CONSTRAINT warranties_item_nonempty CHECK (length(trim(item)) > 0)
 );
 
+-- NB: cannot use a CURRENT_DATE predicate here — Postgres requires
+-- index WHERE clauses to be IMMUTABLE. A full-table index is fine
+-- given warranty row counts are small.
 CREATE INDEX warranties_tenant_expiry_idx
-  ON warranties (tenant_id, warranty_until)
-  WHERE warranty_until >= CURRENT_DATE;
+  ON warranties (tenant_id, warranty_until);
 
 -- Lookups by attached transaction (e.g. "show warranty for this receipt").
 CREATE INDEX warranties_transaction_idx
