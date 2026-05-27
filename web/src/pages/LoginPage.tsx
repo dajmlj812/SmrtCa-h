@@ -123,8 +123,8 @@ export function LoginPage({ onAuthenticated, signupEnabled, supportUrl }: Props)
           {' · '}
           <Link to="/cookies">Cookies</Link>
         </p>
+        <BrandTagline />
       </form>
-      <BrandTagline />
     </div>
   );
 }

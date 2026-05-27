@@ -79,8 +79,8 @@ export function SignupPage({ supportUrl }: Props = {}) {
           <p>
             <Link to="/login">← Back to sign in</Link>
           </p>
+          <BrandTagline />
         </div>
-        <BrandTagline />
       </div>
     );
   }
@@ -173,8 +173,8 @@ export function SignupPage({ supportUrl }: Props = {}) {
           <Link to="/terms">Terms</Link> and{' '}
           <Link to="/privacy">Privacy Policy</Link>.
         </p>
+        <BrandTagline />
       </form>
-      <BrandTagline />
     </div>
   );
 }
