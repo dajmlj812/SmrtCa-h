@@ -1,6 +1,6 @@
 {
   "name": "smrtcash-server",
-  "version": "0.18.12",
+  "version": "0.21.7",
   "private": true,
   "type": "module",
   "scripts": {
