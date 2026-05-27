@@ -63,38 +63,49 @@ export function GoalTemplatePicker({
   }
 
   if (selected) {
-    const placeholders = placeholdersOf(selected);
+    // The form always includes an "amount" field — even when the
+    // template text doesn't reference it — because the goal row
+    // needs a positive targetAmountCents to track progress.
+    // Templates like "Pay off all credit card debt" use it as
+    // "what's the balance you're trying to pay off."
+    const textPlaceholders = placeholdersOf(selected);
+    const placeholders: Placeholder[] = textPlaceholders.includes('amount')
+      ? textPlaceholders
+      : ['amount', ...textPlaceholders];
     return (
       <div className="modal-backdrop" role="dialog" aria-modal="true">
         <form className="modal" onSubmit={submit} style={{ maxWidth: 520 }}>
           <h2>Customize your goal</h2>
           <p className="muted">{selected.text}</p>
           {error && <div className="banner error">{error}</div>}
-          {placeholders.length === 0 ? (
-            <p className="muted small">
-              No values to fill in — click Create to save this goal.
-            </p>
-          ) : (
-            placeholders.map((key) => (
-              <div className="field" key={key}>
-                <label htmlFor={`tpl-${key}`}>{labelFor(key)}</label>
-                <input
-                  id={`tpl-${key}`}
-                  type="number"
-                  step={key === 'amount' ? '0.01' : '1'}
-                  min="0"
-                  value={values[key] ?? ''}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setValues((prev) => ({
-                      ...prev,
-                      [key]: Number.isFinite(v) ? v : undefined,
-                    }));
-                  }}
-                />
-              </div>
-            ))
-          )}
+          {placeholders.map((key) => (
+            <div className="field" key={key}>
+              <label htmlFor={`tpl-${key}`}>
+                {labelFor(key)}
+                {key === 'amount' && !textPlaceholders.includes('amount') && (
+                  <span className="muted small">
+                    {' '}· the dollar number this goal tracks (current debt,
+                    target savings, etc.)
+                  </span>
+                )}
+              </label>
+              <input
+                id={`tpl-${key}`}
+                type="number"
+                step={key === 'amount' ? '0.01' : '1'}
+                min={key === 'amount' ? '0.01' : '0'}
+                value={values[key] ?? ''}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setValues((prev) => ({
+                    ...prev,
+                    [key]: Number.isFinite(v) ? v : undefined,
+                  }));
+                }}
+                required={key === 'amount'}
+              />
+            </div>
+          ))}
           <div className="modal-footer">
             <button
               type="button"
@@ -180,7 +191,7 @@ export function GoalTemplatePicker({
 function labelFor(p: Placeholder): string {
   switch (p) {
     case 'amount':
-      return 'Dollar amount';
+      return 'Target dollar amount';
     case 'months':
       return 'Number of months';
     case 'years':
