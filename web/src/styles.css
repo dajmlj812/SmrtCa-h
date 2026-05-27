@@ -1922,9 +1922,28 @@ tr.selected {
 }
 .wizard-controls {
   display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: 12px;
+}
+.wizard-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.wizard-row > .field { flex: 1 1 120px; margin-bottom: 0; }
+.wizard-row > .field.wide { flex: 1 1 100%; }
+.wizard-row > .field.accounts-row { flex: 1 1 100%; }
+.wizard-row .wizard-refresh-btn { padding: 6px 14px; }
+.wizard-accounts-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-3);
 }
 .wizard-defaults {
   font-size: 12px;

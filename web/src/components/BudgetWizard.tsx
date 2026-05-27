@@ -262,217 +262,191 @@ export function BudgetWizard({ onClose, onCommitted }: Props) {
         {error && <div className="banner error">{error}</div>}
 
         <form className="wizard-controls" onSubmit={inputsHeader}>
-          {/*
-            * 0.17.16 — plan name. Required for commit (server
-            * rejects empty/duplicate names with 409). The
-            * cadence + anchor + accounts all hang off this
-            * named plan.
-            */}
-          <div className="field" style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="wiz-name">Plan name</label>
-            <input
-              id="wiz-name"
-              type="text"
-              placeholder="e.g. Chase-5793 paycheck cycle"
-              value={planName}
-              onChange={(e) => setPlanName(e.target.value)}
-              maxLength={120}
-              required
-            />
+          {/* Line 1 — Plan name */}
+          <div className="wizard-row">
+            <div className="field wide">
+              <label htmlFor="wiz-name">Plan name</label>
+              <input
+                id="wiz-name"
+                type="text"
+                placeholder="e.g. Chase-5793 paycheck cycle"
+                value={planName}
+                onChange={(e) => setPlanName(e.target.value)}
+                maxLength={120}
+                required
+              />
+            </div>
           </div>
-          <div className="field">
-            <label htmlFor="wiz-period">Period</label>
-            <select
-              id="wiz-period"
-              value={periodType}
-              onChange={(e) => setPeriodType(e.target.value as PeriodType)}
-            >
-              {(['weekly', 'biweekly', 'semimonthly', 'monthly'] as const).map((p) => (
-                <option key={p} value={p}>
-                  {PERIOD_LABELS[p]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="wiz-anchor">Start date</label>
-            <input
-              id="wiz-anchor"
-              type="date"
-              value={anchor}
-              onChange={(e) => setAnchor(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="wiz-count">How many periods</label>
-            <input
-              id="wiz-count"
-              type="number"
-              min="1"
-              max="24"
-              value={count}
-              onChange={(e) => setCount(Math.max(1, Math.min(24, Number(e.target.value) || 5)))}
-            />
-          </div>
-          {/*
-            * 0.17.22 — three configurable percentages of post-
-            * deduction leftover. Defaults 25/50/75. The Max chip
-            * (100%) on each period row is always derived from
-            * leftover.
-            */}
-          <div className="field">
-            <label htmlFor="wiz-low-pct">
-              Low % of leftover
-              <span className="muted">
-                {' '}
-                {preview ? `(default ${preview.savingsLowPct}%)` : ''}
-              </span>
-            </label>
-            <input
-              id="wiz-low-pct"
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-              placeholder={preview ? String(preview.savingsLowPct) : '25'}
-              value={lowPctOverride}
-              onChange={(e) => setLowPctOverride(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="wiz-mid-pct">
-              Mid % of leftover
-              <span className="muted">
-                {' '}
-                {preview ? `(default ${preview.savingsMidPct}%)` : ''}
-              </span>
-            </label>
-            <input
-              id="wiz-mid-pct"
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-              placeholder={preview ? String(preview.savingsMidPct) : '50'}
-              value={midPctOverride}
-              onChange={(e) => setMidPctOverride(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="wiz-high-pct">
-              High % of leftover
-              <span className="muted">
-                {' '}
-                {preview ? `(default ${preview.savingsHighPct}%)` : ''}
-              </span>
-            </label>
-            <input
-              id="wiz-high-pct"
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-              placeholder={preview ? String(preview.savingsHighPct) : '75'}
-              value={highPctOverride}
-              onChange={(e) => setHighPctOverride(e.target.value)}
-            />
-          </div>
-          {/*
-            * 0.17.22 — savings destination. Filtered to
-            * `accounts.type = 'savings'`. If the user has none,
-            * the dropdown is empty with a hint to add one.
-            */}
-          <div className="field" style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="wiz-savings-acct">
-              Savings goes to{' '}
-              <span className="muted small">
-                · destination for chosen savings amounts
-              </span>
-            </label>
-            <select
-              id="wiz-savings-acct"
-              value={savingsAccountId}
-              onChange={(e) => setSavingsAccountId(e.target.value)}
-            >
-              <option value="">— No destination —</option>
-              {accounts
-                .filter((a) => a.type === 'savings')
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-            </select>
-            {accounts.filter((a) => a.type === 'savings').length === 0 && (
-              <div className="muted small" style={{ marginTop: 4 }}>
-                No savings-type accounts configured. Add one on the Accounts
-                page if you want to link savings here.
-              </div>
-            )}
-          </div>
-          {/*
-            * 0.17.8 — accounts to include. Defaults to every account
-            * checked. Unchecking removes that account's bills,
-            * recurring income, and grocery transactions from the
-            * wizard's data sources. Bills/income with no account
-            * (household-wide) stay in regardless.
-            */}
+
+          {/* Line 2 — Include accounts, horizontal chip row */}
           {accounts.length > 0 && (
-            <div className="field" style={{ gridColumn: '1 / -1' }}>
-              <label>
-                Include accounts{' '}
-                <span className="muted small">
-                  · {selectedAccountIds.size} of {accounts.length}
-                </span>
-              </label>
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 12,
-                  padding: '8px 10px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6,
-                  background: 'var(--surface-3)',
-                }}
-              >
-                <label
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate =
-                        selectedAccountIds.size > 0 && !allSelected;
-                    }}
-                    onChange={toggleAll}
-                  />
-                  <strong>{allSelected ? 'Deselect all' : 'Select all'}</strong>
+            <div className="wizard-row">
+              <div className="field accounts-row">
+                <label>
+                  Include accounts{' '}
+                  <span className="muted small">
+                    · {selectedAccountIds.size} of {accounts.length} ·
+                    bills / income with no specific account are always
+                    included
+                  </span>
                 </label>
-                {accounts.map((a) => (
-                  <label
-                    key={a.id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-                  >
+                <div className="wizard-accounts-chips">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
-                      checked={selectedAccountIds.has(a.id)}
-                      onChange={() => toggleAccount(a.id)}
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate =
+                          selectedAccountIds.size > 0 && !allSelected;
+                      }}
+                      onChange={toggleAll}
                     />
-                    {a.name}
+                    <strong>{allSelected ? 'Deselect all' : 'Select all'}</strong>
                   </label>
-                ))}
-              </div>
-              <div className="muted small" style={{ marginTop: 4 }}>
-                Bills and income that aren't tied to any specific account
-                (household-wide) are always included.
+                  {accounts.map((a) => (
+                    <label
+                      key={a.id}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAccountIds.has(a.id)}
+                        onChange={() => toggleAccount(a.id)}
+                      />
+                      {a.name}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           )}
-          <button className="btn secondary" type="submit" disabled={previewing}>
-            {previewing ? 'Previewing…' : 'Refresh preview'}
-          </button>
+
+          {/* Line 3 — Period | Start date | Periods */}
+          <div className="wizard-row">
+            <div className="field">
+              <label htmlFor="wiz-period">Period</label>
+              <select
+                id="wiz-period"
+                value={periodType}
+                onChange={(e) => setPeriodType(e.target.value as PeriodType)}
+              >
+                {(['weekly', 'biweekly', 'semimonthly', 'monthly'] as const).map((p) => (
+                  <option key={p} value={p}>
+                    {PERIOD_LABELS[p]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="wiz-anchor">Start date</label>
+              <input
+                id="wiz-anchor"
+                type="date"
+                value={anchor}
+                onChange={(e) => setAnchor(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="wiz-count">How many periods</label>
+              <input
+                id="wiz-count"
+                type="number"
+                min="1"
+                max="24"
+                value={count}
+                onChange={(e) => setCount(Math.max(1, Math.min(24, Number(e.target.value) || 5)))}
+              />
+            </div>
+          </div>
+
+          {/* Line 4 — Leftover Low | Mid | High | Savings destination */}
+          <div className="wizard-row">
+            <div className="field">
+              <label htmlFor="wiz-low-pct">
+                Low % of leftover
+                <span className="muted">
+                  {' '}
+                  {preview ? `(default ${preview.savingsLowPct}%)` : ''}
+                </span>
+              </label>
+              <input
+                id="wiz-low-pct"
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                placeholder={preview ? String(preview.savingsLowPct) : '25'}
+                value={lowPctOverride}
+                onChange={(e) => setLowPctOverride(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="wiz-mid-pct">
+                Mid % of leftover
+                <span className="muted">
+                  {' '}
+                  {preview ? `(default ${preview.savingsMidPct}%)` : ''}
+                </span>
+              </label>
+              <input
+                id="wiz-mid-pct"
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                placeholder={preview ? String(preview.savingsMidPct) : '50'}
+                value={midPctOverride}
+                onChange={(e) => setMidPctOverride(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="wiz-high-pct">
+                High % of leftover
+                <span className="muted">
+                  {' '}
+                  {preview ? `(default ${preview.savingsHighPct}%)` : ''}
+                </span>
+              </label>
+              <input
+                id="wiz-high-pct"
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                placeholder={preview ? String(preview.savingsHighPct) : '75'}
+                value={highPctOverride}
+                onChange={(e) => setHighPctOverride(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="wiz-savings-acct">Savings goes to</label>
+              <select
+                id="wiz-savings-acct"
+                value={savingsAccountId}
+                onChange={(e) => setSavingsAccountId(e.target.value)}
+              >
+                <option value="">— No destination —</option>
+                {accounts
+                  .filter((a) => a.type === 'savings')
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Line 5 — Refresh button, single-line text, shrunk */}
+          <div className="wizard-row">
+            <button
+              className="btn secondary wizard-refresh-btn"
+              type="submit"
+              disabled={previewing}
+            >
+              {previewing ? 'Previewing…' : 'Refresh preview'}
+            </button>
+          </div>
         </form>
 
         {preview && (
