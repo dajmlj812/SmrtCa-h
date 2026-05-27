@@ -673,8 +673,12 @@ select:focus {
 
 /* ── Phase 3: attachments column on the transaction table ──── */
 .attach-col {
-  width: 56px;
-  text-align: center;
+  min-width: 160px;
+  white-space: nowrap;
+  text-align: right;
+}
+.attach-col .attach-btn + .attach-btn {
+  margin-left: 2px;
 }
 .attach-btn {
   font-size: 18px;
