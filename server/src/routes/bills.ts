@@ -735,6 +735,69 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
         return idx >= 0 ? series[idx]!.projected_cents : balance;
       };
 
+      // 0.21.5 — Scenario overlay.
+      //
+      // If the caller passes any of these query params, we re-walk
+      // the timeline producing a second "scenario" series alongside
+      // the baseline:
+      //   incomePct=110   — multiply recurring income by 1.10
+      //   expensePct=90   — multiply bill amounts by 0.90
+      //   oneTime=2026-06-15:50000,2026-07-01:-12000
+      //                   — comma-separated date:cents pairs (positive = income)
+      const incomePct = Number(
+        (req.query as Record<string, string | undefined>).incomePct ?? '100',
+      );
+      const expensePct = Number(
+        (req.query as Record<string, string | undefined>).expensePct ?? '100',
+      );
+      const oneTimeRaw =
+        (req.query as Record<string, string | undefined>).oneTime ?? '';
+      const oneTime: Array<{ date: string; amount: number }> = [];
+      if (oneTimeRaw) {
+        for (const piece of oneTimeRaw.split(',')) {
+          const [d, c] = piece.split(':');
+          if (!d || !c || !/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+          const cents = Number(c);
+          if (Number.isFinite(cents)) oneTime.push({ date: d, amount: cents });
+        }
+      }
+      const hasScenario =
+        incomePct !== 100 || expensePct !== 100 || oneTime.length > 0;
+
+      let scenarioSeries: typeof series | null = null;
+      if (hasScenario) {
+        const scenarioEvents = events.map((e) => ({
+          date: e.date,
+          amount:
+            e.amount >= 0
+              ? Math.round(e.amount * (incomePct / 100))
+              : Math.round(e.amount * (expensePct / 100)),
+        }));
+        for (const o of oneTime) scenarioEvents.push(o);
+        scenarioEvents.sort((a, b) => a.date.localeCompare(b.date));
+        let sBalance = Number(nw.rows[0]!.total);
+        let sIdx = 0;
+        const sCursor2 = new Date(today);
+        scenarioSeries = [];
+        let sDay = 0;
+        while (sCursor2 <= horizon) {
+          const ds = sCursor2.toISOString().slice(0, 10);
+          while (sIdx < scenarioEvents.length && scenarioEvents[sIdx]!.date === ds) {
+            sBalance += scenarioEvents[sIdx]!.amount;
+            sIdx++;
+          }
+          const bh = Math.round(dailyStdDev * Math.sqrt(sDay));
+          scenarioSeries.push({
+            date: ds,
+            projected_cents: sBalance,
+            low_cents: sBalance - bh,
+            high_cents: sBalance + bh,
+          });
+          sCursor2.setUTCDate(sCursor2.getUTCDate() + 1);
+          sDay++;
+        }
+      }
+
       return {
         days,
         starting_cents: Number(nw.rows[0]!.total),
@@ -746,6 +809,19 @@ export async function billRoutes(app: FastifyInstance): Promise<void> {
           day_90: milestoneAt(90),
         },
         series,
+        scenario: scenarioSeries
+          ? {
+              applied: {
+                income_pct: incomePct,
+                expense_pct: expensePct,
+                one_time: oneTime,
+              },
+              ending_cents:
+                scenarioSeries[scenarioSeries.length - 1]?.projected_cents ??
+                Number(nw.rows[0]!.total),
+              series: scenarioSeries,
+            }
+          : null,
       };
     },
   );

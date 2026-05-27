@@ -45,6 +45,7 @@ import { TaxYearPage } from './pages/TaxYearPage';
 import { MileagePage } from './pages/MileagePage';
 import { WarrantiesPage } from './pages/WarrantiesPage';
 import { HouseholdPage } from './pages/HouseholdPage';
+import { ScenarioPage } from './pages/ScenarioPage';
 import { AnomaliesPage } from './pages/AnomaliesPage';
 import { BillingPage } from './pages/BillingPage';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -370,6 +371,7 @@ function AuthenticatedApp({
             <NavLink to="/retirement">Retirement</NavLink>
             <NavLink to="/investments">Investments</NavLink>
             <NavLink to="/debt-payoff">Debt payoff</NavLink>
+            <NavLink to="/scenarios">Scenarios</NavLink>
           </div>
           <div className="nav-group">
             <div className="nav-group-label">Insights</div>
@@ -453,6 +455,7 @@ function AuthenticatedApp({
           <Route path="/mileage" element={<MileagePage />} />
           <Route path="/warranties" element={<WarrantiesPage />} />
           <Route path="/household" element={<HouseholdPage />} />
+          <Route path="/scenarios" element={<ScenarioPage />} />
           <Route path="/anomalies" element={<AnomaliesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />

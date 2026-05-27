@@ -197,6 +197,37 @@ export interface MileageSummary {
   total_deduction_cents: number;
 }
 
+export interface CashFlowSeriesPoint {
+  date: string;
+  projected_cents: number;
+  low_cents: number;
+  high_cents: number;
+}
+
+export interface CashFlowResponse {
+  days: number;
+  starting_cents: number;
+  ending_cents: number;
+  daily_volatility_cents: number;
+  milestones: { day_30: number; day_60: number; day_90: number };
+  series: CashFlowSeriesPoint[];
+  scenario: null | {
+    applied: {
+      income_pct: number;
+      expense_pct: number;
+      one_time: Array<{ date: string; amount: number }>;
+    };
+    ending_cents: number;
+    series: CashFlowSeriesPoint[];
+  };
+}
+
+export interface CashFlowScenarioParams {
+  incomePct?: number;
+  expensePct?: number;
+  oneTime?: Array<{ date: string; amount_cents: number }>;
+}
+
 export interface InvestmentPerformanceAccount {
   account_id: string;
   account_name: string;
@@ -2780,20 +2811,22 @@ export const api = {
   deleteRecurringIncome: (id: string) =>
     http<void>(`/api/recurring-income/${id}`, { method: 'DELETE' }),
 
-  cashFlow: (days = 90) =>
-    http<{
-      days: number;
-      starting_cents: number;
-      ending_cents: number;
-      daily_volatility_cents: number;
-      milestones: { day_30: number; day_60: number; day_90: number };
-      series: Array<{
-        date: string;
-        projected_cents: number;
-        low_cents: number;
-        high_cents: number;
-      }>;
-    }>(`/api/cash-flow?days=${days}`),
+  cashFlow: (params: { days?: number; scenario?: CashFlowScenarioParams } = {}) => {
+    const q = new URLSearchParams();
+    q.set('days', String(params.days ?? 90));
+    const s = params.scenario;
+    if (s) {
+      if (s.incomePct !== undefined) q.set('incomePct', String(s.incomePct));
+      if (s.expensePct !== undefined) q.set('expensePct', String(s.expensePct));
+      if (s.oneTime && s.oneTime.length > 0) {
+        q.set(
+          'oneTime',
+          s.oneTime.map((o) => `${o.date}:${o.amount_cents}`).join(','),
+        );
+      }
+    }
+    return http<CashFlowResponse>(`/api/cash-flow?${q.toString()}`);
+  },
 
   // ── Recurring (Phase 6.1) ────────────────────────────────
   detectRecurring: () =>

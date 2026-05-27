@@ -158,7 +158,7 @@ export function DashboardPage() {
             api.incomeExpense({ months: 12 }),
             api.netWorthOverTime({ months: 12 }),
             api.upcomingBills(30),
-            api.cashFlow(90),
+            api.cashFlow({ days: 90 }),
             api.listGoals(),
             api.getPreferences().catch(() => ({} as Record<string, unknown>)),
             // 0.20.0 — proactive insight cards. Best-effort fetch;
