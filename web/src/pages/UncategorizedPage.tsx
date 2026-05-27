@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
-import { api, type Category, type Transaction } from '../api';
-import { TransactionTable } from '../components/TransactionTable';
+import { api, type Account, type Category, type Transaction } from '../api';
+import { TransactionTable, type SortKey } from '../components/TransactionTable';
 import { BulkActionBar } from '../components/BulkActionBar';
 import { SplitsModal } from '../components/SplitsModal';
 
 const PAGE_SIZE = 100;
 
+/**
+ * 0.21.x — Triage queue.
+ *
+ * Two filters to make bulk-categorisation faster:
+ *   • Multi-account chips — narrow the page to one or more
+ *     accounts so similar transactions cluster together.
+ *   • Sortable columns — click a header to group same-merchant
+ *     or same-amount rows, then bulk-categorise.
+ */
 export function UncategorizedPage() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -15,9 +26,12 @@ export function UncategorizedPage() {
   const [error, setError] = useState<string | null>(null);
   const [splittingFor, setSplittingFor] = useState<Transaction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     api.listCategories().then(setCategories).catch(() => undefined);
+    api.listAccounts().then(setAccounts).catch(() => undefined);
   }, []);
 
   async function load(nextOffset: number) {
@@ -28,6 +42,7 @@ export function UncategorizedPage() {
         limit: PAGE_SIZE,
         offset: nextOffset,
         uncategorized: true,
+        accountIds: selectedAccountIds.length > 0 ? selectedAccountIds : undefined,
       });
       setTransactions(page.transactions);
       setTotal(page.total);
@@ -40,7 +55,28 @@ export function UncategorizedPage() {
 
   useEffect(() => {
     void load(offset);
-  }, [offset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offset, selectedAccountIds]);
+
+  // Reset to first page whenever the account filter changes.
+  useEffect(() => {
+    setOffset(0);
+  }, [selectedAccountIds]);
+
+  function toggleAccount(id: string) {
+    setSelectedAccountIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function onHeaderClick(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'amount' || key === 'date' ? 'desc' : 'asc');
+    }
+  }
 
   async function onTxnUpdate(
     id: string,
@@ -48,7 +84,6 @@ export function UncategorizedPage() {
   ) {
     try {
       await api.updateTransaction(id, updates);
-      // Once a row gets a category, it disappears from the triage list.
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       setTotal((n) => Math.max(0, n - 1));
       setSelectedIds((prev) => {
@@ -80,6 +115,39 @@ export function UncategorizedPage() {
           {total === 0 ? '0' : `${from}–${to} of ${total}`}
         </span>
       </div>
+
+      {accounts.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="section-title" style={{ marginTop: 0 }}>
+            Accounts ({selectedAccountIds.length === 0 ? 'all' : `${selectedAccountIds.length} selected`})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {accounts.map((a) => {
+              const on = selectedAccountIds.includes(a.id);
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`account-chip ${on ? 'selected' : ''}`}
+                  onClick={() => toggleAccount(a.id)}
+                >
+                  {on && <span aria-hidden style={{ marginRight: 4 }}>✓</span>}
+                  {a.name}
+                </button>
+              );
+            })}
+            {selectedAccountIds.length > 0 && (
+              <button
+                type="button"
+                className="btn-link"
+                onClick={() => setSelectedAccountIds([])}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && <div className="banner error">{error}</div>}
 
@@ -116,6 +184,7 @@ export function UncategorizedPage() {
           categories={categories}
           onUpdate={onTxnUpdate}
           onOpenSplits={setSplittingFor}
+          sort={{ key: sortKey, dir: sortDir, onChange: onHeaderClick }}
           selection={{
             selected: selectedIds,
             onToggle: (id) =>

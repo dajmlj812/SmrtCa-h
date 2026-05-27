@@ -1,8 +1,40 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { Category, RefundStatus, Transaction } from '../api';
 import { REFUND_STATUS_LABELS } from '../api';
 import { formatCents, formatDate } from '../format';
 import { CategoryPicker } from './CategoryPicker';
+
+export type SortKey =
+  | 'date'
+  | 'account'
+  | 'description'
+  | 'category'
+  | 'amount';
+
+function compareForSort(
+  a: Transaction,
+  b: Transaction,
+  key: SortKey,
+): number {
+  switch (key) {
+    case 'date':
+      return a.txn_date.localeCompare(b.txn_date);
+    case 'account':
+      return a.account_name.localeCompare(b.account_name);
+    case 'description': {
+      const av = (a.normalized_merchant ?? a.raw_description).toLowerCase();
+      const bv = (b.normalized_merchant ?? b.raw_description).toLowerCase();
+      return av.localeCompare(bv);
+    }
+    case 'category': {
+      const av = (a.category_name ?? '').toLowerCase();
+      const bv = (b.category_name ?? '').toLowerCase();
+      return av.localeCompare(bv);
+    }
+    case 'amount':
+      return a.amount_cents - b.amount_cents;
+  }
+}
 
 const REFUND_PILL_TONE: Record<RefundStatus, string> = {
   refund_pending: 'warn',
@@ -43,6 +75,16 @@ interface Props {
   onOpenShares?: (transaction: Transaction) => void;
   /** 0.21.1 — Called when the user wants to set/edit refund status. */
   onOpenRefund?: (transaction: Transaction) => void;
+  /**
+   * 0.21.x — optional column sort. When provided, the header cells
+   * become clickable; the table sorts client-side before mapping.
+   * Pages that want server-side sort can ignore this.
+   */
+  sort?: {
+    key: SortKey;
+    dir: 'asc' | 'desc';
+    onChange: (key: SortKey) => void;
+  };
   /** When provided, render a checkbox column and report changes. */
   selection?: {
     selected: Set<string>;
@@ -96,16 +138,29 @@ export function TransactionTable({
   onOpenShares,
   onOpenRefund,
   selection,
+  sort,
 }: Props) {
   const groups = useMemo(
     () => (categories ? buildCategoryGroups(categories) : []),
     [categories],
   );
 
-  if (transactions.length === 0) {
+  // Sort client-side when a sort config is provided. Stable: ties
+  // fall back to the original order.
+  const sorted = useMemo(() => {
+    if (!sort) return transactions;
+    const arr = [...transactions];
+    arr.sort((a, b) => {
+      const cmp = compareForSort(a, b, sort.key);
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [transactions, sort]);
+
+  if (sorted.length === 0) {
     return <p className="empty">No transactions yet.</p>;
   }
-  const allIds = transactions.map((t) => t.id);
+  const allIds = sorted.map((t) => t.id);
   const allChecked =
     !!selection && allIds.length > 0 && allIds.every((id) => selection.selected.has(id));
   const someChecked =
@@ -133,11 +188,15 @@ export function TransactionTable({
             <th className="cleared-col" title="Cleared (reconciled to bank statement)">
               ✓
             </th>
-            <th>Date</th>
-            {showAccount && <th>Account</th>}
-            <th>Description</th>
-            <th>Category</th>
-            <th className="num">Amount</th>
+            <SortHeader sort={sort} sortKey="date">Date</SortHeader>
+            {showAccount && (
+              <SortHeader sort={sort} sortKey="account">Account</SortHeader>
+            )}
+            <SortHeader sort={sort} sortKey="description">Description</SortHeader>
+            <SortHeader sort={sort} sortKey="category">Category</SortHeader>
+            <SortHeader sort={sort} sortKey="amount" align="right">
+              Amount
+            </SortHeader>
             {showRunningBalance && <th className="num">Balance</th>}
             {(onOpenAttachments || onOpenSplits || onOpenShares) && (
               <th className="attach-col">Actions</th>
@@ -145,7 +204,7 @@ export function TransactionTable({
           </tr>
         </thead>
         <tbody>
-          {transactions.map((t) => (
+          {sorted.map((t) => (
             <TransactionRow
               key={t.id}
               transaction={t}
@@ -385,4 +444,32 @@ function TransactionRow({
 function StatusPill({ status }: { status: string }) {
   const label = STATUS_LABEL[status] ?? status;
   return <span className={`pill status-${status}`}>{label}</span>;
+}
+
+function SortHeader({
+  sort,
+  sortKey,
+  align,
+  children,
+}: {
+  sort?: Props['sort'];
+  sortKey: SortKey;
+  align?: 'right';
+  children: ReactNode;
+}) {
+  if (!sort) {
+    return <th className={align === 'right' ? 'num' : ''}>{children}</th>;
+  }
+  const active = sort.key === sortKey;
+  const arrow = active ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+  return (
+    <th
+      className={align === 'right' ? 'num sortable' : 'sortable'}
+      style={{ cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => sort.onChange(sortKey)}
+      title={`Sort by ${sortKey}${active ? `, currently ${sort.dir}ending` : ''}`}
+    >
+      {children}{arrow}
+    </th>
+  );
 }

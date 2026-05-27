@@ -1824,6 +1824,7 @@ export const api = {
 
   listTransactions: (params: {
     accountId?: string;
+    accountIds?: readonly string[];
     search?: string;
     limit?: number;
     offset?: number;
@@ -1833,6 +1834,9 @@ export const api = {
   }) => {
     const q = new URLSearchParams();
     if (params.accountId) q.set('accountId', params.accountId);
+    if (params.accountIds && params.accountIds.length > 0) {
+      q.set('accountIds', params.accountIds.join(','));
+    }
     if (params.search) q.set('search', params.search);
     if (params.limit != null) q.set('limit', String(params.limit));
     if (params.offset != null) q.set('offset', String(params.offset));

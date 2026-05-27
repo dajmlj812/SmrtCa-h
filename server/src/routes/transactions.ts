@@ -11,6 +11,8 @@ import {
 
 interface TransactionQuery {
   accountId?: string;
+  /** 0.21.x — comma-separated UUIDs for multi-account filter. */
+  accountIds?: string;
   search?: string;
   limit?: string;
   offset?: string;
@@ -352,6 +354,21 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       if (accountId && !isUuid(accountId)) {
         return reply.code(400).send({ error: 'Invalid accountId' });
       }
+      // 0.21.x — multi-account filter via comma-separated UUIDs.
+      // Layers on top of the single accountId and the RBAC-scoped set.
+      let accountIdsFilter: string[] | null = null;
+      if (req.query.accountIds) {
+        const ids = req.query.accountIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        for (const id of ids) {
+          if (!isUuid(id)) {
+            return reply.code(400).send({ error: 'accountIds must be UUIDs' });
+          }
+        }
+        if (ids.length > 0) accountIdsFilter = ids;
+      }
       const search = req.query.search?.trim() || null;
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
       const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -439,9 +456,10 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
            AND ($6::uuid[] IS NULL OR t.account_id = ANY($6::uuid[]))
            AND ($7::date IS NULL OR t.txn_date >= $7)
            AND ($8::date IS NULL OR t.txn_date <= $8)
+           AND ($10::uuid[] IS NULL OR t.account_id = ANY($10::uuid[]))
          ORDER BY t.txn_date DESC, t.created_at DESC
          LIMIT $3 OFFSET $4`,
-        [accountId, search, limit, offset, uncategorized, scopedIds, startDate, endDate, tenantId],
+        [accountId, search, limit, offset, uncategorized, scopedIds, startDate, endDate, tenantId, accountIdsFilter],
       );
 
       const count = await query<{ total: number }>(
@@ -458,8 +476,9 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
            ))
            AND ($4::uuid[] IS NULL OR t.account_id = ANY($4::uuid[]))
            AND ($5::date IS NULL OR t.txn_date >= $5)
-           AND ($6::date IS NULL OR t.txn_date <= $6)`,
-        [accountId, search, uncategorized, scopedIds, startDate, endDate, tenantId],
+           AND ($6::date IS NULL OR t.txn_date <= $6)
+           AND ($8::uuid[] IS NULL OR t.account_id = ANY($8::uuid[]))`,
+        [accountId, search, uncategorized, scopedIds, startDate, endDate, tenantId, accountIdsFilter],
       );
 
       return {
