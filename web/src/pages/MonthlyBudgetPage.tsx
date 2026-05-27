@@ -102,11 +102,15 @@ export function MonthlyBudgetPage() {
         alert('No active bills to seed from. Add bills on /bills first.');
         return;
       }
+      const recurring = r.recurring_category_count ?? 0;
       const msg =
         r.created > 0
-          ? `Seeded ${r.created} budget row(s) from ${r.bill_count} bill(s). ` +
-            `Monthly total ${(r.total_monthly_cents / 100).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}.`
-          : 'Every bill category already had a budget — nothing to add.';
+          ? `Seeded ${r.created} budget row(s) — ${r.bill_count} from bills` +
+            (recurring > 0
+              ? `, ${recurring} from recurring spend categories (3-month average)`
+              : '') +
+            `. Monthly total ${(r.total_monthly_cents / 100).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}.`
+          : 'Every bill and recurring category already had a budget — nothing to add.';
       alert(msg);
       await load(month);
     } catch (e) {

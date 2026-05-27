@@ -407,11 +407,84 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       else skipped++;
     }
 
+    // 0.21.x — also seed always-budget categories that aren't
+    // bill-driven (Groceries, Gas & Fuel, Tolls, Restaurants, etc.).
+    // We compute a 3-month average of actual category spend so the
+    // suggested budget reflects the user's real burn rate. Skip any
+    // category that already has a non-bill budget row for the
+    // month so user edits aren't clobbered.
+    const ALWAYS_BUDGET_CATEGORIES = [
+      'Groceries',
+      'Gas & Fuel',
+      'Tolls',
+      'Restaurants',
+      'Fast Food',
+      'Coffee Shops',
+      'Food Delivery',
+    ];
+
+    // Resolve canonical category ids for the names that exist in
+    // this tenant (or the global NULL-tenant seed).
+    const catRows = await query<{ id: string; name: string }>(
+      `SELECT id, name FROM categories
+        WHERE lower(name) = ANY($1::text[])
+          AND (tenant_id IS NULL OR tenant_id = $2::uuid)`,
+      [ALWAYS_BUDGET_CATEGORIES.map((n) => n.toLowerCase()), tenantId],
+    );
+
+    let recurringCreated = 0;
+    let recurringSkipped = 0;
+    let recurringTotal = 0;
+    for (const cat of catRows.rows) {
+      // 3-month trailing average spend in this category.
+      const avg = await query<{ avg_cents: string }>(
+        `SELECT COALESCE(ROUND(AVG(monthly_spend))::bigint, 0)::text AS avg_cents
+           FROM (
+             SELECT date_trunc('month', t.txn_date) AS m,
+                    SUM(-t.amount_cents)::bigint AS monthly_spend
+               FROM transactions t
+               JOIN accounts a ON a.id = t.account_id
+              WHERE a.tenant_id = $1
+                AND t.category_id = $2
+                AND t.amount_cents < 0
+                AND t.transfer_group_id IS NULL
+                AND t.txn_date >= ($3::date - INTERVAL '3 months')
+                AND t.txn_date <  $3::date
+              GROUP BY date_trunc('month', t.txn_date)
+           ) m`,
+        [tenantId, cat.id, month],
+      );
+      const avgCents = Number(avg.rows[0]?.avg_cents ?? 0);
+      if (avgCents <= 0) continue;
+      const ins = await query<{ id: string }>(
+        `INSERT INTO budgets
+           (tenant_id, period_month, period_type, category_id, amount_cents)
+         SELECT $1, $2::date, 'monthly', $3, $4
+          WHERE NOT EXISTS (
+            SELECT 1 FROM budgets
+             WHERE tenant_id = $1
+               AND period_type = 'monthly'
+               AND period_month = $2::date
+               AND category_id = $3
+               AND bill_id IS NULL
+          )
+         RETURNING id`,
+        [tenantId, month, cat.id, avgCents],
+      );
+      if (ins.rowCount && ins.rowCount > 0) {
+        recurringCreated++;
+        recurringTotal += avgCents;
+      } else {
+        recurringSkipped++;
+      }
+    }
+
     return {
-      created,
-      skipped,
-      total_monthly_cents: total,
+      created: created + recurringCreated,
+      skipped: skipped + recurringSkipped,
+      total_monthly_cents: total + recurringTotal,
       bill_count: bills.rowCount,
+      recurring_category_count: recurringCreated,
     };
   });
 
@@ -431,9 +504,15 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
           error: 'fromMonth and toMonth must both be YYYY-MM-01 dates',
         });
       }
+      // 0.21.x — preserve bill_id when copying so each bill row
+      // stays a distinct line on the new month. Dedupe keys on
+      // (category_id, bill_id) together to avoid the "one Utilities
+      // line that swallows every bill" collapse that happened when
+      // bill_id was dropped on copy.
       const r = await query(
-        `INSERT INTO budgets (tenant_id, period_month, period_type, category_id, amount_cents)
-         SELECT $1, $3::date, 'monthly', src.category_id, src.amount_cents
+        `INSERT INTO budgets
+           (tenant_id, period_month, period_type, category_id, bill_id, amount_cents)
+         SELECT $1, $3::date, 'monthly', src.category_id, src.bill_id, src.amount_cents
            FROM budgets src
           WHERE src.tenant_id = $1
             AND src.period_month = $2::date
@@ -445,6 +524,8 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
                  AND dst.period_month = $3::date
                  AND COALESCE(dst.category_id, '00000000-0000-0000-0000-000000000000'::uuid)
                      = COALESCE(src.category_id, '00000000-0000-0000-0000-000000000000'::uuid)
+                 AND COALESCE(dst.bill_id,     '00000000-0000-0000-0000-000000000000'::uuid)
+                     = COALESCE(src.bill_id,     '00000000-0000-0000-0000-000000000000'::uuid)
             )
          RETURNING id`,
         [tenantId, fromMonth, toMonth],
@@ -560,11 +641,16 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       }
       const groups = new Map<string, Group>();
       for (const b of inMonth) {
+        // 0.21.x — when a row has a bill_id, key on bill_id first
+        // so per-bill seeded rows stay as separate lines (each one
+        // editable / removable individually). Previously category
+        // took precedence, which collapsed every bill in the same
+        // category into one group and broke remove-by-id.
         const key =
-          b.category_id !== null
-            ? `c:${b.category_id}`
-            : b.bill_id !== null
-              ? `b:${b.bill_id}`
+          b.bill_id !== null
+            ? `b:${b.bill_id}`
+            : b.category_id !== null
+              ? `c:${b.category_id}`
               : 'flex';
         const existing = groups.get(key);
         if (existing) {

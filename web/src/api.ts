@@ -2584,6 +2584,10 @@ export const api = {
       skipped: number;
       total_monthly_cents: number;
       bill_count: number;
+      /** 0.21.x — count of always-budget categories seeded from
+       * trailing 3-month spend average (Groceries / Gas & Fuel /
+       * Tolls / etc.). */
+      recurring_category_count?: number;
     }>('/api/budgets/seed-from-bills', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
