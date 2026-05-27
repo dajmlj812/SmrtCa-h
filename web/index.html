@@ -5,8 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SmrtCash</title>
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+    <script>
+      // Owns the favicon for the whole app. Tints it green on local /
+      // red on test / default purple on prod, so the browser tab tells
+      // you which environment a window is pointing at. Runs inline
+      // during head parse so the icon is set before the browser ever
+      // paints the tab — JS in main.tsx would be too late.
+      (function () {
+        var h = (window.location.hostname || '').toLowerCase();
+        var color = '#4f46e5'; // prod / fallback
+        if (
+          h === 'localhost' ||
+          h === '127.0.0.1' ||
+          h === '0.0.0.0' ||
+          h.endsWith('.local') ||
+          h.endsWith('.localhost')
+        ) {
+          color = '#16a34a'; // local — green
+        } else if (h === 'smrtcash-test.builditsmrt.com') {
+          color = '#dc2626'; // test — red
+        }
+        var svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">' +
+          '<rect width="192" height="192" rx="32" fill="' + color + '"/>' +
+          '<text x="96" y="118" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="96" font-weight="700" fill="#ffffff" text-anchor="middle">$</text>' +
+          '<text x="96" y="156" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="2">SMRT</text>' +
+          '</svg>';
+        var url = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+        var icon = document.createElement('link');
+        icon.rel = 'icon';
+        icon.type = 'image/svg+xml';
+        icon.href = url;
+        document.head.appendChild(icon);
+        var apple = document.createElement('link');
+        apple.rel = 'apple-touch-icon';
+        apple.href = url;
+        document.head.appendChild(apple);
+      })();
+    </script>
     <meta name="theme-color" content="#4f46e5" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0b1020" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

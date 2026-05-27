@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { applyEnvFavicon } from './branding/envIndicator';
 import './styles.css';
 
 // Apply the stored theme BEFORE React mounts so there's no flash of
@@ -15,8 +14,6 @@ try {
 } catch {
   /* private mode etc. */
 }
-
-applyEnvFavicon();
 
 // Register the service worker after first paint so it doesn't compete
 // with the initial JS bundle. The SW handles offline app-shell + cache
