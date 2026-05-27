@@ -1048,5 +1048,71 @@ Probably 2027+. Only worth doing once we have measurable EU/AU/AP customer base.
 
 ---
 
+## 0.24.x — Scenario expansion 📋
+
+**Goal:** Turn `/scenarios` from a one-trick cash-flow projector into a real life-planning surface. Users come in with specific questions — "should I bump my 401(k)?", "what if we have a kid?", "is a balance transfer worth it?" — and walk out with a numeric answer they can lean on. Each scenario type is its own form + calculator + result panel under a shared hub UI.
+
+### 0.24.0 — Scenario hub refactor 🧱
+
+Refactor `/scenarios` into a hub that lists available scenario types and routes each to its own input/result view. The existing cash-flow-with-deltas scenario keeps working (becomes the "Cash-flow stress test" entry). Shared chrome (page header, history of saved scenarios, share-result link).
+
+### 0.24.1 — Wealth-building scenarios 📈
+
+- **Invest $X/mo for Y years at Z%** — compounding curve, tax-deferred vs taxable side-by-side, ending portfolio value.
+- **Bump 401(k) to N%** — take-home delta this year, retirement balance delta at 65, employer-match capture.
+- **Windfall split** — split a bonus / refund / inheritance between debt payoff, emergency fund, and invest; show 5/10/20-year impact of each split.
+- **FIRE date** — given save rate + spend, project when the portfolio covers annual expenses at a 4% / 3% withdrawal.
+
+### 0.24.2 — Debt-payoff scenarios 💸
+
+- **Add $X/mo extra** — promotion of the existing /debt-payoff control into a saved/shareable scenario.
+- **Balance transfer at N% APR for M months** — interest saved vs transfer fee, payoff date.
+- **Consolidate at one rate** (HELOC / personal loan) — total cost + payoff date vs current trajectory.
+- **Biweekly mortgage** — years shaved, interest saved, side-by-side schedule.
+
+### 0.24.3 — Life-event scenarios 🌱
+
+The most engaging category — users come for these.
+
+- **Have a kid** — childcare/baby spend bump, 529 ramp, tax credit hit, 1-year and 5-year cash-flow impact.
+- **Buy a house** — given target purchase price, model affordable mortgage from DTI + savings rate + current debt; show monthly payment, opportunity cost vs renting.
+- **Job change** — salary delta, relocation cost, retirement-account portability, projected 5-year net-worth divergence.
+- **Sabbatical / income loss** — emergency-fund runway, return-to-work recovery curve, what-it-costs to plan a 6-month break.
+- **Recession** (income −X% for N months) — stress-test the next 24 months, where the budget breaks first.
+
+### Implementation notes
+
+Each scenario type lives in `web/src/scenarios/<type>/` with three exports: `<Type>Form`, `<Type>Calculator` (pure function, deterministic, no API), and `<Type>Result`. The hub maps a scenario id to those three. Server endpoints are only needed for scenarios that require historical data (e.g. baseline cash flow); the rest run client-side so they're snappy and shareable via URL params.
+
+---
+
+## 0.25.x — Credit score + retirement scenarios 📋
+
+Deferred from 0.24.x because both need model layers we don't have yet.
+
+### 0.25.0 — Credit-score modeling 📊
+
+A coarse FICO-like model that translates utilization, age-of-credit, hard-pull count, and account mix into an estimated score band (not a number). Even with a simple "your utilization is 65% → band: Fair → likely 600-650" output, the scenario surface becomes:
+
+- **Pay to N% utilization → score band** (pairs with the 0.22.2 credit-card payoff goals).
+- **New card opened** — temp hit from hard pull + utilization headroom gained.
+- **Old card closed** — utilization rises + average history shortens.
+- **Collections removed** — biggest single-event modeled lift.
+
+Open question for this arc: do we ship a hand-rolled model or buy a real score-estimator API (Experian, ScoreSense, etc.)?
+
+### 0.25.1 — Retirement scenarios 🏖️
+
+Once we have a real return-assumption model + withdrawal model:
+
+- **Retire at 60 vs 65 vs 67** — savings needed, monthly draw, longevity risk.
+- **Social Security at 62 vs 67 vs 70** — break-even age + lifetime delta.
+- **Healthcare to Medicare gap** — premium projection for ages 60–65.
+- **Roth conversion ladder** — convert $X/yr from traditional, tax cost vs RMD reduction at 73.
+
+Depends on us having a real Monte Carlo or sequence-of-returns engine, not just compounding curves. Deferred until we know what we want there.
+
+---
+
 *This roadmap is a living document. Phase scope and ordering may shift as the
 product is used and priorities become clearer.*
