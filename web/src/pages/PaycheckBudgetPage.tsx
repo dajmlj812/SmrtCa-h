@@ -243,212 +243,86 @@ function PlanBlock({
           </button>
         </div>
       )}
-      {periods.map((p) => (
-        <PeriodOverview
-          key={`${p.period.start}-${p.period.end}-${p.period.type}`}
-          summary={p}
-          accounts={accounts}
-          onRunWizard={onRunWizard}
-          onDeletePeriod={onDeletePeriod}
-        />
-      ))}
-    </div>
-  );
-}
-
-function PeriodOverview({
-  summary,
-  accounts,
-  onRunWizard,
-  onDeletePeriod,
-}: {
-  summary: BudgetPeriodSummary;
-  accounts: Account[];
-  onRunWizard: () => void;
-  onDeletePeriod: (
-    planId: string,
-    periodStart: string,
-    label: string,
-  ) => Promise<void>;
-}) {
-  const { period, income, bills, editable, totals } = summary;
-  const periodLabel = PERIOD_LABELS[period.type];
-  const overextended = totals.net_cents < 0;
-  const scopedAccountNames =
-    summary.included_account_ids
-      ?.map((id) => accounts.find((a) => a.id === id)?.name ?? '(removed)')
-      ?? null;
-  return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div className="page-section-head">
-        <h2 style={{ margin: 0 }}>Period overview</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span className="muted small">
-            {periodLabel} · {formatDate(period.start)} → {formatDate(period.end)}
-          </span>
-          {summary.plan_id && (
-            <button
-              type="button"
-              className="btn-link danger"
-              onClick={() =>
-                void onDeletePeriod(
-                  summary.plan_id!,
-                  period.start,
-                  `${formatDate(period.start)} → ${formatDate(period.end)}`,
-                )
-              }
-              title="Remove every budget row for this period (the plan itself stays)"
-            >
-              Delete period
-            </button>
-          )}
-        </div>
-      </div>
-      {scopedAccountNames && scopedAccountNames.length > 0 && (
-        <div className="muted small" style={{ marginTop: 4 }}>
-          Includes accounts: <strong>{scopedAccountNames.join(', ')}</strong>
-        </div>
-      )}
-
-      {/* Income */}
-      <h3 style={{ marginTop: 16, marginBottom: 8 }}>
-        Income — <strong className="pos">{formatCents(totals.income_cents)}</strong>
-      </h3>
-      {income.length === 0 ? (
-        <p className="muted small">No income events in this period.</p>
-      ) : (
-        <table className="txn-table">
-          <thead>
-            <tr>
-              <th>Source</th>
-              <th className="nowrap">Expected</th>
-              <th className="num">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {income.map((i) => (
-              <tr key={i.id + i.date}>
-                <td>{i.name}</td>
-                <td className="nowrap">{formatDate(i.date)}</td>
-                <td className="num pos">+{formatCents(i.amount_cents)}</td>
+      {/* 0.21.x — replaced the verbose PeriodOverview card with a
+          compact summary line per period. The old card showed
+          "Monthly" labels + income/bills/set-aside data that
+          didn't match a paycheck plan's reality. The new line
+          just shows the period window, total income / bills /
+          set-aside, and a delete-period link. */}
+      {periods.length > 0 && (
+        <div className="card" style={{ padding: 8 }}>
+          <table className="txn-table" style={{ marginBottom: 0 }}>
+            <thead>
+              <tr>
+                <th>Window</th>
+                <th className="num">Income</th>
+                <th className="num">Bills</th>
+                <th className="num">Set-aside</th>
+                <th className="num">Net</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {/* Bills */}
-      <h3 style={{ marginTop: 16, marginBottom: 8 }}>
-        Bills — <strong className="neg">{formatCents(totals.bills_cents)}</strong>
-      </h3>
-      {bills.length === 0 ? (
-        <p className="muted small">No bills due in this period.</p>
-      ) : (
-        <table className="txn-table">
-          <thead>
-            <tr>
-              <th>Vendor</th>
-              <th className="nowrap">Due</th>
-              <th className="num">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bills.map((b) => (
-              <tr key={b.budget_id}>
-                <td>{b.name}</td>
-                <td className="nowrap">
-                  {b.date ? formatDate(b.date) : <span className="muted">—</span>}
-                </td>
-                <td className="num neg">−{formatCents(b.amount_cents)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {/* Editable categories */}
-      <h3 style={{ marginTop: 16, marginBottom: 8 }}>
-        Set aside —{' '}
-        <strong className="neg">{formatCents(totals.editable_cents)}</strong>
-      </h3>
-      {editable.length === 0 ? (
-        <div className="card" style={{ background: 'var(--surface-3)', padding: 12 }}>
-          <p style={{ margin: 0 }}>
-            <strong>No category allowances configured for this period.</strong>
-          </p>
-          <p className="muted small" style={{ marginTop: 4 }}>
-            Run AutoMagic Setup to suggest amounts for groceries, fuel, tolls,
-            savings, etc. based on your history + bills + income.
-          </p>
-          <button
-            className="btn"
-            type="button"
-            onClick={onRunWizard}
-            style={{ marginTop: 8 }}
-          >
-            ✨ Run AutoMagic Setup
-          </button>
+            </thead>
+            <tbody>
+              {periods.map((p) => {
+                const net = p.totals.net_cents;
+                const label = `${formatDate(p.period.start)} → ${formatDate(p.period.end)}`;
+                return (
+                  <tr
+                    key={`${p.period.start}-${p.period.end}-${p.period.type}`}
+                  >
+                    <td className="nowrap">{label}</td>
+                    <td className="num pos">
+                      +{formatCents(p.totals.income_cents)}
+                    </td>
+                    <td className="num neg">
+                      −{formatCents(p.totals.bills_cents)}
+                    </td>
+                    <td className="num neg">
+                      −{formatCents(p.totals.editable_cents)}
+                    </td>
+                    <td className={`num ${net < 0 ? 'neg' : 'pos'}`}>
+                      {net < 0 ? '−' : '+'}
+                      {formatCents(Math.abs(net))}
+                    </td>
+                    <td>
+                      {p.plan_id && (
+                        <button
+                          type="button"
+                          className="btn-link danger"
+                          onClick={() =>
+                            void onDeletePeriod(
+                              p.plan_id!,
+                              p.period.start,
+                              label,
+                            )
+                          }
+                          title="Remove every budget row for this period"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        <table className="txn-table">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Action</th>
-              <th className="num">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {editable.map((e) => (
-              <tr key={e.budget_id}>
-                <td>{e.category_name}</td>
-                <td className="muted small">
-                  {e.requires_manual_action
-                    ? 'Manually transfer to savings'
-                    : 'Spending allowance'}
-                </td>
-                <td className="num neg">−{formatCents(e.amount_cents)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       )}
-
-      {/* Net */}
-      <div
-        style={{
-          marginTop: 20,
-          paddingTop: 12,
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'baseline',
-          fontSize: '1.05em',
-        }}
-      >
-        <span>
-          <strong>{overextended ? 'Overextended by' : 'Leftover'}</strong>
-          <div className="muted small">
-            Income − bills − set-aside ={' '}
-            {formatCents(totals.income_cents)} − {formatCents(totals.bills_cents)} −{' '}
-            {formatCents(totals.editable_cents)}
-          </div>
-        </span>
-        <strong
-          className={overextended ? 'neg' : 'pos'}
-          style={{ fontSize: '1.3em' }}
-        >
-          {overextended ? '−' : '+'}
-          {formatCents(Math.abs(totals.net_cents))}
-        </strong>
-      </div>
-      {overextended && (
+      {periods.length === 0 && (
         <p className="muted small" style={{ marginTop: 8 }}>
-          You'll need to cover this gap — either by reducing one of the
-          modifiable allowances above or by accepting that some bills will roll
-          forward.
+          No periods committed for this plan yet — run AutoMagic setup
+          to populate.
         </p>
       )}
     </div>
   );
 }
+
+// PeriodOverview removed in 0.21.x — replaced by the compact
+// per-period summary table inside PlanBlock. The old card was
+// labelled "Period overview" with "Monthly · …" subtext that
+// didn't reflect the actual cadence of paycheck plans, and its
+// income / bills / set-aside breakdown duplicated data already
+// shown on bills and category pages without contributing
+// information specific to this view.
