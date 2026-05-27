@@ -137,6 +137,78 @@ export interface TaxYearReport {
   by_tax_category: TaxYearRow[];
 }
 
+export interface ScheduleCRow {
+  line: string;
+  label: string;
+  kind: 'income' | 'expense';
+  total_cents: number;
+  txn_count: number;
+  contributing_tax_categories: string[];
+}
+
+export interface ScheduleCReport {
+  year: number;
+  start_date: string;
+  end_date: string;
+  lines: ScheduleCRow[];
+  unmatched: Array<{
+    tax_category: string;
+    total_cents: number;
+    txn_count: number;
+  }>;
+  mileage: {
+    business_miles: number;
+    business_deduction_cents: number;
+    rate_cents_per_mile: number;
+  };
+  total_gross_receipts_cents: number;
+  total_expenses_cents: number;
+  net_profit_cents: number;
+}
+
+export type MileagePurpose =
+  | 'business' | 'commute' | 'charity' | 'medical' | 'moving' | 'personal';
+
+export interface MileageTrip {
+  id: string;
+  vehicle_id: string | null;
+  trip_date: string;
+  purpose: MileagePurpose;
+  miles: number;
+  start_odometer: number | null;
+  end_odometer: number | null;
+  start_location: string | null;
+  end_location: string | null;
+  description: string | null;
+  created_at: string;
+}
+
+export interface MileageSummary {
+  year: number;
+  rates: Record<MileagePurpose, number>;
+  by_purpose: Array<{
+    purpose: MileagePurpose;
+    miles: number;
+    trip_count: number;
+    rate_cents_per_mile: number;
+    deduction_cents: number;
+  }>;
+  total_miles: number;
+  total_deduction_cents: number;
+}
+
+export interface MileageTripInput {
+  vehicleId: string | null;
+  tripDate: string;
+  purpose: MileagePurpose;
+  miles: number;
+  startOdometer?: number | null;
+  endOdometer?: number | null;
+  startLocation?: string | null;
+  endLocation?: string | null;
+  description?: string | null;
+}
+
 export interface CalendarDay {
   date: string;
   spend_cents: number;
@@ -3280,6 +3352,43 @@ export const api = {
     http<TaxYearReport>(`/api/reports/tax-year/${year}`),
 
   taxYearCsvUrl: (year: number) => `/api/reports/tax-year/${year}.csv`,
+
+  scheduleCReport: (year: number) =>
+    http<ScheduleCReport>(`/api/reports/tax-year/${year}/schedule-c`),
+
+  taxYearTxfUrl: (year: number) => `/api/reports/tax-year/${year}.txf`,
+
+  mileageCsvUrl: (year: number) =>
+    `/api/reports/tax-year/${year}/mileage.csv`,
+
+  listMileage: (params?: { year?: number; vehicleId?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.year != null) q.set('year', String(params.year));
+    if (params?.vehicleId) q.set('vehicleId', params.vehicleId);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    return http<{ trips: MileageTrip[] }>(`/api/mileage${qs ? `?${qs}` : ''}`);
+  },
+
+  createMileage: (body: MileageTripInput) =>
+    http<{ trip: MileageTrip }>(`/api/mileage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  updateMileage: (id: string, body: MileageTripInput) =>
+    http<{ trip: MileageTrip }>(`/api/mileage/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  deleteMileage: (id: string) =>
+    http<void>(`/api/mileage/${id}`, { method: 'DELETE' }),
+
+  mileageSummary: (year: number) =>
+    http<MileageSummary>(`/api/mileage/summary/${year}`),
 
   // ── Anomaly alerts (backlog 0.13.2) ──────────────────────
   listAnomalies: (includeDismissed = false) =>

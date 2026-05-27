@@ -42,6 +42,7 @@ import { AssistantPage } from './pages/AssistantPage';
 import { SharingPage } from './pages/SharingPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TaxYearPage } from './pages/TaxYearPage';
+import { MileagePage } from './pages/MileagePage';
 import { AnomaliesPage } from './pages/AnomaliesPage';
 import { BillingPage } from './pages/BillingPage';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -372,6 +373,7 @@ function AuthenticatedApp({
             <div className="nav-group-label">Insights</div>
             <NavLink to="/reports">Reports</NavLink>
             <NavLink to="/tax">Tax</NavLink>
+            <NavLink to="/mileage">Mileage</NavLink>
             <NavLink to="/anomalies">Anomalies</NavLink>
           </div>
           <div className="nav-group">
@@ -444,6 +446,7 @@ function AuthenticatedApp({
           <Route path="/sharing" element={<SharingPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/tax" element={<TaxYearPage />} />
+          <Route path="/mileage" element={<MileagePage />} />
           <Route path="/anomalies" element={<AnomaliesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
