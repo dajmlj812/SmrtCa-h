@@ -336,26 +336,28 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     }
     const doOverwrite = overwrite === true;
 
-    // Bills with active flag, with their category to roll up.
+    // Pull every active bill — id, amount, cadence, category. One
+    // budget row will be emitted per bill so each one is its own
+    // editable line, grouped under its category for reporting.
     const bills = await query<{
+      id: string;
+      name: string;
       amount_cents: string;
       frequency: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'quarterly' | 'annual';
       category_id: string | null;
     }>(
-      `SELECT amount_cents::text, frequency, category_id
+      `SELECT id, name, amount_cents::text, frequency, category_id
          FROM bills
         WHERE tenant_id = $1 AND active = true`,
       [tenantId],
     );
 
     if (bills.rowCount === 0) {
-      return { created: 0, skipped: 0, total_monthly_cents: 0 };
+      return { created: 0, skipped: 0, total_monthly_cents: 0, bill_count: 0 };
     }
 
-    // Sum per-category monthly equivalent. Multipliers below
-    // approximate how many times a frequency hits in an average
-    // month — picked to round-trip through the existing cash-flow
-    // projector's assumptions.
+    // Multipliers approximate how many times a frequency hits in an
+    // average month — same assumptions the cash-flow projector uses.
     const MULTIPLIER: Record<string, number> = {
       weekly: 52 / 12,
       biweekly: 26 / 12,
@@ -364,22 +366,17 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       quarterly: 1 / 3,
       annual: 1 / 12,
     };
-    const monthlyByCategory = new Map<string | null, number>();
-    for (const b of bills.rows) {
-      const mult = MULTIPLIER[b.frequency] ?? 1;
-      const monthlyCents = Math.round(Number(b.amount_cents) * mult);
-      if (monthlyCents <= 0) continue;
-      const key = b.category_id;
-      monthlyByCategory.set(key, (monthlyByCategory.get(key) ?? 0) + monthlyCents);
-    }
 
-    // Reset path: wipe the month's monthly budgets if overwriting.
+    // Overwrite path: wipe ONLY the bill-linked rows we seeded
+    // previously (preserving any custom non-bill budget rows the
+    // user added by hand).
     if (doOverwrite) {
       await query(
         `DELETE FROM budgets
           WHERE tenant_id = $1
             AND period_type = 'monthly'
-            AND period_month = $2::date`,
+            AND period_month = $2::date
+            AND bill_id IS NOT NULL`,
         [tenantId, month],
       );
     }
@@ -387,22 +384,24 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     let created = 0;
     let skipped = 0;
     let total = 0;
-    for (const [categoryId, cents] of monthlyByCategory.entries()) {
+    for (const b of bills.rows) {
+      const mult = MULTIPLIER[b.frequency] ?? 1;
+      const cents = Math.round(Number(b.amount_cents) * mult);
+      if (cents <= 0) continue;
       total += cents;
       const ins = await query<{ id: string }>(
         `INSERT INTO budgets
-           (tenant_id, period_month, period_type, category_id, amount_cents)
-         SELECT $1, $2::date, 'monthly', $3, $4
+           (tenant_id, period_month, period_type, category_id, bill_id, amount_cents)
+         SELECT $1, $2::date, 'monthly', $3, $4, $5
           WHERE NOT EXISTS (
             SELECT 1 FROM budgets
              WHERE tenant_id = $1
                AND period_type = 'monthly'
                AND period_month = $2::date
-               AND COALESCE(category_id, '00000000-0000-0000-0000-000000000000'::uuid)
-                   = COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+               AND bill_id = $4
           )
          RETURNING id`,
-        [tenantId, month, categoryId, cents],
+        [tenantId, month, b.category_id, b.id, cents],
       );
       if (ins.rowCount && ins.rowCount > 0) created++;
       else skipped++;
