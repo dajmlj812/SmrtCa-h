@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   api,
   type BudgetPeriodType,
@@ -409,6 +410,15 @@ export function MonthlyBudgetPage() {
               >
                 Copy from {formatMonth(prevMonth(month))}
               </button>
+              {!isFutureMonth && (
+                <Link
+                  to={`/budget-recap/${month.slice(0, 7)}`}
+                  className="btn secondary"
+                  title="View an AI-narrated recap of this month's hit / under / over categories"
+                >
+                  📈 View recap
+                </Link>
+              )}
             </div>
           </div>
 

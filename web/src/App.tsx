@@ -22,6 +22,7 @@ import { TermsPage } from './pages/TermsPage';
 import { CookieNoticePage } from './pages/CookieNoticePage';
 import { MonthlyBudgetPage } from './pages/MonthlyBudgetPage';
 import { PaycheckBudgetPage } from './pages/PaycheckBudgetPage';
+import { BudgetRecapPage } from './pages/BudgetRecapPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { BillsPage } from './pages/BillsPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
@@ -443,6 +444,7 @@ function AuthenticatedApp({
           <Route path="/budgets" element={<Navigate to="/monthly-budget" replace />} />
           <Route path="/monthly-budget" element={<MonthlyBudgetPage />} />
           <Route path="/paycheck-budget" element={<PaycheckBudgetPage />} />
+          <Route path="/budget-recap/:month" element={<BudgetRecapPage />} />
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/retirement" element={<RetirementPage />} />
           <Route path="/investments" element={<InvestmentsPage />} />

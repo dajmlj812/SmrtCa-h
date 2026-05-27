@@ -222,6 +222,26 @@ export interface CancellationQueueInput {
   monthlyCents?: number | null;
 }
 
+export interface BudgetRecapBucket {
+  category_name: string;
+  budgeted_cents: number;
+  actual_cents: number;
+  delta_pct: number;
+  status: 'hit' | 'under' | 'over';
+}
+export interface BudgetRecap {
+  tenant_id: string;
+  recap_month: string;
+  budgeted_cents: number;
+  actual_cents: number;
+  hit_count: number;
+  under_count: number;
+  over_count: number;
+  buckets: BudgetRecapBucket[];
+  narrative: string;
+  generated_at: string;
+}
+
 export interface CashFlowSeriesPoint {
   date: string;
   projected_cents: number;
@@ -1753,7 +1773,9 @@ export interface InsightCard {
     | 'goal_pace_slipping'
     | 'unusual_recurring_charge'
     | 'cash_flow_warning'
-    | 'fee_drag';
+    | 'fee_drag'
+    | 'warranty_expiring'
+    | 'budget_recap';
   severity: 'info' | 'warn' | 'critical';
   title: string;
   body: string;
@@ -2580,6 +2602,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fromMonth, toMonth }),
     }),
+
+  // 0.21.x — budget recap (month-end review)
+  getBudgetRecap: (month: string) =>
+    http<BudgetRecap>(`/api/budget-recaps/${month}`),
+  generateBudgetRecap: (month: string) =>
+    http<BudgetRecap>(`/api/budget-recaps/${month}`, { method: 'POST' }),
 
   // 0.21.x — seed a month's monthly budget from active recurring bills.
   seedBudgetFromBills: (month: string, overwrite = false) =>
