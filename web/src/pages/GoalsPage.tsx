@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type Account, type SavingsGoal } from '../api';
 import { formatCents, formatDate } from '../format';
 import { GoalTemplatePicker } from '../components/GoalTemplatePicker';
+import { PayoffGoalModal } from '../components/PayoffGoalModal';
 
 function daysUntil(dateStr: string): number {
   const today = new Date();
@@ -22,6 +23,8 @@ export function GoalsPage() {
   const [contributing, setContributing] = useState<SavingsGoal | null>(null);
   // 0.21.x — drop-in template picker.
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  // 0.22.2 — credit-card payoff goal builder.
+  const [showPayoffBuilder, setShowPayoffBuilder] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -73,6 +76,13 @@ export function GoalsPage() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             className="btn secondary"
+            onClick={() => setShowPayoffBuilder(true)}
+            title='Build a credit-card payoff goal to $0 or to a target utilization %'
+          >
+            💳 Credit card payoff
+          </button>
+          <button
+            className="btn secondary"
             onClick={() => setShowTemplatePicker(true)}
           >
             ✨ From template
@@ -88,6 +98,15 @@ export function GoalsPage() {
           onClose={() => setShowTemplatePicker(false)}
           onCreated={() => {
             setShowTemplatePicker(false);
+            void load();
+          }}
+        />
+      )}
+      {showPayoffBuilder && (
+        <PayoffGoalModal
+          onClose={() => setShowPayoffBuilder(false)}
+          onCreated={() => {
+            setShowPayoffBuilder(false);
             void load();
           }}
         />
@@ -172,8 +191,19 @@ function GoalCard({
   onSetAccount: (accountId: string | null) => void;
   onContribute: () => void;
 }) {
+  // 0.22.2 — payoff goals shrink downward instead of accumulating up.
+  // For them, "current" displays the live balance (sum of linked card
+  // balances from the server) and the progress bar fills as that
+  // balance drops toward target.
+  const isPayoff = goal.kind === 'payoff';
   const pct = Math.round(Number(goal.progress) * 100);
-  const remaining = Math.max(0, goal.target_amount_cents - goal.current_amount_cents);
+  const initial = goal.initial_amount_cents ?? 0;
+  const currentBalance = isPayoff
+    ? (goal.computed_balance_cents ?? initial)
+    : goal.current_amount_cents;
+  const remaining = isPayoff
+    ? Math.max(0, currentBalance - goal.target_amount_cents)
+    : Math.max(0, goal.target_amount_cents - goal.current_amount_cents);
   let dateNote: string | null = null;
   // 0.18.5 — when the user set both a date and an amount, project
   // the pace they'd need to keep hitting the target.
@@ -195,13 +225,33 @@ function GoalCard({
     <div className="card goal-card">
       <div className="goal-card-head">
         <div>
-          <div className="goal-card-name">{goal.name}</div>
+          <div className="goal-card-name">
+            {isPayoff && (
+              <span
+                className="pill"
+                style={{
+                  fontSize: '0.65em',
+                  padding: '2px 7px',
+                  background: 'var(--accent-soft)',
+                  color: 'var(--accent)',
+                  borderRadius: 999,
+                  marginRight: 6,
+                  verticalAlign: 'middle',
+                }}
+              >
+                Payoff
+              </span>
+            )}
+            {goal.name}
+          </div>
           {dateNote && <div className="muted goal-card-date">{dateNote}</div>}
         </div>
         <div className="goal-card-actions">
-          <button className="btn-link" type="button" onClick={onContribute}>
-            Contribute
-          </button>
+          {!isPayoff && (
+            <button className="btn-link" type="button" onClick={onContribute}>
+              Contribute
+            </button>
+          )}
           <button className="btn-link" type="button" onClick={onEdit}>
             Edit
           </button>
@@ -210,37 +260,81 @@ function GoalCard({
           </button>
         </div>
       </div>
-      <div className="goal-card-amount">
-        <strong>{formatCents(goal.current_amount_cents)}</strong>
-        <span className="muted"> / {formatCents(goal.target_amount_cents)}</span>
-      </div>
-      <div className={`progress-track ${pct >= 100 ? 'progress-track-done' : ''}`}>
-        <div className="progress-fill" style={{ width: `${Math.min(100, pct)}%` }} />
-      </div>
-      <div className="muted goal-card-foot">
-        {pct}% complete · {formatCents(remaining)} remaining
-        {paceNote && <> · <strong>{paceNote}</strong></>}
-      </div>
-      <div style={{ marginTop: 8 }}>
-        <label className="muted small" style={{ display: 'block', marginBottom: 2 }}>
-          Funded from
-        </label>
-        <select
-          value={goal.account_id ?? ''}
-          onChange={(e) =>
-            onSetAccount(e.target.value === '' ? null : e.target.value)
-          }
-          style={{ fontSize: '0.9em', width: '100%' }}
-          title="Account this goal is funded from; controls which plan's savings suggestion includes it"
-        >
-          <option value="">— No account —</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {isPayoff ? (
+        <>
+          <div className="goal-card-amount">
+            <strong>{formatCents(currentBalance)}</strong>
+            <span className="muted">
+              {' '}balance · target {formatCents(goal.target_amount_cents)}
+            </span>
+          </div>
+          <div
+            className={`progress-track ${pct >= 100 ? 'progress-track-done' : ''}`}
+          >
+            <div
+              className="progress-fill"
+              style={{ width: `${Math.min(100, pct)}%` }}
+            />
+          </div>
+          <div className="muted goal-card-foot">
+            {pct}% paid down · {formatCents(remaining)} to go
+            {paceNote && <> · <strong>{paceNote}</strong></>}
+            {goal.target_utilization_pct !== null &&
+              goal.target_utilization_pct !== undefined && (
+                <> · target {goal.target_utilization_pct}% utilization</>
+              )}
+          </div>
+          <div className="muted small" style={{ marginTop: 8 }}>
+            Linked to {goal.linked_account_ids?.length ?? 0} credit card
+            {(goal.linked_account_ids?.length ?? 0) === 1 ? '' : 's'} ·
+            updates live from balances
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="goal-card-amount">
+            <strong>{formatCents(goal.current_amount_cents)}</strong>
+            <span className="muted">
+              {' '}/ {formatCents(goal.target_amount_cents)}
+            </span>
+          </div>
+          <div
+            className={`progress-track ${pct >= 100 ? 'progress-track-done' : ''}`}
+          >
+            <div
+              className="progress-fill"
+              style={{ width: `${Math.min(100, pct)}%` }}
+            />
+          </div>
+          <div className="muted goal-card-foot">
+            {pct}% complete · {formatCents(remaining)} remaining
+            {paceNote && <> · <strong>{paceNote}</strong></>}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <label
+              className="muted small"
+              style={{ display: 'block', marginBottom: 2 }}
+            >
+              Funded from
+            </label>
+            <select
+              value={goal.account_id ?? ''}
+              onChange={(e) =>
+                onSetAccount(e.target.value === '' ? null : e.target.value)
+              }
+              style={{ fontSize: '0.9em', width: '100%' }}
+              title="Account this goal is funded from; controls which plan's savings suggestion includes it"
+            >
+              <option value="">— No account —</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
     </div>
   );
 }

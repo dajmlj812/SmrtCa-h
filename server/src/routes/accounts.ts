@@ -80,7 +80,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       `SELECT
         a.id, a.name, a.institution, a.type, a.last4, a.currency, a.created_at,
         a.opening_balance_cents, a.opening_balance_date,
-        a.interest_rate_apr, a.min_payment_cents,
+        a.interest_rate_apr, a.min_payment_cents, a.credit_limit_cents,
         (${BALANCE_SELECT})::bigint           AS balance_cents,
         (${HOLDINGS_VALUE})::bigint            AS holdings_value_cents,
         COUNT(t.id)::bigint                    AS transaction_count
@@ -119,7 +119,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         `SELECT a.id, a.name, a.institution, a.type, a.last4, a.currency,
                 a.created_at,
                 a.opening_balance_cents, a.opening_balance_date,
-                a.interest_rate_apr, a.min_payment_cents,
+                a.interest_rate_apr, a.min_payment_cents, a.credit_limit_cents,
                 (${BALANCE_SELECT})::bigint           AS balance_cents,
                 (${HOLDINGS_VALUE})::bigint            AS holdings_value_cents,
                 COUNT(t.id)::bigint                    AS transaction_count
@@ -259,6 +259,26 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         }
         updates.push(`min_payment_cents = $${params.length}`);
       }
+      // 0.22.2 — credit limit (used by payoff goals targeting an
+      // X% utilization ratio). Meaningful on credit_card accounts;
+      // accepted on any row but ignored elsewhere.
+      if (body.credit_limit_cents !== undefined) {
+        if (body.credit_limit_cents === null) {
+          params.push(null);
+        } else {
+          const n =
+            typeof body.credit_limit_cents === 'number'
+              ? body.credit_limit_cents
+              : Number(body.credit_limit_cents);
+          if (!Number.isInteger(n) || n <= 0) {
+            return reply
+              .code(400)
+              .send({ error: 'credit_limit_cents must be a positive integer or null' });
+          }
+          params.push(n);
+        }
+        updates.push(`credit_limit_cents = $${params.length}`);
+      }
 
       if (updates.length === 0) {
         return reply
@@ -275,7 +295,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
           WHERE id = $${idIdx} AND tenant_id = $${tenantIdx}
        RETURNING id, name, institution, type, last4, currency, created_at,
                  opening_balance_cents, opening_balance_date,
-                 interest_rate_apr, min_payment_cents`,
+                 interest_rate_apr, min_payment_cents, credit_limit_cents`,
         params,
       );
       if (result.rowCount === 0) {

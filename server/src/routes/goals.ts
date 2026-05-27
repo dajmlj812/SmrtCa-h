@@ -9,6 +9,11 @@ interface GoalBody {
   currentAmountCents?: unknown;
   targetDate?: unknown;
   accountId?: unknown;
+  // 0.22.2 — payoff-goal inputs.
+  kind?: unknown;
+  initialAmountCents?: unknown;
+  linkedAccountIds?: unknown;
+  targetUtilizationPct?: unknown;
 }
 
 function asString(value: unknown): string {
@@ -32,10 +37,69 @@ function isYmdOrNull(value: unknown): value is string | null {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+/**
+ * 0.22.2 — GOAL_COLUMNS expanded for payoff goals.
+ *
+ * For payoff goals: progress shrinks the balance toward the target,
+ * so display math is (initial - current) / (initial - target).
+ * computed_balance_cents is the live SUM of |balance| across
+ * linked accounts; the UI prefers that over current_amount_cents
+ * for payoff goals so progress reflects new statements
+ * immediately. For savings goals, those new fields are NULL and
+ * progress keeps the original current / target formula.
+ *
+ * Live balance computation uses the same opening_balance +
+ * trailing-txn sum as /api/accounts. For credit cards / loans /
+ * manual liabilities, balances are stored signed-negative under
+ * the 0.20.x liability-sign convention, so ABS() makes the math
+ * always work in positive "amount owed" cents.
+ */
 const GOAL_COLUMNS = `id, name, target_amount_cents, current_amount_cents,
   target_date, account_id, created_at,
-  CASE WHEN target_amount_cents = 0 THEN 0
-       ELSE LEAST(1.0, current_amount_cents::numeric / target_amount_cents)
+  kind, initial_amount_cents, linked_account_ids, target_utilization_pct,
+  CASE
+    WHEN kind = 'payoff'
+      THEN COALESCE((
+        SELECT SUM(ABS(
+          a.opening_balance_cents + COALESCE((
+            SELECT SUM(t.amount_cents) FROM transactions t
+             WHERE t.account_id = a.id
+               AND t.txn_date >= a.opening_balance_date
+          ), 0)
+        ))::bigint
+          FROM accounts a
+         WHERE a.id = ANY(linked_account_ids)
+           AND a.tenant_id = savings_goals.tenant_id
+      ), 0)
+    ELSE NULL
+  END AS computed_balance_cents,
+  CASE
+    WHEN kind = 'payoff' THEN
+      CASE
+        WHEN initial_amount_cents IS NULL
+          OR initial_amount_cents <= target_amount_cents THEN 0
+        ELSE LEAST(1.0,
+          GREATEST(0,
+            (initial_amount_cents::numeric -
+              COALESCE((
+                SELECT SUM(ABS(
+                  a.opening_balance_cents + COALESCE((
+                    SELECT SUM(t.amount_cents) FROM transactions t
+                     WHERE t.account_id = a.id
+                       AND t.txn_date >= a.opening_balance_date
+                  ), 0)
+                ))::bigint
+                  FROM accounts a
+                 WHERE a.id = ANY(linked_account_ids)
+                   AND a.tenant_id = savings_goals.tenant_id
+              ), 0)
+            )::numeric
+              / NULLIF(initial_amount_cents - target_amount_cents, 0)
+          )
+        )
+      END
+    WHEN target_amount_cents = 0 THEN 0
+    ELSE LEAST(1.0, current_amount_cents::numeric / target_amount_cents)
   END AS progress`;
 
 /**
@@ -68,11 +132,25 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
     if (name === '') {
       return reply.code(400).send({ error: 'Name is required' });
     }
-    const target = asPositiveInt(body.targetAmountCents);
+    // 0.22.2 — kind discriminator. Default 'savings' preserves the
+    // existing API for callers that don't know about payoff.
+    const kind = body.kind === 'payoff' ? 'payoff' : 'savings';
+
+    // For savings goals: target must be > 0. For payoff goals:
+    // target is the *target balance to reach* (e.g. $0 to pay off,
+    // or some positive number representing the 30%-utilization
+    // dollar threshold). 0 is valid (full payoff).
+    const target =
+      kind === 'payoff'
+        ? asNonNegativeInt(body.targetAmountCents)
+        : asPositiveInt(body.targetAmountCents);
     if (target === null) {
-      return reply
-        .code(400)
-        .send({ error: 'targetAmountCents must be a positive integer' });
+      return reply.code(400).send({
+        error:
+          kind === 'payoff'
+            ? 'targetAmountCents must be a non-negative integer (target balance)'
+            : 'targetAmountCents must be a positive integer',
+      });
     }
     let current = 0;
     if (body.currentAmountCents !== undefined) {
@@ -95,10 +173,61 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
       if (!ok) return reply.code(400).send({ error: 'Invalid accountId' });
       accountId = body.accountId;
     }
+
+    // 0.22.2 — payoff-specific fields.
+    let initialAmountCents: number | null = null;
+    let linkedAccountIds: string[] | null = null;
+    let targetUtilizationPct: number | null = null;
+    if (kind === 'payoff') {
+      const init = asNonNegativeInt(body.initialAmountCents);
+      if (init === null || init <= target) {
+        return reply.code(400).send({
+          error:
+            'Payoff goals require initialAmountCents > targetAmountCents (otherwise there is nothing to pay down)',
+        });
+      }
+      initialAmountCents = init;
+
+      if (!Array.isArray(body.linkedAccountIds) || body.linkedAccountIds.length === 0) {
+        return reply.code(400).send({
+          error: 'Payoff goals require at least one linked account',
+        });
+      }
+      const accounts: string[] = [];
+      for (const raw of body.linkedAccountIds) {
+        if (typeof raw !== 'string' || !isUuid(raw)) {
+          return reply
+            .code(400)
+            .send({ error: 'linkedAccountIds must be uuids' });
+        }
+        const ok = await assertAccountInTenant(tenantId, raw);
+        if (!ok) {
+          return reply.code(400).send({ error: 'Invalid linkedAccountIds' });
+        }
+        accounts.push(raw);
+      }
+      linkedAccountIds = accounts;
+
+      if (
+        body.targetUtilizationPct !== undefined &&
+        body.targetUtilizationPct !== null
+      ) {
+        const p = Number(body.targetUtilizationPct);
+        if (!Number.isFinite(p) || p < 0 || p > 100) {
+          return reply
+            .code(400)
+            .send({ error: 'targetUtilizationPct must be between 0 and 100' });
+        }
+        targetUtilizationPct = p;
+      }
+    }
+
     const r = await query(
       `INSERT INTO savings_goals
-         (tenant_id, name, target_amount_cents, current_amount_cents, target_date, account_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (tenant_id, name, target_amount_cents, current_amount_cents,
+          target_date, account_id, kind, initial_amount_cents,
+          linked_account_ids, target_utilization_pct)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING ${GOAL_COLUMNS}`,
       [
         tenantId,
@@ -107,6 +236,10 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
         current,
         (body.targetDate as string | null) ?? null,
         accountId,
+        kind,
+        initialAmountCents,
+        linkedAccountIds,
+        targetUtilizationPct,
       ],
     );
     return reply.code(201).send({ goal: r.rows[0] });
@@ -133,11 +266,13 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
         updates.push(`name = $${params.length}`);
       }
       if (body.targetAmountCents !== undefined) {
-        const t = asPositiveInt(body.targetAmountCents);
+        // 0.22.2 — non-negative (was strictly positive) so payoff
+        // goals targeting $0 can be saved.
+        const t = asNonNegativeInt(body.targetAmountCents);
         if (t === null) {
           return reply
             .code(400)
-            .send({ error: 'targetAmountCents must be a positive integer' });
+            .send({ error: 'targetAmountCents must be ≥ 0' });
         }
         params.push(t);
         updates.push(`target_amount_cents = $${params.length}`);

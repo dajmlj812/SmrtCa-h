@@ -15,6 +15,8 @@ export interface Account {
   /** 0.18.6: APR + min payment power the /debt-payoff page. Null when unset. */
   interest_rate_apr: number | null;
   min_payment_cents: number | null;
+  /** 0.22.2: credit limit (cents). Used by payoff goals for utilization-target math. */
+  credit_limit_cents?: number | null;
   /** 0.10.0: balance converted to the global DISPLAY_CURRENCY. */
   display_currency?: string;
   balance_display_cents?: number;
@@ -1032,6 +1034,16 @@ export interface SavingsGoal {
   created_at: string;
   /** Server-computed: current / target, capped at 1. */
   progress: number;
+  /** 0.22.2 — 'savings' (default) or 'payoff' (debt payoff shrinks down). */
+  kind?: 'savings' | 'payoff';
+  /** For payoff: snapshot of total balance at creation time. */
+  initial_amount_cents?: number | null;
+  /** For payoff: credit card accounts the goal tracks. */
+  linked_account_ids?: string[] | null;
+  /** For payoff with utilization-target mode: 0..100 (e.g. 30). */
+  target_utilization_pct?: number | null;
+  /** For payoff: live SUM(|balance|) across linked accounts. */
+  computed_balance_cents?: number | null;
 }
 
 export type BillFrequency =
@@ -1769,6 +1781,8 @@ export interface UpdateAccountInput {
   /** 0.18.6 — debt fields. Null clears. */
   interest_rate_apr?: number | null;
   min_payment_cents?: number | null;
+  /** 0.22.2 — credit limit (cents); null clears. */
+  credit_limit_cents?: number | null;
 }
 
 // 0.18.6 — debt-payoff plan calculator.
@@ -2711,6 +2725,11 @@ export const api = {
     targetDate?: string | null;
     /** 0.17.21 */
     accountId?: string | null;
+    /** 0.22.2 — payoff goal inputs (omit for savings goals). */
+    kind?: 'savings' | 'payoff';
+    initialAmountCents?: number;
+    linkedAccountIds?: string[];
+    targetUtilizationPct?: number | null;
   }) =>
     http<{ goal: SavingsGoal }>('/api/goals', {
       method: 'POST',

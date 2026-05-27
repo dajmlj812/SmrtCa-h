@@ -7,6 +7,7 @@ import {
   type PayoffResponse,
 } from '../api';
 import { formatCents } from '../format';
+import { PayoffGoalModal } from '../components/PayoffGoalModal';
 
 /**
  * 0.18.6 — Debt payoff planning page.
@@ -25,6 +26,11 @@ export function DebtPayoffPage() {
   const [error, setError] = useState<string | null>(null);
   const [strategy, setStrategy] = useState<'snowball' | 'avalanche'>(
     'avalanche',
+  );
+  // 0.22.2 — payoff goal builder, shared with /goals.
+  const [showPayoffGoal, setShowPayoffGoal] = useState(false);
+  const [payoffGoalSuccess, setPayoffGoalSuccess] = useState<string | null>(
+    null,
   );
 
   const debtAccounts = useMemo(
@@ -71,6 +77,7 @@ export function DebtPayoffPage() {
   async function patchAccount(id: string, body: {
     interest_rate_apr?: number | null;
     min_payment_cents?: number | null;
+    credit_limit_cents?: number | null;
   }) {
     try {
       await api.updateAccount(id, body);
@@ -97,7 +104,38 @@ export function DebtPayoffPage() {
             first), computed against your loan and credit-card accounts.
           </div>
         </div>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => setShowPayoffGoal(true)}
+          title='Turn the selected cards into a goal that auto-tracks balance toward $0 or a target utilization %'
+        >
+          💳 Create payoff goal
+        </button>
       </div>
+
+      {showPayoffGoal && (
+        <PayoffGoalModal
+          // Pre-select all current credit-card accounts with a balance
+          // since the user is staring at them on this page.
+          preselectAccountIds={debtAccounts
+            .filter((a) => a.type === 'credit_card')
+            .map((a) => a.id)}
+          onClose={() => setShowPayoffGoal(false)}
+          onCreated={(g) => {
+            setShowPayoffGoal(false);
+            setPayoffGoalSuccess(
+              `Created "${g.name}" — track it on the Goals page.`,
+            );
+          }}
+        />
+      )}
+      {payoffGoalSuccess && (
+        <div className="banner success" style={{ marginBottom: 12 }}>
+          {payoffGoalSuccess}{' '}
+          <Link to="/goals" style={{ marginLeft: 8 }}>Open Goals →</Link>
+        </div>
+      )}
 
       {error && <div className="banner error">{error}</div>}
 
@@ -125,6 +163,12 @@ export function DebtPayoffPage() {
                   <th style={{ textAlign: 'right' }}>Balance</th>
                   <th style={{ textAlign: 'right' }}>APR %</th>
                   <th style={{ textAlign: 'right' }}>Min payment</th>
+                  <th
+                    style={{ textAlign: 'right' }}
+                    title='Credit limit (credit cards only). Used by payoff goals to compute utilization-based targets.'
+                  >
+                    Credit limit
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -173,6 +217,33 @@ export function DebtPayoffPage() {
                           }
                         }}
                       />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {a.type === 'credit_card' ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          defaultValue={
+                            a.credit_limit_cents != null
+                              ? (a.credit_limit_cents / 100).toFixed(2)
+                              : ''
+                          }
+                          placeholder="e.g. 10000.00"
+                          style={{ width: 110, textAlign: 'right' }}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            const next =
+                              v === '' ? null : Math.round(Number(v) * 100);
+                            if (next !== (a.credit_limit_cents ?? null)) {
+                              void patchAccount(a.id, {
+                                credit_limit_cents: next,
+                              });
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="muted small">n/a</span>
+                      )}
                     </td>
                   </tr>
                 ))}
