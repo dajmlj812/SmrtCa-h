@@ -63,15 +63,26 @@ export function GoalTemplatePicker({
   }
 
   if (selected) {
-    // The form always includes an "amount" field — even when the
-    // template text doesn't reference it — because the goal row
-    // needs a positive targetAmountCents to track progress.
-    // Templates like "Pay off all credit card debt" use it as
-    // "what's the balance you're trying to pay off."
+    // Form fields = the union of:
+    //   • 'amount' (always, since the goal row requires a positive
+    //     target amount even when the template text doesn't reference
+    //     a dollar number),
+    //   • every placeholder appearing in the template text,
+    //   • every placeholder with a default in the template — so
+    //     a "by end of next year" / "within 18 months" hint
+    //     baked into the defaults still drives the targetDate.
     const textPlaceholders = placeholdersOf(selected);
-    const placeholders: Placeholder[] = textPlaceholders.includes('amount')
-      ? textPlaceholders
-      : ['amount', ...textPlaceholders];
+    const defaultKeys = Object.keys(selected.defaults ?? {}) as Placeholder[];
+    const ordered: Placeholder[] = [
+      'amount',
+      'months',
+      'years',
+      'age',
+      'pct',
+      'count',
+    ];
+    const wanted = new Set<Placeholder>(['amount', ...textPlaceholders, ...defaultKeys]);
+    const placeholders = ordered.filter((p) => wanted.has(p));
     return (
       <div className="modal-backdrop" role="dialog" aria-modal="true">
         <form className="modal" onSubmit={submit} style={{ maxWidth: 520 }}>
@@ -102,7 +113,7 @@ export function GoalTemplatePicker({
                     [key]: Number.isFinite(v) ? v : undefined,
                   }));
                 }}
-                required={key === 'amount'}
+                required={key === 'amount' || textPlaceholders.includes(key)}
               />
             </div>
           ))}
