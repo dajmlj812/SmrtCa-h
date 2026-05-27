@@ -85,6 +85,10 @@ export function BillsPage() {
     | { kind: 'income'; row: RecurringIncome }
     | null
   >(null);
+  // 0.22.1 — auto-match config modal target (matcher fields).
+  const [autoMatchTarget, setAutoMatchTarget] = useState<Bill | null>(null);
+  // 0.22.1 — pause-until prompt: bill being paused, before they pick a date.
+  const [pausingBill, setPausingBill] = useState<Bill | null>(null);
 
   async function load() {
     setLoading(true);
@@ -246,6 +250,31 @@ export function BillsPage() {
     }
   }
 
+  // 0.22.1 — matcher row actions.
+  async function skipPeriod(id: string) {
+    if (
+      !window.confirm(
+        'Mark this period as skipped and advance to the next cycle?\n\n' +
+          'No payment will be recorded for the current period; the next due date will move forward.',
+      )
+    )
+      return;
+    try {
+      await api.skipBillPeriod(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Skip failed');
+    }
+  }
+  async function unpauseBill(id: string) {
+    try {
+      await api.unpauseBill(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unpause failed');
+    }
+  }
+
   // 0.17.23 — inline frequency editor for bills + income.
   async function setBillFrequency(id: string, frequency: BillFrequency) {
     try {
@@ -384,7 +413,7 @@ export function BillsPage() {
               ...b,
               // Display amount as a negative outflow to match the old table.
               amount_cents: -b.amount_cents,
-              status_label: b.active ? 'Active' : 'Closed',
+              status_label: billStatusLabel(b),
               account_name: accountName(b.account_id),
             }))}
             formatCell={formatTableCell}
@@ -440,6 +469,49 @@ export function BillsPage() {
                       />
                     )}
                   </button>
+                  <button
+                    className="btn-link"
+                    type="button"
+                    onClick={() => setAutoMatchTarget(r)}
+                    title='Configure how the matcher recognizes this bill (vendor pattern, amount mode, tolerances)'
+                  >
+                    Auto-match
+                    {r.merchant_pattern && (
+                      <span
+                        className="badge-dot"
+                        aria-label="matcher configured"
+                      />
+                    )}
+                  </button>
+                  {r.active && r.paused_until ? (
+                    <button
+                      className="btn-link"
+                      type="button"
+                      onClick={() => void unpauseBill(r.id)}
+                      title={`Currently paused until ${formatDate(r.paused_until)}. Click to resume matching.`}
+                    >
+                      Unpause
+                    </button>
+                  ) : r.active ? (
+                    <button
+                      className="btn-link"
+                      type="button"
+                      onClick={() => setPausingBill(r)}
+                      title='Pause matching + overdue alerts until a date'
+                    >
+                      Pause
+                    </button>
+                  ) : null}
+                  {r.active && !r.paused_until && (
+                    <button
+                      className="btn-link"
+                      type="button"
+                      onClick={() => void skipPeriod(r.id)}
+                      title='Skip this period and advance to next due date'
+                    >
+                      Skip period
+                    </button>
+                  )}
                   <button
                     className="btn-link"
                     type="button"
@@ -589,6 +661,295 @@ export function BillsPage() {
           onChanged={() => void load()}
         />
       )}
+      {autoMatchTarget && (
+        <AutoMatchConfigModal
+          bill={autoMatchTarget}
+          onClose={() => setAutoMatchTarget(null)}
+          onSaved={(updated) => {
+            setAutoMatchTarget(null);
+            setBills((prev) =>
+              prev.map((b) => (b.id === updated.id ? updated : b)),
+            );
+          }}
+        />
+      )}
+      {pausingBill && (
+        <PauseBillModal
+          bill={pausingBill}
+          onClose={() => setPausingBill(null)}
+          onPaused={() => {
+            setPausingBill(null);
+            void load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 0.22.1 — label for the Status column on the bills list. The
+ * existing logic only checked active vs closed; with the matcher
+ * landed we also surface paused bills explicitly so the user
+ * doesn't wonder why a bill stopped auto-matching.
+ */
+function billStatusLabel(bill: Bill): string {
+  if (!bill.active) return 'Closed';
+  if (bill.paused_until) {
+    return `Paused until ${formatDate(bill.paused_until)}`;
+  }
+  return 'Active';
+}
+
+/**
+ * 0.22.1 — date prompt for indefinite pause. The user picks a
+ * resume date; until that day, the matcher skips this bill and
+ * overdue alerts are suppressed.
+ */
+function PauseBillModal({
+  bill,
+  onClose,
+  onPaused,
+}: {
+  bill: Bill;
+  onClose: () => void;
+  onPaused: () => void;
+}) {
+  // Default to 30 days out so a user who just hits "Save" gets
+  // something sensible without picking a date.
+  const [until, setUntil] = useState(() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.pauseBill(bill.id, until);
+      onPaused();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Pause failed');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <header className="modal-header">
+          <h2>Pause {bill.name}</h2>
+          <button className="modal-close" type="button" onClick={onClose}>✕</button>
+        </header>
+        <form onSubmit={submit}>
+          {error && <div className="banner error">{error}</div>}
+          <p className="muted small">
+            While paused, the matcher won't try to link transactions to this
+            bill, and overdue alerts are suppressed. Resume any time with the
+            Unpause button.
+          </p>
+          <div className="field">
+            <label htmlFor="pause-until">Resume on</label>
+            <input
+              id="pause-until"
+              type="date"
+              value={until}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setUntil(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button type="button" className="btn secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn" disabled={submitting}>
+              {submitting ? 'Pausing…' : 'Pause'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 0.22.1 — per-bill auto-match config. Exposes the matcher fields
+ * that don't fit on the row (merchant pattern, amount mode, match
+ * window, overdue grace). Saving PATCHes the bill; the row reloads
+ * on success so badges + status_label refresh immediately.
+ */
+function AutoMatchConfigModal({
+  bill,
+  onClose,
+  onSaved,
+}: {
+  bill: Bill;
+  onClose: () => void;
+  onSaved: (updated: Bill) => void;
+}) {
+  const [merchantPattern, setMerchantPattern] = useState(
+    bill.merchant_pattern ?? '',
+  );
+  const [amountMode, setAmountMode] = useState<'fixed' | 'drift' | 'variable'>(
+    bill.amount_mode ?? 'fixed',
+  );
+  const [toleranceDollars, setToleranceDollars] = useState(
+    bill.amount_tolerance_cents != null
+      ? (bill.amount_tolerance_cents / 100).toFixed(2)
+      : '',
+  );
+  const [matchWindowDays, setMatchWindowDays] = useState(
+    String(bill.match_window_days ?? 7),
+  );
+  const [overdueGraceDays, setOverdueGraceDays] = useState(
+    String(bill.overdue_grace_days ?? 3),
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const patch: Parameters<typeof api.updateBill>[1] = {
+        merchantPattern: merchantPattern.trim() === '' ? null : merchantPattern.trim(),
+        amountMode,
+        matchWindowDays: Number(matchWindowDays),
+        overdueGraceDays: Number(overdueGraceDays),
+      };
+      if (amountMode === 'variable') {
+        const t = Math.round(Number(toleranceDollars) * 100);
+        if (!Number.isFinite(t) || t <= 0) {
+          throw new Error('Variable mode needs an absolute $ cap > 0');
+        }
+        patch.amountToleranceCents = t;
+      } else {
+        // Clear the cap so it's not stale if the user re-toggles modes.
+        patch.amountToleranceCents = null;
+      }
+      const updated = await api.updateBill(bill.id, patch);
+      onSaved(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <header className="modal-header">
+          <h2>Auto-match config — {bill.name}</h2>
+          <button className="modal-close" type="button" onClick={onClose}>✕</button>
+        </header>
+        <form onSubmit={submit}>
+          {error && <div className="banner error">{error}</div>}
+          <div className="field">
+            <label htmlFor="am-pattern">Merchant pattern</label>
+            <input
+              id="am-pattern"
+              type="text"
+              value={merchantPattern}
+              onChange={(e) => setMerchantPattern(e.target.value)}
+              placeholder="e.g. NETFLIX or 'Energy Co'"
+              autoFocus
+            />
+            <div className="muted small" style={{ marginTop: 4 }}>
+              Case-insensitive substring matched against the bank's transaction
+              description. Leave blank to disable auto-matching for this bill.
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="am-mode">Amount mode</label>
+            <select
+              id="am-mode"
+              value={amountMode}
+              onChange={(e) =>
+                setAmountMode(e.target.value as 'fixed' | 'drift' | 'variable')
+              }
+            >
+              <option value="fixed">Fixed — same amount every cycle (±$1 / 2%)</option>
+              <option value="drift">Drifts — slowly changes (trailing 3-mo avg ±10%)</option>
+              <option value="variable">Variable — widely fluctuates (absolute $ cap)</option>
+            </select>
+            <div className="muted small" style={{ marginTop: 4 }}>
+              {amountMode === 'fixed' && (
+                <>Use for Netflix, gym, mortgage — anything billed at the same number.</>
+              )}
+              {amountMode === 'drift' && (
+                <>Use when the price creeps over time (car wash, streaming hikes).</>
+              )}
+              {amountMode === 'variable' && (
+                <>Use for utilities that swing month over month.</>
+              )}
+            </div>
+          </div>
+          {amountMode === 'variable' && (
+            <div className="field">
+              <label htmlFor="am-tol">
+                Absolute cap ($)
+              </label>
+              <input
+                id="am-tol"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={toleranceDollars}
+                onChange={(e) => setToleranceDollars(e.target.value)}
+                placeholder="500.00"
+                required
+              />
+              <div className="muted small" style={{ marginTop: 4 }}>
+                The most you'd ever expect to see from this vendor in one
+                cycle. Charges above this are NOT auto-linked.
+              </div>
+            </div>
+          )}
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="am-window">Match window (± days)</label>
+              <input
+                id="am-window"
+                type="number"
+                min="1"
+                max="30"
+                step="1"
+                value={matchWindowDays}
+                onChange={(e) => setMatchWindowDays(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="am-grace">Overdue grace (days)</label>
+              <input
+                id="am-grace"
+                type="number"
+                min="0"
+                max="30"
+                step="1"
+                value={overdueGraceDays}
+                onChange={(e) => setOverdueGraceDays(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button type="button" className="btn secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn" disabled={submitting}>
+              {submitting ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

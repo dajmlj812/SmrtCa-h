@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../api';
 import { BillsPage } from './BillsPage';
 import { SubscriptionsPage } from './SubscriptionsPage';
 import { BillTriageQueue } from '../components/BillTriageQueue';
@@ -41,9 +42,87 @@ export function RecurringPage() {
     navigate(`/recurring${q ? `?${q}` : ''}`, { replace: true });
   }
 
+  // 0.22.1 — banner shown after a Rescan or Sweep action so the
+  // user sees what the engine did without surprising them with a
+  // silent reload.
+  const [actionBanner, setActionBanner] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<'rescan' | 'sweep' | null>(null);
+  // Bumping this counter triggers BillTriageQueue to reload, so a
+  // Rescan that lands new triage rows shows them immediately.
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const rescan = useCallback(async () => {
+    setActionBusy('rescan');
+    setActionBanner(null);
+    try {
+      const r = await api.rescanBills();
+      setActionBanner(
+        `Rescanned ${r.scanned} transactions — ${r.matched} auto-matched, ${r.triaged} sent to triage.`,
+      );
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setActionBanner(
+        `Rescan failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setActionBusy(null);
+    }
+  }, []);
+
+  const sweep = useCallback(async () => {
+    setActionBusy('sweep');
+    setActionBanner(null);
+    try {
+      const r = await api.sweepOverdueBills();
+      setActionBanner(
+        r.flipped > 0
+          ? `Flipped ${r.flipped} past-due bill${r.flipped === 1 ? '' : 's'} to overdue.`
+          : 'No bills past due grace window.',
+      );
+    } catch (e) {
+      setActionBanner(
+        `Sweep failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setActionBusy(null);
+    }
+  }, []);
+
   return (
     <div>
-      <BillTriageQueue />
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        <button
+          className="btn secondary"
+          type="button"
+          onClick={() => void rescan()}
+          disabled={actionBusy !== null}
+          title="Re-check the last 90 days of transactions against the bill set. Useful after editing a bill's merchant pattern or amount mode."
+        >
+          {actionBusy === 'rescan' ? 'Rescanning…' : 'Rescan transactions'}
+        </button>
+        <button
+          className="btn secondary"
+          type="button"
+          onClick={() => void sweep()}
+          disabled={actionBusy !== null}
+          title="Force the overdue sweep right now instead of waiting for the hourly tick."
+        >
+          {actionBusy === 'sweep' ? 'Sweeping…' : 'Sweep overdue'}
+        </button>
+      </div>
+      {actionBanner && (
+        <div className="banner info" style={{ marginBottom: 12 }}>
+          {actionBanner}
+        </div>
+      )}
+      <BillTriageQueue key={refreshKey} />
       <div
         className="tab-strip"
         role="tablist"
