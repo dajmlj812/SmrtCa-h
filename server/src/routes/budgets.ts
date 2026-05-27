@@ -704,14 +704,28 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
         actual_cents: number;
       }> = [];
 
+      // 0.21.x — when the budget month is in the future, every
+      // category row's actual is naturally 0 (no transactions
+      // yet). Bill rows used to short-circuit to
+      // actual = budgeted (assumes paid on schedule) which is
+      // very wrong for a future-month forecast. We now treat
+      // bill rows the same as category rows for actuals when
+      // the period is in the future, so a freshly-seeded July
+      // budget shows $0 spent across the board.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const isFutureMonth = monthStart > todayStr;
       for (const g of groups.values()) {
         let actualCents: number;
         if (g.bill_id !== null) {
-          // Bills are recurring + fixed; assume the budgeted
-          // amount equals the actual (the user wired up
-          // auto-pay or pays on schedule). Wrong-but-useful
-          // until we add per-bill transaction matching.
-          actualCents = g.budgeted_cents;
+          if (isFutureMonth) {
+            actualCents = 0;
+          } else {
+            // Past / current month: assume the budgeted amount
+            // equals the actual (the user wired up auto-pay or
+            // pays on schedule). Wrong-but-useful until we add
+            // per-bill transaction matching.
+            actualCents = g.budgeted_cents;
+          }
         } else if (g.category_id !== null) {
           const r = await query<{ total: number }>(
             `SELECT COALESCE(SUM(-l.amount_cents), 0)::bigint AS total
