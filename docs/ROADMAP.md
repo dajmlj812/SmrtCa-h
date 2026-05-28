@@ -44,7 +44,9 @@ application — nothing is "all or nothing."
 | **0.20.x** | **Agentic AI moat — proactive insights, staged actions, voice** | ✅ Complete — 2026-05-26 |
 | **0.21.x** | **Universal customer asks competitors haven't delivered** | ✅ Complete — 2026-05-27 |
 | **0.22.x** | **Production launch readiness — Stripe live, ToS, observability** | ✅ Complete — 2026-05-24 |
-| **0.23.x** | **Scaling — vertical upgrade runbook + horizontal architecture (read replicas, multi-instance app, object-store attachments)** | 📋 Planned |
+| **0.24.x** | **Scenario expansion — hub + 13 scenarios + 11 reports + editable mileage rates + daily anomaly scan** | ✅ Complete — 2026-05-27 |
+| **0.25.x** | **Credit-score + retirement scenarios — needs new model layers (score-band, Monte Carlo / withdrawal)** | 📋 Planned (next up after 0.24.x) |
+| **0.26.x** | **Scaling — vertical upgrade runbook + horizontal architecture (read replicas, multi-instance app, object-store attachments)** | 📋 Planned (renumbered from 0.23.x; feature work prioritized first) |
 
 Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog
 
@@ -978,115 +980,54 @@ version bump:
 
 ---
 
-## 0.23.x — Scaling 📋
-
-**Goal:** Stop reaching for "stand up a new server" as the answer to "we're running out of capacity." Build the runbook for vertical upgrades and the architecture for horizontal scale so growth doesn't require an emergency migration.
-
-The trigger for this series is the **/health → Server capacity** widget (0.18.13). Once that widget says "prepare a replacement environment by [date]," we want the migration to be a 1-hour boring procedure, not a project.
-
-### 0.23.0 — Vertical-scale runbook ⬆️
-
-Document and rehearse the cheapest answer to "we need more capacity": **bigger box.** Until traffic justifies the architectural complexity of horizontal scale, vertical is the right move.
-
-Deliverables:
-- `docs/RUNBOOK_VERTICAL_SCALE.md` — step-by-step for moving SmrtCash to a beefier VM with minimal downtime:
-  - Pre-flight: take a backup (`scripts/backup.mjs`), confirm `health-capacity` projection vs. the new VM's capacity ceiling, schedule maintenance window.
-  - Provision the new VM (CPU/RAM/disk sized to the next 12 months of projected growth + 50% headroom).
-  - Sync: copy `/data` via rsync while the old box is still serving, then short maintenance window for final delta + DB freeze.
-  - DNS swap via Cloudflare (low TTL ahead of time).
-  - Verification: hit `/api/health`, walk a smoke checklist (login, dashboard, attach receipt, run scan, sync transactions, view Stripe portal).
-  - Rollback: keep the old VM warm for 24h.
-- **Reusable migration script** at `scripts/migrate-server.sh` that rolls those steps into one prompt-driven flow.
-- **Capacity ceiling estimates** documented per Hostinger VM tier (or chosen host's equivalent) so the operator knows when the next-bigger tier still won't be enough.
-
-Expected lifespan of vertical-only scaling: probably good through low-thousands of paying tenants. Beyond that → 0.23.1+.
-
-### 0.23.1 — Stateless app + shared session store ↔️
-
-Today the app is single-instance: one container, in-memory rate limit state, file-system attachments. Sharing instances behind a load balancer requires eliminating per-instance state.
-
-Deliverables:
-- **Redis (or Valkey) integration** for the rolling rate-limit counters (when F-01 lands those — see security audit), the OCR retry queue, and any short-lived process-bound state.
-- **Sessions stay in Postgres** (already there — `sessions` table). No change needed; this slice is mostly about NOT introducing new instance-local state going forward.
-- **Health-check endpoint** that returns 200 once the app is ready to accept traffic and 503 during startup migrations. Required for a load balancer to do anything sensible during deploys.
-- **Multi-instance Docker compose** sample at `docker-compose.scale.yml` showing N app containers behind an Nginx LB on a single host — the "scale up before scale out" intermediate step.
-
-### 0.23.2 — Attachments to object storage 📦
-
-Today receipts live on the app's local filesystem encrypted with the per-tenant DEK. That's a hard ceiling on horizontal scale because every app instance needs the same files.
-
-Deliverables:
-- **S3-compatible client** (R2 / Backblaze B2 / Wasabi / actual AWS S3) behind a small adapter — the encryption layer stays in our process; the storage layer just gets a new backend.
-- **Migration script** `scripts/migrate-attachments-to-s3.mjs` that walks `/data/attachments`, uploads each file as `<bucket>/<tenant_id>/<attachment_id>`, verifies the upload, then deletes the local file. Resumable.
-- **Setting**: `ATTACHMENT_STORAGE=local|s3` with `S3_*` config keys. Defaults to `local` so self-host installs aren't surprised.
-- **Backup script** updates: when `ATTACHMENT_STORAGE=s3`, backups skip the attachments tar and the operator relies on S3 lifecycle/versioning for that side.
-- **F-31 hardening**: container can finally run with `read-only` rootfs since attachments no longer write to the local FS.
-
-### 0.23.3 — Postgres read replica + connection pooling 📊
-
-Once we're running N app instances, the DB becomes the next bottleneck. Two moves:
-
-Deliverables:
-- **PgBouncer** in front of Postgres (transaction-mode pooling) so app instances don't each consume a fan-out of long-held connections.
-- **Read-replica routing** — a `pool.replicaQuery()` helper that targets a read-only Postgres replica for the dashboard, reports, and assistant read tools. Writes still go to the primary. Transparent to the rest of the codebase because we wrap the existing `pool.query()` with the replica choice at the call site.
-- **Replica lag awareness** — if the replica is more than 30s behind, fall back to the primary so the user never sees stale data.
-- **Documentation** at `docs/RUNBOOK_HORIZONTAL_SCALE.md` covering the cutover.
-
-### 0.23.4 — Multi-region (optional, customer-driven) 🌎
-
-Probably 2027+. Only worth doing once we have measurable EU/AU/AP customer base. Sketch only:
-- Postgres logical replication across regions
-- S3 cross-region replication (or per-region buckets)
-- Latency-based DNS routing
-- Per-region data residency for GDPR (revisit F-33's deferred-EU decision when we get here)
-
-### What's deliberately out of scope (and why)
-
-- **Sharding Postgres**. Useless at SmrtCash's scale and a constant complexity tax. Don't go there unless we see >100M txn rows per tenant (Personal Finance Lover's Million-Row Power User is a real edge case but not a planning constraint).
-- **Microservices**. The monolith is right for this product. Splitting `assistant` or `billing` into separate services would multiply the deploy surface for no real isolation benefit — they all share the same tenant data anyway.
-- **Server-side rendering**. The PWA model works for personal finance. SSR would add a node runtime in front of the static SPA assets for no measurable benefit.
-
----
-
-## 0.24.x — Scenario expansion 📋
+## 0.24.x — Scenario expansion ✅
 
 **Goal:** Turn `/scenarios` from a one-trick cash-flow projector into a real life-planning surface. Users come in with specific questions — "should I bump my 401(k)?", "what if we have a kid?", "is a balance transfer worth it?" — and walk out with a numeric answer they can lean on. Each scenario type is its own form + calculator + result panel under a shared hub UI.
 
-### 0.24.0 — Scenario hub refactor 🧱
+Shipped 2026-05-27.
 
-Refactor `/scenarios` into a hub that lists available scenario types and routes each to its own input/result view. The existing cash-flow-with-deltas scenario keeps working (becomes the "Cash-flow stress test" entry). Shared chrome (page header, history of saved scenarios, share-result link).
+### 0.24.0 — Scenario hub refactor 🧱 ✅
 
-### 0.24.1 — Wealth-building scenarios 📈
+Refactored `/scenarios` into a hub that lists available scenario types and routes each to its own input/result view. The existing cash-flow-with-deltas scenario keeps working (became the "Cash-flow stress test" entry). Per-scenario inputs persist when switching between scenarios.
 
-- **Invest $X/mo for Y years at Z%** — compounding curve, tax-deferred vs taxable side-by-side, ending portfolio value.
-- **Bump 401(k) to N%** — take-home delta this year, retirement balance delta at 65, employer-match capture.
-- **Windfall split** — split a bonus / refund / inheritance between debt payoff, emergency fund, and invest; show 5/10/20-year impact of each split.
-- **FIRE date** — given save rate + spend, project when the portfolio covers annual expenses at a 4% / 3% withdrawal.
+### 0.24.1 — Wealth-building scenarios 📈 ✅
 
-### 0.24.2 — Debt-payoff scenarios 💸
+- **Invest $X/mo for Y years at Z%** — compounding curve, tax-deferred vs taxable side-by-side.
+- **Bump 401(k) to N%** — take-home delta, tax savings, retirement-balance delta, employer-match warning.
+- **Windfall split** — bonus / refund / inheritance: emergency + debt + invest split with N-year impact.
+- **FIRE date** — given save rate + spend, years until portfolio covers SWR.
 
-- **Add $X/mo extra** — promotion of the existing /debt-payoff control into a saved/shareable scenario.
-- **Balance transfer at N% APR for M months** — interest saved vs transfer fee, payoff date.
-- **Consolidate at one rate** (HELOC / personal loan) — total cost + payoff date vs current trajectory.
-- **Biweekly mortgage** — years shaved, interest saved, side-by-side schedule.
+### 0.24.2 — Debt-payoff scenarios 💸 ✅
 
-### 0.24.3 — Life-event scenarios 🌱
+- **Add $X/mo extra payment** — time + interest saved.
+- **Balance transfer offer** — promo APR + transfer fee vs current APR.
+- **Consolidate at one rate** — multi-debt list rolled into a single loan.
+- **Biweekly mortgage** — years shaved + interest saved.
 
-The most engaging category — users come for these.
+### 0.24.3 — Life-event scenarios 🌱 ✅
 
-- **Have a kid** — childcare/baby spend bump, 529 ramp, tax credit hit, 1-year and 5-year cash-flow impact.
-- **Buy a house** — given target purchase price, model affordable mortgage from DTI + savings rate + current debt; show monthly payment, opportunity cost vs renting.
-- **Job change** — salary delta, relocation cost, retirement-account portability, projected 5-year net-worth divergence.
-- **Sabbatical / income loss** — emergency-fund runway, return-to-work recovery curve, what-it-costs to plan a 6-month break.
-- **Recession** (income −X% for N months) — stress-test the next 24 months, where the budget breaks first.
+- **Have a kid** — childcare + 529 + tax credit, year 1 / 5 / 18.
+- **Buy a house** — PITI breakdown, front/back-end DTI, lender-comfort verdict.
+- **Job change** — total comp delta (salary + benefits + match) adjusted for COL, N-year net.
+- **Sabbatical / income loss** — runway, end-of-break cash, rebuild timeline.
+- **Recession / income shock** — stress-test with belt-tightening response, breakpoint month.
+
+### Follow-on slices that landed in the same arc
+
+- **0.24.4** — 11 new reports (year-over-year by category, MoM movers, day-of-week pattern, tax-deductible YTD, savings rate by month, income sources, first-time merchants, refunds YTD, bill price drift, debt balance by month, average txn by category).
+- **0.24.5** — editable per-tenant IRS mileage rates (was hardcoded; now per-year editable from `/mileage`).
+- **0.24.6** — daily anomaly scan riding the insights scheduler.
+- **0.24.7** — date-picker indicator visible in dark mode (replaced native glyph with theme-aware SVG).
+- **0.24.8** — pill backgrounds adapt to dark mode (theme vars instead of hardcoded hex).
+- **0.24.9** — error-handler tolerates non-string `err.code`; portability export tar flag fix.
 
 ### Implementation notes
 
-Each scenario type lives in `web/src/scenarios/<type>/` with three exports: `<Type>Form`, `<Type>Calculator` (pure function, deterministic, no API), and `<Type>Result`. The hub maps a scenario id to those three. Server endpoints are only needed for scenarios that require historical data (e.g. baseline cash flow); the rest run client-side so they're snappy and shareable via URL params.
+Each scenario type lives in `web/src/scenarios/<id>.tsx` and exports a `ScenarioDef`: id, title, subtitle, category, defaults, Form, Result. Calculations are pure functions (no API) for every scenario except cash-flow-stress, which needs `/api/cash-flow` baseline.
 
 ---
 
-## 0.25.x — Credit score + retirement scenarios 📋
+## 0.25.x — Credit-score + retirement scenarios 📋
 
 Deferred from 0.24.x because both need model layers we don't have yet.
 
@@ -1111,6 +1052,78 @@ Once we have a real return-assumption model + withdrawal model:
 - **Roth conversion ladder** — convert $X/yr from traditional, tax cost vs RMD reduction at 73.
 
 Depends on us having a real Monte Carlo or sequence-of-returns engine, not just compounding curves. Deferred until we know what we want there.
+
+---
+
+## 0.26.x — Scaling 📋
+
+> **Sequencing note:** Originally drafted as 0.23.x (the next arc after 0.22.x), renumbered to 0.26.x because feature work (0.24.x scenarios shipped, 0.25.x credit/retirement next) is taking priority — we're still nowhere near the capacity ceiling that justifies architectural moves.
+
+**Goal:** Stop reaching for "stand up a new server" as the answer to "we're running out of capacity." Build the runbook for vertical upgrades and the architecture for horizontal scale so growth doesn't require an emergency migration.
+
+The trigger for this series is the **/health → Server capacity** widget (0.18.13). Once that widget says "prepare a replacement environment by [date]," we want the migration to be a 1-hour boring procedure, not a project.
+
+### 0.26.0 — Vertical-scale runbook ⬆️
+
+Document and rehearse the cheapest answer to "we need more capacity": **bigger box.** Until traffic justifies the architectural complexity of horizontal scale, vertical is the right move.
+
+Deliverables:
+- `docs/RUNBOOK_VERTICAL_SCALE.md` — step-by-step for moving SmrtCash to a beefier VM with minimal downtime:
+  - Pre-flight: take a backup (`scripts/backup.mjs`), confirm `health-capacity` projection vs. the new VM's capacity ceiling, schedule maintenance window.
+  - Provision the new VM (CPU/RAM/disk sized to the next 12 months of projected growth + 50% headroom).
+  - Sync: copy `/data` via rsync while the old box is still serving, then short maintenance window for final delta + DB freeze.
+  - DNS swap via Cloudflare (low TTL ahead of time).
+  - Verification: hit `/api/health`, walk a smoke checklist (login, dashboard, attach receipt, run scan, sync transactions, view Stripe portal).
+  - Rollback: keep the old VM warm for 24h.
+- **Reusable migration script** at `scripts/migrate-server.sh` that rolls those steps into one prompt-driven flow.
+- **Capacity ceiling estimates** documented per Hostinger VM tier (or chosen host's equivalent) so the operator knows when the next-bigger tier still won't be enough.
+
+Expected lifespan of vertical-only scaling: probably good through low-thousands of paying tenants. Beyond that → 0.26.1+.
+
+### 0.26.1 — Stateless app + shared session store ↔️
+
+Today the app is single-instance: one container, in-memory rate limit state, file-system attachments. Sharing instances behind a load balancer requires eliminating per-instance state.
+
+Deliverables:
+- **Redis (or Valkey) integration** for the rolling rate-limit counters (when F-01 lands those — see security audit), the OCR retry queue, and any short-lived process-bound state.
+- **Sessions stay in Postgres** (already there — `sessions` table). No change needed; this slice is mostly about NOT introducing new instance-local state going forward.
+- **Health-check endpoint** that returns 200 once the app is ready to accept traffic and 503 during startup migrations. Required for a load balancer to do anything sensible during deploys.
+- **Multi-instance Docker compose** sample at `docker-compose.scale.yml` showing N app containers behind an Nginx LB on a single host — the "scale up before scale out" intermediate step.
+
+### 0.26.2 — Attachments to object storage 📦
+
+Today receipts live on the app's local filesystem encrypted with the per-tenant DEK. That's a hard ceiling on horizontal scale because every app instance needs the same files.
+
+Deliverables:
+- **S3-compatible client** (R2 / Backblaze B2 / Wasabi / actual AWS S3) behind a small adapter — the encryption layer stays in our process; the storage layer just gets a new backend.
+- **Migration script** `scripts/migrate-attachments-to-s3.mjs` that walks `/data/attachments`, uploads each file as `<bucket>/<tenant_id>/<attachment_id>`, verifies the upload, then deletes the local file. Resumable.
+- **Setting**: `ATTACHMENT_STORAGE=local|s3` with `S3_*` config keys. Defaults to `local` so self-host installs aren't surprised.
+- **Backup script** updates: when `ATTACHMENT_STORAGE=s3`, backups skip the attachments tar and the operator relies on S3 lifecycle/versioning for that side.
+- **F-31 hardening**: container can finally run with `read-only` rootfs since attachments no longer write to the local FS.
+
+### 0.26.3 — Postgres read replica + connection pooling 📊
+
+Once we're running N app instances, the DB becomes the next bottleneck. Two moves:
+
+Deliverables:
+- **PgBouncer** in front of Postgres (transaction-mode pooling) so app instances don't each consume a fan-out of long-held connections.
+- **Read-replica routing** — a `pool.replicaQuery()` helper that targets a read-only Postgres replica for the dashboard, reports, and assistant read tools. Writes still go to the primary. Transparent to the rest of the codebase because we wrap the existing `pool.query()` with the replica choice at the call site.
+- **Replica lag awareness** — if the replica is more than 30s behind, fall back to the primary so the user never sees stale data.
+- **Documentation** at `docs/RUNBOOK_HORIZONTAL_SCALE.md` covering the cutover.
+
+### 0.26.4 — Multi-region (optional, customer-driven) 🌎
+
+Probably 2027+. Only worth doing once we have measurable EU/AU/AP customer base. Sketch only:
+- Postgres logical replication across regions
+- S3 cross-region replication (or per-region buckets)
+- Latency-based DNS routing
+- Per-region data residency for GDPR (revisit F-33's deferred-EU decision when we get here)
+
+### What's deliberately out of scope (and why)
+
+- **Sharding Postgres**. Useless at SmrtCash's scale and a constant complexity tax. Don't go there unless we see >100M txn rows per tenant (Personal Finance Lover's Million-Row Power User is a real edge case but not a planning constraint).
+- **Microservices**. The monolith is right for this product. Splitting `assistant` or `billing` into separate services would multiply the deploy surface for no real isolation benefit — they all share the same tenant data anyway.
+- **Server-side rendering**. The PWA model works for personal finance. SSR would add a node runtime in front of the static SPA assets for no measurable benefit.
 
 ---
 
