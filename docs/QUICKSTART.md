@@ -1,76 +1,61 @@
 # SmrtCash — Quick Start
 
-Get SmrtCash running and import your first statement in about five minutes.
-For a fuller walkthrough see the [Installation Guide](./INSTALLATION.md).
+Create your account and see where your money goes in about five minutes.
+SmrtCash is a hosted service — there's nothing to install.
 
-## Prerequisites
+## 1. Create your account
 
-- **Node.js 20+** and **Docker** installed and running.
+1. Go to **[smrtcash.builditsmrt.com](https://smrtcash.builditsmrt.com)**.
+2. Click **Sign up**, enter your email, and set a password.
+3. Check your inbox for the verification email and click the link.
 
-## 1. Configure
+Your **14-day free trial** starts automatically — no credit card required up
+front.
 
-From the project root, create your local config file:
+## 2. Add an account
 
-```powershell
-# PowerShell (Windows)
-Copy-Item .env.example .env
-```
-```sh
-# macOS / Linux
-cp .env.example .env
-```
+1. Click **New Account** — give it a name, pick a type (e.g. *Credit Card*,
+   *Checking*, *Savings*), and save.
 
-The defaults work for local development as-is.
+## 3. Get your transactions in
 
-## 2. Start everything
+You have two ways to bring transactions in:
 
-```powershell
-# Start the PostgreSQL database
-docker compose -p smrtcash up -d db
+**Connect a bank (fastest):**
 
-# Install dependencies
-npm install --prefix server
-npm install --prefix web
+1. Go to **Connections**.
+2. Link your bank — transactions sync automatically and keep refreshing on a
+   schedule.
 
-# Create the database tables
-npm run migrate --prefix server
-```
+**Or import a statement:**
 
-Now start the two dev servers — **each in its own terminal**:
-
-```powershell
-# Terminal 1 — API
-npm run dev --prefix server
-
-# Terminal 2 — Web app
-npm run dev --prefix web
-```
-
-## 3. Open the app
-
-Go to **http://localhost:5173**.
-
-## 4. Import your first statement
-
-1. Click **New Account** — give it a name, pick a type (e.g. *Credit Card*),
-   and save.
-2. Go to the **Import** tab.
-3. Choose the account you just created.
-4. Select a CSV or Excel statement export from your bank.
-5. SmrtCash detects the format and shows a **preview** — number of rows, a
+1. Go to the **Import** tab.
+2. Choose the account you created.
+3. Select a CSV or Excel statement export from your bank.
+4. SmrtCash detects the format and shows a **preview** — number of rows, a
    sample, and any problems.
-6. Click **Import** to save the transactions.
-7. Open the **Transactions** tab to see them.
+5. Click **Import** to save the transactions.
 
 Re-importing the same file is safe — duplicates are skipped automatically.
+
+## 4. Let it work for you
+
+Once transactions are in, SmrtCash starts doing the heavy lifting:
+
+- **AI cleans up** messy bank descriptions and categorizes spending.
+- **The bill matcher** links recurring charges to your bills automatically.
+- **Budgets, goals, and scenarios** turn your data into decisions.
+
+Open the **Dashboard** to see the picture come together.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| `docker compose` fails | Make sure Docker Desktop is running |
-| API won't start | Confirm Postgres is up: `docker ps`; check `.env` |
-| "Could not recognize this file's format" | Use a CSV export; other banks may need column mapping (see [Documentation](./DOCUMENTATION.md#7-the-import-pipeline)) |
-| Port already in use | Change `PORT` in `.env`, or free port 5173/4000 |
+| Didn't get the verification email | Check spam; request a new link from the sign-in page |
+| "Could not recognize this file's format" | Use a CSV export from your bank; some banks need a one-time column mapping (the import wizard walks you through it) |
+| Bank won't connect | Some institutions need OFX Direct Connect instead of the default aggregator — see the in-app Connections help |
+| Forgot your password | Use **Forgot password** on the sign-in screen — you'll get a reset link |
 
-More help: [Admin Guide](./ADMIN_GUIDE.md) · [Known Issues](./KNOWN_ISSUES.md)
+More help: open a ticket at **support@builditsmrt.com** or use the in-app
+**Help & feature requests** link.

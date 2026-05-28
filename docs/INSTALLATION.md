@@ -1,11 +1,16 @@
 # SmrtCash — Installation Guide
 
-A complete, step-by-step setup for a development / self-hosted installation.
-For the condensed version, see the [Quick Start](./QUICKSTART.md).
+> ⚠️ **DEPRECATED — self-hosting is no longer supported.**
+> SmrtCash is now a managed SaaS. Customers should sign up at
+> **[smrtcash.builditsmrt.com](https://smrtcash.builditsmrt.com)** — there is
+> nothing to install. This document is retained **internal-only** as an
+> operator reference for standing up the hosted service and for local
+> contributor development; see [SaaS Deploy](./SAAS_DEPLOY.md) and the
+> [Operator Runbook](./OPERATOR_RUNBOOK.md) for the current operator
+> procedures. It is **not** published to the public docs site.
 
-> **Phase 1 note:** SmrtCash currently runs as a PostgreSQL container plus two
-> local dev servers (API and web). Full single-command containerization
-> arrives in Phase 5 — see the [Roadmap](./ROADMAP.md).
+The historical self-host setup steps below are kept for contributor
+local-dev reference only.
 
 ---
 

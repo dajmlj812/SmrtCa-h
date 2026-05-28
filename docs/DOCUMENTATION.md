@@ -1,28 +1,31 @@
 # SmrtCash — General Documentation
 
-Technical reference for the SmrtCash application as of **Phase 1**.
+Technical reference for the SmrtCash application.
 
 - New here? Start with the [Quick Start](./QUICKSTART.md).
-- Setting it up properly? See the [Installation Guide](./INSTALLATION.md).
-- Running it day to day? See the [Admin Guide](./ADMIN_GUIDE.md).
+- Want to know what it does? See the [Feature List](./FEATURES.md).
+
+> SmrtCash is a hosted SaaS operated by BuildITSmrt, LLC. The
+> architecture notes below describe how the service is built; they are
+> not setup instructions (there's nothing for you to install — just
+> sign up at [smrtcash.builditsmrt.com](https://smrtcash.builditsmrt.com)).
 
 ---
 
 ## 1. Overview
 
-SmrtCash is a self-hosted personal finance manager. You import bank and
-credit-card statement exports; SmrtCash stores them, de-duplicates them, and
-(from Phase 2) uses AI to clean and categorize each transaction.
+SmrtCash is a hosted personal finance manager. You connect a bank or import
+statement exports; SmrtCash stores them, de-duplicates them, and uses AI to
+clean and categorize each transaction.
 
 **Design principles**
 
-- **Local-first.** Your data lives in your own PostgreSQL database. Nothing is
-  sent to a third party except, optionally, transaction text to your chosen AI
-  provider in Phase 2.
+- **Your data, isolated and encrypted.** Each household's data is isolated
+  per tenant in our managed PostgreSQL, encrypted at rest, and exportable in
+  full at any time. Transaction text is only sent to an AI provider when you
+  use AI features.
 - **Exact money.** All amounts are stored as integer **cents**. Floating-point
   math is never used for currency.
-- **Phased delivery.** Every phase produces a working application. See the
-  [Roadmap](./ROADMAP.md).
 - **Typed end to end.** TypeScript on both the server and the client.
 
 ---

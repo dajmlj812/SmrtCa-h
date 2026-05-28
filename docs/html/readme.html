@@ -156,11 +156,13 @@ h4:hover .heading-anchor { visibility: visible; }
 </header>
 <main>
 <h1 id="smrtcash">SmrtCash<a class="heading-anchor" href="#smrtcash">#</a></h1>
-<p>A personal-finance manager (in the spirit of Quicken / Monarch).
-Import bank &amp; credit-card exports, let AI normalize messy transaction
-descriptions, attach receipts, and see where your money goes — runs
-<strong>self-hosted</strong> on hardware you control <strong>or as a SaaS</strong> on
-infrastructure the operator deploys.</p>
+<p>A hosted personal-finance manager (in the spirit of Quicken / Monarch).
+Connect a bank or import statements, let AI normalize messy transaction
+descriptions, attach receipts, and see where your money goes. SmrtCash
+is a <strong>managed SaaS</strong> — sign up at
+<a href="https://smrtcash.builditsmrt.com">smrtcash.builditsmrt.com</a>, start your
+14-day trial, and your data lives in our encrypted, per-tenant-isolated
+infrastructure. Nothing to install.</p>
 <h2 id="status">Status<a class="heading-anchor" href="#status">#</a></h2>
 <p><strong>Current release: 0.24.4</strong> — phases 1–9, hardening, SaaS pivot
 (0.15.x), launch readiness (0.16.x), competitive-parity work
@@ -189,7 +191,8 @@ others), mismatch flagging.</li>
 manual assets &amp; liabilities, <strong>multi-currency</strong> with daily-refreshed
 FX rates, <strong>retirement projections</strong>, <strong>crypto</strong> tracking, <strong>credit
 card payoff goals</strong> that auto-track current balance toward $0 or a
-target utilization %.</li>
+target utilization %. Your data is encrypted at rest and isolated
+per tenant on our managed infrastructure.</li>
 <li><strong>Budgeting &amp; cash flow</strong> — flex budgets, weekly→monthly periods,
 budget-vs-actual, savings goals with <strong>28 curated templates</strong>,
 AutoMagic wizard with fuel/toll math, 90-day forecast.</li>
@@ -239,23 +242,23 @@ operator runbook with playbooks for the common SaaS incidents.</li>
 </thead>
 <tbody><tr>
 <td><a href="./QUICKSTART.html">Quick Start</a></td>
-<td>Get running in ~5 minutes</td>
-</tr>
-<tr>
-<td><a href="./INSTALLATION.html">Installation Guide</a></td>
-<td>Full step-by-step setup</td>
+<td>Sign up + first import in ~5 minutes (customer-facing)</td>
 </tr>
 <tr>
 <td><a href="./DOCUMENTATION.html">General Documentation</a></td>
 <td>Architecture, data model, API reference</td>
 </tr>
 <tr>
-<td><a href="./ADMIN_GUIDE.html">Admin Guide</a></td>
-<td>Operations, backups, security, troubleshooting</td>
+<td><a href="./OPERATOR_RUNBOOK.html">Operator Runbook</a></td>
+<td><em>Internal</em> — deploy, webhook failures, customer-no-access, encryption rotation, dunning, grace window</td>
 </tr>
 <tr>
-<td><a href="./OPERATOR_RUNBOOK.html">Operator Runbook</a></td>
-<td>SaaS-mode playbooks: webhook failures, customer-no-access, encryption rotation, dunning, grace window</td>
+<td><a href="./ADMIN_GUIDE.html">Admin Guide</a></td>
+<td><em>Internal</em> — operations, backups, security, troubleshooting</td>
+</tr>
+<tr>
+<td><a href="./SAAS_DEPLOY.html">SaaS Deploy</a></td>
+<td><em>Internal</em> — how the operator builds + ships the hosted service</td>
 </tr>
 <tr>
 <td><a href="./SAAS_PLAN.html">SaaS Plan</a></td>
@@ -308,17 +311,21 @@ operator runbook with playbooks for the common SaaS incidents.</li>
 site. Regenerate with <code>npm run docs:html</code> after editing any
 <code>.md</code> source.</p>
 </blockquote>
-<h2 id="quick-start">Quick start<a class="heading-anchor" href="#quick-start">#</a></h2>
-<p><strong>Production (single container):</strong></p>
-<pre><code class="language-powershell">Copy-Item .env.example .env
-# Generate a session secret + attachment key (paste into .env)
-node -e &quot;console.log(&#39;SESSION_SECRET=&#39; + require(&#39;crypto&#39;).randomBytes(32).toString(&#39;base64&#39;))&quot;
-node -e &quot;console.log(&#39;ATTACHMENT_ENCRYPTION_KEY=&#39; + require(&#39;crypto&#39;).randomBytes(32).toString(&#39;base64&#39;))&quot;
-docker compose -p smrtcash up -d --build
-</code></pre>
-<p>Then open <strong><a href="http://localhost:4000">http://localhost:4000</a></strong> and set your password on the first
-screen.</p>
-<p><strong>Development (hot reload, no container build):</strong></p>
+<h2 id="using-smrtcash">Using SmrtCash<a class="heading-anchor" href="#using-smrtcash">#</a></h2>
+<p>SmrtCash is a hosted service. To use it, <strong>sign up at
+<a href="https://smrtcash.builditsmrt.com">smrtcash.builditsmrt.com</a></strong> — there&#39;s
+nothing to install. See the <a href="./QUICKSTART.html">Quick Start</a> for the
+onboarding walkthrough.</p>
+<blockquote>
+<p>Self-hosting is no longer supported. SmrtCash runs only as the managed
+SaaS operated by BuildITSmrt, LLC.</p>
+</blockquote>
+<h2 id="running-the-service-operators-only">Running the service (operators only)<a class="heading-anchor" href="#running-the-service-operators-only">#</a></h2>
+<p>This repository is the source for the hosted service. Running it is an
+<strong>operator</strong> task, not a customer one. The build + deploy procedure lives
+in <a href="./SAAS_DEPLOY.html">SaaS Deploy</a> and the day-to-day playbooks in the
+<a href="./OPERATOR_RUNBOOK.html">Operator Runbook</a>.</p>
+<p>Local development (for contributors):</p>
 <pre><code class="language-powershell">Copy-Item .env.example .env
 docker compose -p smrtcash up -d db
 npm install --prefix server
@@ -327,13 +334,12 @@ npm run migrate --prefix server
 npm run dev --prefix server   # terminal 1
 npm run dev --prefix web      # terminal 2
 </code></pre>
-<p>Then open <strong><a href="http://localhost:5173">http://localhost:5173</a></strong>. Full details in the
-<a href="./QUICKSTART.html">Quick Start</a>.</p>
+<p>Then open <strong><a href="http://localhost:5173">http://localhost:5173</a></strong>.</p>
 <h2 id="architecture">Architecture<a class="heading-anchor" href="#architecture">#</a></h2>
 <ul>
 <li><strong>server/</strong> — Fastify + TypeScript API</li>
-<li><strong>web/</strong> — React + Vite + TypeScript frontend</li>
-<li><strong>PostgreSQL 17</strong> — runs as a dedicated docker-compose service</li>
+<li><strong>web/</strong> — React + Vite + TypeScript frontend (installable PWA)</li>
+<li><strong>PostgreSQL 17</strong> — managed database; per-tenant data isolation</li>
 <li>Money is stored as <strong>integer cents</strong> — never floating point.</li>
 </ul>
 <h2 id="testing">Testing<a class="heading-anchor" href="#testing">#</a></h2>
@@ -346,23 +352,24 @@ npm run test:e2e    # browser end-to-end tests
 </code></pre>
 <p>See the <a href="./TESTING.html">Testing Guide</a> for the full strategy, commands,
 and exploratory-testing charters.</p>
-<h2 id="security-notes">Security notes<a class="heading-anchor" href="#security-notes">#</a></h2>
+<h2 id="security-how-we-protect-your-data">Security (how we protect your data)<a class="heading-anchor" href="#security-how-we-protect-your-data">#</a></h2>
 <ul>
-<li><code>.env</code> is gitignored — never commit real credentials.</li>
-<li>The <code>samples/</code> folder is gitignored — never commit real financial exports.</li>
-<li><code>SESSION_SECRET</code> and <code>ATTACHMENT_ENCRYPTION_KEY</code> must be set in <code>.env</code>
-for a real deployment; the README quick-start shows how to generate them.</li>
-<li>Database encryption at rest is via the host volume (LUKS / BitLocker /
-FileVault / encrypted ZFS) — not in-app. Put HTTPS (Caddy / nginx) in
-front and set <code>COOKIE_SECURE=1</code>.</li>
+<li><strong>Per-tenant isolation</strong> — every read and write is scoped to your
+household; cross-tenant access is verified by a dedicated test suite.</li>
+<li><strong>Encryption</strong> — attachments and connection secrets are encrypted with
+AES-256-GCM (per-tenant envelope keys); the database is encrypted at
+rest on managed infrastructure; all traffic is HTTPS.</li>
+<li><strong>Authentication</strong> — Argon2id password hashing, signed HttpOnly session
+cookies, anti-enumeration on signup + password reset.</li>
+<li><strong>You can leave with your data</strong> — download a full <code>.smrtcash</code> export
+any time.</li>
 </ul>
-<p>See the <a href="./ADMIN_GUIDE.html#security-checklist">Admin Guide</a> for the full
-security checklist, HTTPS-via-Caddy snippet, and dependency vulnerability
-policy.</p>
+<p>Operator security details (key management, deploy hardening, the security
+checklist) live in the <em>internal</em> <a href="./ADMIN_GUIDE.html#security-checklist">Admin Guide</a>.</p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-28 01:54:34 UTC · commit be0f9c1</span>
+  <span>Generated 2026-05-28 02:41:34 UTC · commit dd70e02</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

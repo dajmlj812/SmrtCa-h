@@ -156,26 +156,30 @@ h4:hover .heading-anchor { visibility: visible; }
 </header>
 <main>
 <h1 id="smrtcash-general-documentation">SmrtCash — General Documentation<a class="heading-anchor" href="#smrtcash-general-documentation">#</a></h1>
-<p>Technical reference for the SmrtCash application as of <strong>Phase 1</strong>.</p>
+<p>Technical reference for the SmrtCash application.</p>
 <ul>
 <li>New here? Start with the <a href="./QUICKSTART.html">Quick Start</a>.</li>
-<li>Setting it up properly? See the <a href="./INSTALLATION.html">Installation Guide</a>.</li>
-<li>Running it day to day? See the <a href="./ADMIN_GUIDE.html">Admin Guide</a>.</li>
+<li>Want to know what it does? See the <a href="./FEATURES.html">Feature List</a>.</li>
 </ul>
+<blockquote>
+<p>SmrtCash is a hosted SaaS operated by BuildITSmrt, LLC. The
+architecture notes below describe how the service is built; they are
+not setup instructions (there&#39;s nothing for you to install — just
+sign up at <a href="https://smrtcash.builditsmrt.com">smrtcash.builditsmrt.com</a>).</p>
+</blockquote>
 <hr>
 <h2 id="1-overview">1. Overview<a class="heading-anchor" href="#1-overview">#</a></h2>
-<p>SmrtCash is a self-hosted personal finance manager. You import bank and
-credit-card statement exports; SmrtCash stores them, de-duplicates them, and
-(from Phase 2) uses AI to clean and categorize each transaction.</p>
+<p>SmrtCash is a hosted personal finance manager. You connect a bank or import
+statement exports; SmrtCash stores them, de-duplicates them, and uses AI to
+clean and categorize each transaction.</p>
 <p><strong>Design principles</strong></p>
 <ul>
-<li><strong>Local-first.</strong> Your data lives in your own PostgreSQL database. Nothing is
-sent to a third party except, optionally, transaction text to your chosen AI
-provider in Phase 2.</li>
+<li><strong>Your data, isolated and encrypted.</strong> Each household&#39;s data is isolated
+per tenant in our managed PostgreSQL, encrypted at rest, and exportable in
+full at any time. Transaction text is only sent to an AI provider when you
+use AI features.</li>
 <li><strong>Exact money.</strong> All amounts are stored as integer <strong>cents</strong>. Floating-point
 math is never used for currency.</li>
-<li><strong>Phased delivery.</strong> Every phase produces a working application. See the
-<a href="./ROADMAP.html">Roadmap</a>.</li>
 <li><strong>Typed end to end.</strong> TypeScript on both the server and the client.</li>
 </ul>
 <hr>
@@ -768,7 +772,7 @@ rolls the whole batch back.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-28 01:54:35 UTC · commit be0f9c1</span>
+  <span>Generated 2026-05-28 02:41:35 UTC · commit dd70e02</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

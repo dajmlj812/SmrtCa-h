@@ -900,23 +900,7 @@ users can compare answers. URL carries <code>?type=&lt;id&gt;</code> for refresh
 <td>✅</td>
 </tr>
 <tr>
-<td>~630-test automated suite (unit → e2e)</td>
-<td>✅</td>
-</tr>
-<tr>
-<td>Live health dashboard (gauges, charts, CPU/mem/req-rate/DB-latency)</td>
-<td>✅</td>
-</tr>
-<tr>
-<td>GUI-managed backups (schedule + manual + retention)</td>
-<td>✅</td>
-</tr>
-<tr>
-<td>GUI-managed runtime settings (no .env edits for live config)</td>
-<td>✅</td>
-</tr>
-<tr>
-<td>Local-first — data stays in your PostgreSQL</td>
+<td>Comprehensive automated test suite (unit → e2e)</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -924,36 +908,36 @@ users can compare answers. URL carries <code>?type=&lt;id&gt;</code> for refresh
 <td>✅</td>
 </tr>
 <tr>
-<td>Encryption at rest (attachments &amp; connection secrets AES-256-GCM; DB via host volume)</td>
+<td>Encryption at rest — attachments &amp; connection secrets AES-256-GCM (per-tenant envelope keys); managed database encrypted at rest</td>
 <td>✅</td>
 </tr>
 <tr>
-<td>Hardened Docker container</td>
+<td>Per-tenant data isolation — every read + write scoped to your household</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Full data export any time (<code>.smrtcash</code> archive)</td>
 <td>✅</td>
 </tr>
 <tr>
 <td>Non-AI rules engine for auto-categorization (runs on import)</td>
 <td>✅</td>
 </tr>
-<tr>
-<td>Multi-tenant isolation — every read + write scoped to caller&#39;s tenant</td>
-<td>✅</td>
-</tr>
 </tbody></table>
 <hr>
 <h2 id="platform">Platform<a class="heading-anchor" href="#platform">#</a></h2>
 <ul>
-<li><strong>Web application</strong> delivered as an installable PWA</li>
-<li><strong>Backend API</strong> — Fastify + TypeScript</li>
-<li><strong>Database</strong> — PostgreSQL 17 (runs as a Docker container)</li>
-<li><strong>Self-hosted</strong> — runs entirely on hardware you control</li>
+<li><strong>Hosted SaaS</strong> — sign up at <a href="https://smrtcash.builditsmrt.com">smrtcash.builditsmrt.com</a>; nothing to install</li>
+<li><strong>Web application</strong> delivered as an installable PWA (works on desktop + mobile)</li>
+<li><strong>Your data</strong> — encrypted, isolated per tenant, exportable any time</li>
+<li><strong>Managed infrastructure</strong> — backups, updates, and uptime are handled for you</li>
 </ul>
 <p>See <a href="./ROADMAP.html">ROADMAP.md</a> for the full phase plan and the longer-term
-backlog, and <a href="./TESTING.html">TESTING.md</a> for how the suite is verified.</p>
+backlog.</p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-28 01:54:35 UTC · commit be0f9c1</span>
+  <span>Generated 2026-05-28 02:41:35 UTC · commit dd70e02</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -253,25 +253,21 @@ users can compare answers. URL carries `?type=<id>` for refresh + sharing.
 | Money stored as integer cents — never floating point | ✅ |
 | Parameterized SQL everywhere (injection-safe) | ✅ |
 | Transactional, all-or-nothing imports | ✅ |
-| ~630-test automated suite (unit → e2e) | ✅ |
-| Live health dashboard (gauges, charts, CPU/mem/req-rate/DB-latency) | ✅ |
-| GUI-managed backups (schedule + manual + retention) | ✅ |
-| GUI-managed runtime settings (no .env edits for live config) | ✅ |
-| Local-first — data stays in your PostgreSQL | ✅ |
+| Comprehensive automated test suite (unit → e2e) | ✅ |
 | Argon2id authentication | ✅ |
-| Encryption at rest (attachments & connection secrets AES-256-GCM; DB via host volume) | ✅ |
-| Hardened Docker container | ✅ |
+| Encryption at rest — attachments & connection secrets AES-256-GCM (per-tenant envelope keys); managed database encrypted at rest | ✅ |
+| Per-tenant data isolation — every read + write scoped to your household | ✅ |
+| Full data export any time (`.smrtcash` archive) | ✅ |
 | Non-AI rules engine for auto-categorization (runs on import) | ✅ |
-| Multi-tenant isolation — every read + write scoped to caller's tenant | ✅ |
 
 ---
 
 ## Platform
 
-- **Web application** delivered as an installable PWA
-- **Backend API** — Fastify + TypeScript
-- **Database** — PostgreSQL 17 (runs as a Docker container)
-- **Self-hosted** — runs entirely on hardware you control
+- **Hosted SaaS** — sign up at [smrtcash.builditsmrt.com](https://smrtcash.builditsmrt.com); nothing to install
+- **Web application** delivered as an installable PWA (works on desktop + mobile)
+- **Your data** — encrypted, isolated per tenant, exportable any time
+- **Managed infrastructure** — backups, updates, and uptime are handled for you
 
 See [ROADMAP.md](./ROADMAP.md) for the full phase plan and the longer-term
-backlog, and [TESTING.md](./TESTING.md) for how the suite is verified.
+backlog.

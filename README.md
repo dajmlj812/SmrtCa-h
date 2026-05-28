@@ -1,10 +1,12 @@
 # SmrtCash
 
-A personal-finance manager (in the spirit of Quicken / Monarch).
-Import bank & credit-card exports, let AI normalize messy transaction
-descriptions, attach receipts, and see where your money goes — runs
-**self-hosted** on hardware you control **or as a SaaS** on
-infrastructure the operator deploys.
+A hosted personal-finance manager (in the spirit of Quicken / Monarch).
+Connect a bank or import statements, let AI normalize messy transaction
+descriptions, attach receipts, and see where your money goes. SmrtCash
+is a **managed SaaS** — sign up at
+[smrtcash.builditsmrt.com](https://smrtcash.builditsmrt.com), start your
+14-day trial, and your data lives in our encrypted, per-tenant-isolated
+infrastructure. Nothing to install.
 
 ## Status
 
@@ -36,7 +38,8 @@ What ships today:
   manual assets & liabilities, **multi-currency** with daily-refreshed
   FX rates, **retirement projections**, **crypto** tracking, **credit
   card payoff goals** that auto-track current balance toward $0 or a
-  target utilization %.
+  target utilization %. Your data is encrypted at rest and isolated
+  per tenant on our managed infrastructure.
 - **Budgeting & cash flow** — flex budgets, weekly→monthly periods,
   budget-vs-actual, savings goals with **28 curated templates**,
   AutoMagic wizard with fuel/toll math, 90-day forecast.
@@ -81,11 +84,11 @@ See the [Roadmap](./docs/ROADMAP.md) for the full phase history and
 
 | Document | What it covers |
 |----------|----------------|
-| [Quick Start](./docs/QUICKSTART.md) | Get running in ~5 minutes |
-| [Installation Guide](./docs/INSTALLATION.md) | Full step-by-step setup |
+| [Quick Start](./docs/QUICKSTART.md) | Sign up + first import in ~5 minutes (customer-facing) |
 | [General Documentation](./docs/DOCUMENTATION.md) | Architecture, data model, API reference |
-| [Admin Guide](./docs/ADMIN_GUIDE.md) | Operations, backups, security, troubleshooting |
-| [Operator Runbook](./docs/OPERATOR_RUNBOOK.md) | SaaS-mode playbooks: webhook failures, customer-no-access, encryption rotation, dunning, grace window |
+| [Operator Runbook](./docs/OPERATOR_RUNBOOK.md) | _Internal_ — deploy, webhook failures, customer-no-access, encryption rotation, dunning, grace window |
+| [Admin Guide](./docs/ADMIN_GUIDE.md) | _Internal_ — operations, backups, security, troubleshooting |
+| [SaaS Deploy](./docs/SAAS_DEPLOY.md) | _Internal_ — how the operator builds + ships the hosted service |
 | [SaaS Plan](./docs/SAAS_PLAN.md) | Pricing tiers + feature gating (source of truth for paywall) |
 | [Stripe Setup](./docs/STRIPE_SETUP.md) | Initial Stripe configuration walkthrough |
 | [Testing Guide](./docs/TESTING.md) | Test suite, how to run it, exploratory charters |
@@ -103,22 +106,24 @@ See the [Roadmap](./docs/ROADMAP.md) for the full phase history and
 > site. Regenerate with `npm run docs:html` after editing any
 > `.md` source.
 
-## Quick start
+## Using SmrtCash
 
-**Production (single container):**
+SmrtCash is a hosted service. To use it, **sign up at
+[smrtcash.builditsmrt.com](https://smrtcash.builditsmrt.com)** — there's
+nothing to install. See the [Quick Start](./docs/QUICKSTART.md) for the
+onboarding walkthrough.
 
-```powershell
-Copy-Item .env.example .env
-# Generate a session secret + attachment key (paste into .env)
-node -e "console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('base64'))"
-node -e "console.log('ATTACHMENT_ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('base64'))"
-docker compose -p smrtcash up -d --build
-```
+> Self-hosting is no longer supported. SmrtCash runs only as the managed
+> SaaS operated by BuildITSmrt, LLC.
 
-Then open **http://localhost:4000** and set your password on the first
-screen.
+## Running the service (operators only)
 
-**Development (hot reload, no container build):**
+This repository is the source for the hosted service. Running it is an
+**operator** task, not a customer one. The build + deploy procedure lives
+in [SaaS Deploy](./docs/SAAS_DEPLOY.md) and the day-to-day playbooks in the
+[Operator Runbook](./docs/OPERATOR_RUNBOOK.md).
+
+Local development (for contributors):
 
 ```powershell
 Copy-Item .env.example .env
@@ -130,14 +135,13 @@ npm run dev --prefix server   # terminal 1
 npm run dev --prefix web      # terminal 2
 ```
 
-Then open **http://localhost:5173**. Full details in the
-[Quick Start](./docs/QUICKSTART.md).
+Then open **http://localhost:5173**.
 
 ## Architecture
 
 - **server/** — Fastify + TypeScript API
-- **web/** — React + Vite + TypeScript frontend
-- **PostgreSQL 17** — runs as a dedicated docker-compose service
+- **web/** — React + Vite + TypeScript frontend (installable PWA)
+- **PostgreSQL 17** — managed database; per-tenant data isolation
 - Money is stored as **integer cents** — never floating point.
 
 ## Testing
@@ -155,16 +159,17 @@ npm run test:e2e    # browser end-to-end tests
 See the [Testing Guide](./docs/TESTING.md) for the full strategy, commands,
 and exploratory-testing charters.
 
-## Security notes
+## Security (how we protect your data)
 
-- `.env` is gitignored — never commit real credentials.
-- The `samples/` folder is gitignored — never commit real financial exports.
-- `SESSION_SECRET` and `ATTACHMENT_ENCRYPTION_KEY` must be set in `.env`
-  for a real deployment; the README quick-start shows how to generate them.
-- Database encryption at rest is via the host volume (LUKS / BitLocker /
-  FileVault / encrypted ZFS) — not in-app. Put HTTPS (Caddy / nginx) in
-  front and set `COOKIE_SECURE=1`.
+- **Per-tenant isolation** — every read and write is scoped to your
+  household; cross-tenant access is verified by a dedicated test suite.
+- **Encryption** — attachments and connection secrets are encrypted with
+  AES-256-GCM (per-tenant envelope keys); the database is encrypted at
+  rest on managed infrastructure; all traffic is HTTPS.
+- **Authentication** — Argon2id password hashing, signed HttpOnly session
+  cookies, anti-enumeration on signup + password reset.
+- **You can leave with your data** — download a full `.smrtcash` export
+  any time.
 
-See the [Admin Guide](./docs/ADMIN_GUIDE.md#security-checklist) for the full
-security checklist, HTTPS-via-Caddy snippet, and dependency vulnerability
-policy.
+Operator security details (key management, deploy hardening, the security
+checklist) live in the _internal_ [Admin Guide](./docs/ADMIN_GUIDE.md#security-checklist).
