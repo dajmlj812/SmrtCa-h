@@ -84,27 +84,18 @@ See the [Roadmap](./docs/ROADMAP.md) for the full phase history and
 
 | Document | What it covers |
 |----------|----------------|
-| [Quick Start](./docs/QUICKSTART.md) | Sign up + first import in ~5 minutes (customer-facing) |
+| [Quick Start](./docs/QUICKSTART.md) | Sign up + first import in ~5 minutes |
 | [General Documentation](./docs/DOCUMENTATION.md) | Architecture, data model, API reference |
-| [Operator Runbook](./docs/OPERATOR_RUNBOOK.md) | _Internal_ — deploy, webhook failures, customer-no-access, encryption rotation, dunning, grace window |
-| [Admin Guide](./docs/ADMIN_GUIDE.md) | _Internal_ — operations, backups, security, troubleshooting |
-| [SaaS Deploy](./docs/SAAS_DEPLOY.md) | _Internal_ — how the operator builds + ships the hosted service |
-| [SaaS Plan](./docs/SAAS_PLAN.md) | Pricing tiers + feature gating (source of truth for paywall) |
-| [Stripe Setup](./docs/STRIPE_SETUP.md) | Initial Stripe configuration walkthrough |
-| [Testing Guide](./docs/TESTING.md) | Test suite, how to run it, exploratory charters |
-| [Process Playbook](./docs/PROCESS.md) | The 16-stage feature lifecycle, branching, versioning, DoD |
-| [Contributing](./docs/CONTRIBUTING.md) | Brief entry point for new work |
-| [Changelog](./CHANGELOG.md) | Release notes per version |
 | [Feature List](./docs/FEATURES.md) | What works now vs. what's planned |
+| [Changelog](./CHANGELOG.md) | Release notes per version |
 | [Roadmap](./docs/ROADMAP.md) | The phase + release history |
-| [Known Issues](./docs/KNOWN_ISSUES.md) | Current limitations & planned fixes |
-| [Terms of Service](./docs/TERMS_OF_SERVICE.md) | Placeholder — replace with lawyer copy before commercial launch |
-| [Privacy Policy](./docs/PRIVACY_POLICY.md) | Placeholder — replace with lawyer copy before commercial launch |
+| [Terms of Service](./docs/TERMS_OF_SERVICE.md) | Customer terms |
+| [Privacy Policy](./docs/PRIVACY_POLICY.md) | How we handle your data |
 
-> **Static HTML versions** of every doc above live at
-> [`docs/html/`](./docs/html/) for direct hosting on a marketing
-> site. Regenerate with `npm run docs:html` after editing any
-> `.md` source.
+Operator + contributor docs (deploy, runbooks, admin guide, testing,
+process, Stripe setup, known issues) live alongside these in
+[`docs/`](./docs/). They're internal and are not published to the public
+docs site.
 
 ## Using SmrtCash
 
