@@ -50,7 +50,7 @@ export function SetupPage({ onAuthenticated }: Props) {
         </div>
         <h1>Create the platform operator</h1>
         <p className="muted">
-          The first user on a fresh install becomes a <strong>super admin</strong>:
+          The first user on a new SmrtCash deployment becomes a <strong>super admin</strong>:
           they manage tenants, system settings, and the audit log. They
           can't see financial data — those live in tenants. Pick a strong
           password (≥ {MIN_PASSWORD} characters). There's no email
