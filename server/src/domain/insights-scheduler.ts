@@ -97,6 +97,24 @@ async function runForTenant(tenantId: string): Promise<void> {
   if (lastRun > 0 && hoursSince < MIN_INTERVAL_HOURS) return;
 
   await generateAndPersist(tenantId);
+
+  // 0.24.6 — anomaly scan rides on the same daily cadence so a
+  // tenant that hasn't imported recently still gets fresh alerts.
+  // The detector self-gates on ANOMALY_ENABLED (no-op when off)
+  // and dedup is guaranteed by anomaly_alerts(transaction_id, kind)
+  // ON CONFLICT DO NOTHING, so a full re-scan is safe.
+  try {
+    const { scanTransactionsForAnomalies } = await import(
+      './anomaly-detector.js'
+    );
+    await scanTransactionsForAnomalies(tenantId, null);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `insights-scheduler: anomaly scan failed for tenant ${tenantId}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
 
 /**
