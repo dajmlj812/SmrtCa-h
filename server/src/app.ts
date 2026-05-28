@@ -367,7 +367,11 @@ export async function buildApp(
       // errors. Without this, "Expected ',' or '}' after property
       // value in JSON at position 21 (line 1 column 22)" was being
       // sent back to the client.
-      const code = err.code ?? '';
+      // 0.24.9 — err.code can be a number (pg errors, Node fs
+      // errors) or even an object on some libraries; coerce
+      // defensively so the .startsWith check doesn't itself throw
+      // and mask the real error from the caller.
+      const code = typeof err.code === 'string' ? err.code : '';
       const isParserError =
         err instanceof SyntaxError ||
         code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE' ||
