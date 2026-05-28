@@ -9,10 +9,310 @@ This project adheres to [Semantic Versioning](https://semver.org/) and the
 
 ## [Unreleased]
 
-_0.21.x arc is shipped end-to-end (0.21.0–0.21.7) plus 0.21.8
-budget-page split. See entries below for each slice. The
-post-arc verification walk-through lives at
-`docs/VERIFY_0.21.x.md`._
+_Nothing in flight. Next planned arc is 0.25.x —
+credit-score + retirement scenarios (both gated on new model
+layers). The renumbered scaling arc is 0.26.x._
+
+---
+
+## [0.24.4] — 2026-05-27 — Polish + matcher-learning release
+
+Rollup release that wraps the 0.24.x arc. Bundles four follow-on
+slices on top of the scenario-hub shipped in 0.24.3:
+
+### Added — 11 new reports (0.24.4)
+
+`/reports` grew from 6 to 17. New entries:
+
+- **Year-over-year by category** — this period vs same period
+  last year, per category, with delta and % change.
+- **Month-over-month movers** — biggest spending swings between
+  the two most recent completed months.
+- **Day-of-week spending pattern** — total + count + average
+  outflows by weekday.
+- **Tax-deductible YTD** — Schedule C line totals (uses
+  `categories.tax_category` from 0.21.0).
+- **Savings rate by month** — income, expenses, net, savings %.
+- **Income sources breakdown** — inflows grouped by category.
+- **First-time merchants** — vendors whose first transaction
+  falls in the period. Catches subscription creep.
+- **Refunds and chargebacks YTD** — uses `transactions.refund_status`
+  from 0.21.1; open disputes float to the top.
+- **Bill price drift** — active bills whose last 3 paid periods
+  deviate from the stated amount by >max($1, 2%).
+- **Debt balance by month** — mirror of the net-worth report,
+  filtered to credit_card + loan + manual_liability accounts.
+- **Average transaction by category** — count, total, average
+  per category. Useful for budget calibration.
+
+### Added — editable per-tenant mileage rates (0.24.5)
+
+The IRS standard mileage rates were hardcoded in
+`server/src/routes/mileage.ts` as `MILEAGE_RATES`. Updating them
+required a deploy. Migration 073 moves them into a per-tenant
+`mileage_rates` table with `business / charity / medical`
+columns as `numeric(7,1)` (matches the IRS publication
+precision). Existing tenants are backfilled with the same
+values the old constant carried; new tenants lazy-seed on first
+`/api/mileage-rates` read.
+
+UI: new "IRS standard mileage rates" section on `/mileage` with
+one row per year. Inline edit / Save / Cancel per row, source
+pill (seeded / manual / irs_fetch), last-updated date, and a
+"+ Add year" affordance that pre-fills from the most recent
+year on file.
+
+### Added — daily anomaly scan (0.24.6)
+
+Anomaly detection used to only fire at import time, which meant
+a tenant who didn't import for a few days got no fresh alerts.
+The detector now also runs once per ~23h per tenant inside the
+existing insights-scheduler tick. Self-gates on
+`ANOMALY_ENABLED`; idempotent (the `anomaly_alerts` unique
+index handles dedup).
+
+### Fixed — dark-mode polish (0.24.7 + 0.24.8)
+
+- **Date-picker indicator** in dark mode was a barely-visible
+  dark glyph on a dark surface. The previous attempt
+  (`color-scheme: dark` + `filter: invert(0.85)`) was actually
+  fighting itself — Chromium already painted a light glyph in
+  dark mode, and the invert was flipping it back to dark.
+  Replaced the native indicator with an inline SVG that's
+  theme-aware (dark stroke in light mode, light stroke in
+  dark), plus a hover background for a visible click target.
+- **Pill backgrounds** that were hardcoded to light-mode hex
+  codes (the base `.pill` was `#f1f5f9`, `.secret-pill` and
+  `.warn-pill` were amber, HostWidget pills were rgba()) now
+  use theme vars so they adapt in dark mode.
+
+### Fixed — error handler tolerates non-string `err.code` (0.24.9)
+
+`/api/portability/export` returned `code.startsWith is not a
+function` — that was the global error handler crashing on
+top of the real error. `promisify(execFile)` rejects with an
+`Error` whose `code` is the child process exit code (a
+number). The handler now coerces to string before calling
+`startsWith`.
+
+### Fixed — portability export uses BusyBox-compatible tar (0.24.9)
+
+The Docker image is Alpine which ships BusyBox tar. The
+exporter was passing `--force-local` (a GNU tar flag) and the
+command rejected with `unrecognized option: force-local`.
+Dropped the flag — the exec runs inside the Linux container
+regardless of host OS, so Linux paths never have drive-letter
+colons and the flag had nothing to defend against.
+
+### Fixed — reports page nav loop (0.24.4)
+
+After running a report, sidebar nav links stopped responding
+until you selected (but didn't run) a different report.
+`FilterableTable` recomputed `visibleColumns` inline on every
+render (a fresh array reference each time), which fed a
+`useMemo` for `filteredRows`, which fired the
+`onProjectionChange` effect, which `setState`'d on the parent,
+which re-rendered `FilterableTable`, which built a new
+`visibleColumns` array — infinite render loop. Memoizing
+`visibleColumns` on `[columns, visible]` breaks the cycle.
+
+### Added — auto-learn manual transaction renames (0.24.10)
+
+PATCH `/api/transactions/:id` setting `normalized_merchant`
+already flipped `normalization_status='manual'` so future AI
+passes couldn't undo the rename — but it didn't TEACH the
+system, so future imports of the same `raw_description` had no
+carry-forward. Now an upsert into `normalization_rules` lands
+in the same request: `pattern = raw_description` verbatim,
+`source = 'manual'`, enabled, priority 0. The user can
+broaden the pattern from `/normalization-rules` later.
+
+### Added — drift-mode bills track latest matched amount (0.24.10)
+
+`linkBillToTxn` in the matcher now updates `bills.amount_cents`
+to the matched transaction's absolute amount when the bill's
+`amount_mode` is `drift`. Means a car-wash membership going
+from $24 to $26 updates the bill row automatically; the next
+cycle's budget reflects the new expected. Fixed-mode bills are
+left alone (the whole point of fixed is "alert me if this
+changes"), and variable-mode bills are too (the cap, not the
+expected, is what matters).
+
+### Fixed — super-admin sidebar SupportLink undefined
+
+The super-admin layout referenced `<SupportLink>` but the
+component was never defined — login as super admin crashed
+with "SupportLink is not defined". Replaced with the same
+inline `<a>` markup the regular sidebar uses for the same
+support-URL link.
+
+### Operations
+
+- Roadmap reorganized: 0.24.x marked ✅ Complete with all
+  sub-slices listed; 0.23.x (Scaling) renumbered to 0.26.x and
+  moved to the end of the document because feature work
+  (0.25.x credit/retirement scenarios next) is taking priority
+  over architectural work we don't yet need.
+
+---
+
+## [0.24.3] — 2026-05-27 — Scenario hub + 13 what-if scenarios
+
+`/scenarios` was a one-trick cash-flow projector. This release
+refactored it into a hub that registers individual scenario
+modules and renders the selected one's Form + Result. Left-rail
+picker grouped by category; URL carries `?type=<id>` so refresh
+or shared link lands on the same scenario. Per-scenario inputs
+are preserved when switching between scenarios so users can
+compare answers without re-entering numbers.
+
+### 0.24.0 — Hub refactor
+
+`/scenarios` becomes a hub. Existing cash-flow-with-deltas
+scenario keeps working as "Cash-flow stress test".
+
+### 0.24.1 — Wealth-building scenarios (4)
+
+- **Invest $X/mo for Y years at Z%** — compounding curve,
+  tax-deferred vs taxable side-by-side.
+- **Bump 401(k) to N%** — take-home delta + tax savings +
+  retirement-balance delta + employer-match warning.
+- **Windfall split** — bonus / refund / inheritance: emergency
+  + debt + invest split with N-year impact.
+- **FIRE date** — given save rate + spend, years until
+  portfolio covers SWR.
+
+### 0.24.2 — Debt-payoff scenarios (4)
+
+- **Add $X/mo extra payment** — time + interest saved.
+- **Balance transfer offer** — promo APR + transfer fee vs
+  current APR; post-promo balance handling.
+- **Consolidate at one rate** — multi-debt list rolled into a
+  single loan with origination fee.
+- **Biweekly mortgage** — years shaved + interest saved.
+
+### 0.24.3 — Life-event scenarios (5)
+
+- **Have a kid** — childcare + 529 + tax credit, year 1 / 5 / 18.
+- **Buy a house** — PITI breakdown, front/back-end DTI,
+  lender-comfort verdict.
+- **Job change** — total comp delta (salary + benefits +
+  match) adjusted for COL, N-year net.
+- **Sabbatical / income loss** — runway, end-of-break cash,
+  rebuild timeline.
+- **Recession / income shock** — stress test with belt-tightening
+  response, breakpoint month.
+
+Implementation: each scenario lives in
+`web/src/scenarios/<id>.tsx` and exports a `ScenarioDef`
+(id, title, subtitle, category, defaults, Form, Result). Pure
+client-side math for every scenario except cash-flow-stress.
+
+---
+
+## [0.22.2] — 2026-05-27 — Credit-card payoff goals
+
+Goals were always "accumulate up toward target." This release
+adds the inverse: payoff goals that shrink a tracked balance
+toward a target ($0 or X% utilization).
+
+- Migration 072: `accounts.credit_limit_cents`; `savings_goals.kind`
+  (`savings | payoff`); `savings_goals.initial_amount_cents`;
+  `savings_goals.linked_account_ids`;
+  `savings_goals.target_utilization_pct`. Relaxes
+  `target_amount_cents` check from `> 0` to `>= 0` so payoff
+  goals targeting $0 can be saved.
+- `GET /api/goals` enriches payoff goals with
+  `computed_balance_cents` (live SUM of |balance| across linked
+  accounts) and a shrinking-direction progress formula
+  `(initial - current) / (initial - target)`.
+- New `PayoffGoalModal` reachable from both `/goals` and
+  `/debt-payoff`. Multi-selects credit-card accounts, shows
+  total balance + total limit + current utilization, offers
+  "Pay to $0" or "Pay to N% utilization" (default 30%, the
+  standard credit-score recommendation).
+- Inline `credit_limit` field on the account detail page +
+  `/debt-payoff` table. PATCH `/api/accounts/:id` accepts
+  `credit_limit_cents`.
+
+---
+
+## [0.22.1] — 2026-05-27 — Bill matcher UI + date picker fixes
+
+- **Bill row actions on `/recurring`** — Auto-match (opens a
+  config modal exposing `merchant_pattern`, `amount_mode`,
+  `amount_tolerance_cents`, `match_window_days`,
+  `overdue_grace_days`), Pause (with resume-date picker),
+  Unpause, Skip period.
+- **Recurring page toolbar** — Rescan transactions (90-day
+  backfill matcher) and Sweep overdue (manual trigger of the
+  daily sweep).
+- **Date-picker indicator visible in dark mode** —
+  `color-scheme: light/dark` on `:root`, plus
+  `::-webkit-calendar-picker-indicator` styling. (Superseded by
+  0.24.7's SVG approach.)
+
+---
+
+## [0.22.0] — 2026-05-27 — Bill matching engine + /recurring page
+
+The headline feature of this arc: bills now auto-match incoming
+transactions instead of waiting for the user to mark them paid.
+
+### Schema (migration 071)
+
+- `bills.kind` (`bill | subscription`) — used by the unified
+  `/recurring` page's filter tabs.
+- `bills.amount_mode` (`fixed | drift | variable`) +
+  `bills.amount_tolerance_cents` — declares HOW the matcher
+  decides amount fit per row.
+- `bills.match_window_days` (default 7), `bills.merchant_pattern`
+  (initialized to the bill name for opportunistic matching on
+  day one), `bills.paused_until`, `bills.overdue_grace_days`
+  (default 3).
+- `bill_periods` — per-cycle ledger keyed by (bill_id,
+  period_anchor_date). Status: pending / paid / overdue /
+  skipped.
+- `bill_match_triage` — queue for matches the engine wasn't
+  confident enough to make automatically.
+- `insight_cards.kind` extended with `bill_overdue`.
+
+### Engine (`server/src/domain/bill-matcher.ts`)
+
+- `tryMatchTransaction` — vendor (case-insensitive substring)
+  + date (±match_window_days) + amount (per-mode tolerance)
+  scoring. Single confident match → auto-link via bill_periods
+  + cursor advance + category fill-if-blank. Multi-candidate
+  or edge-of-window or amount-out-of-tolerance → triage rows.
+- `sweepOverdueBills` — periodic flip of past-grace pending
+  periods to overdue with an `insight_card` emit.
+- `resolveTriage` — user accept/reject/reassign from the queue.
+
+### Hooks
+
+- Post-import: matcher runs on each freshly inserted
+  transaction (third pass after rules + anomaly scan).
+- Daily: `sweepOverdueBills` runs at the top of every
+  insights-scheduler tick.
+
+### UI
+
+- `/recurring` route replaces `/bills` and `/subscriptions`.
+  Sidebar shows one entry. Both old paths redirect.
+  Tab strip (Bills / Subscriptions) inside the page.
+- `BillTriageQueue` component renders above the tab strip when
+  there are pending matches; groups by transaction so the user
+  sees "this charge has 2 candidate bills" instead of two
+  unrelated rows. Renders nothing when empty.
+
+### Other improvements (same arc)
+
+- **Paycheck budget**: collapsible periods. Today's period
+  auto-expands; others collapsed. State persists in
+  localStorage so choices stick across reloads.
+- **Insights scheduler**: a second daily pass besides the
+  existing insight-card generation — `sweepOverdueBills`
+  runs at the top of every tick.
 
 ---
 

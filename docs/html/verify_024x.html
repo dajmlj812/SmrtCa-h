@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmrtCash 0.24.x verification guide# · SmrtCash docs</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7fb;
+  --text: #1a1f2e;
+  --muted: #5f6678;
+  --border: #e4e7ee;
+  --accent: #4f46e5;
+  --code-bg: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e8ecf3;
+    --muted: #9aa3b8;
+    --border: #2a3038;
+    --accent: #818cf8;
+    --code-bg: #21262d;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+               system-ui, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 96px; }
+header.page {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header.page .brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+header.page .brand span { color: var(--accent); }
+header.page nav a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 16px;
+}
+header.page nav a:hover { color: var(--accent); }
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+h1 { font-size: 2em; margin-top: 0; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1.05em; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 1em; }
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+pre code { background: transparent; padding: 0; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); font-weight: 600; }
+tr:nth-child(even) td { background: var(--surface); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+footer.page {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88em;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heading-anchor {
+  visibility: hidden;
+  margin-left: 8px;
+  font-size: 0.7em;
+  text-decoration: none;
+  color: var(--muted);
+}
+h1:hover .heading-anchor,
+h2:hover .heading-anchor,
+h3:hover .heading-anchor,
+h4:hover .heading-anchor { visibility: visible; }
+.toc { background: var(--surface); padding: 16px 24px; border-radius: 8px; }
+.toc h2 { border: 0; margin: 0 0 12px; font-size: 1.1em; }
+.toc ul { columns: 2; column-gap: 24px; }
+@media (max-width: 600px) {
+  .toc ul { columns: 1; }
+  .wrap { padding: 16px 12px 64px; }
+}
+.category {
+  margin: 32px 0;
+}
+.category h2 { margin-bottom: 8px; }
+.category ul { padding-left: 1.4em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.88em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <a class="brand" href="index.html">Smrt<span>Cash</span> docs</a>
+  <nav>
+    <a href="index.html">All docs</a>
+    <a href="https://support.builditsmrt.com/" target="_blank" rel="noreferrer">Support</a>
+  </nav>
+</header>
+<main>
+<h1 id="smrtcash-024x-verification-guide">SmrtCash 0.24.x verification guide<a class="heading-anchor" href="#smrtcash-024x-verification-guide">#</a></h1>
+<p>A walk-through to confirm each 0.22.x + 0.24.x slice does what its
+roadmap entry promised. Use this before tagging RC1 or after any
+significant deploy. Each section is independent — work through them
+in any order.</p>
+<p><strong>Prereqs:</strong> stack running, signed in as a tenant admin, at least
+one account with several months of transactions including some
+recurring bills (Netflix, electric, etc.). Hard-refresh after the
+deploy so the new SW cache takes over. If something looks stuck,
+DevTools → Application → Storage → Clear site data.</p>
+<hr>
+<h2 id="0220-bill-matching-engine-recurring">0.22.0 — Bill matching engine + <code>/recurring</code><a class="heading-anchor" href="#0220-bill-matching-engine-recurring">#</a></h2>
+<h3 id="sidebar-consolidation">Sidebar consolidation<a class="heading-anchor" href="#sidebar-consolidation">#</a></h3>
+<ol>
+<li>Sidebar shows a single <strong>Recurring</strong> entry under Planning (no
+separate Bills / Subscriptions).</li>
+<li>Open <code>/bills</code> directly → redirects to <code>/recurring</code>.</li>
+<li>Open <code>/subscriptions</code> → redirects to <code>/recurring?view=subscriptions</code>.</li>
+<li>The Subscriptions tab on <code>/recurring</code> lights up when you click it.</li>
+</ol>
+<h3 id="auto-match-confident-case">Auto-match — confident case<a class="heading-anchor" href="#auto-match-confident-case">#</a></h3>
+<ol>
+<li>Pick an existing bill, e.g. <code>Netflix</code> with <code>next_due_date</code> ≈ today
+and <code>amount_cents = 1549</code>.</li>
+<li>Open the bill&#39;s <strong>Auto-match</strong> action — confirm:<ul>
+<li>Mode = <strong>Fixed</strong>, Merchant pattern = <code>Netflix</code>, Window = <strong>7
+days</strong>, Grace = <strong>3 days</strong>.</li>
+</ul>
+</li>
+<li>Import (or manually add) a transaction with raw_description
+&quot;NETFLIX.COM&quot; dated within ±7 days, amount $-15.49.</li>
+<li>Refresh <code>/recurring</code>. The triage queue at the top should be empty.</li>
+<li>In <code>/transactions</code>, the new row should:<ul>
+<li>Have its category set to the bill&#39;s category (if it was blank).</li>
+<li>Show in any &quot;bill payments&quot; view as linked.</li>
+</ul>
+</li>
+<li>Click into the bill on <code>/recurring</code> → its <code>next_due_date</code> should
+have advanced by one cycle.</li>
+</ol>
+<h3 id="triage-ambiguous-vendor">Triage — ambiguous vendor<a class="heading-anchor" href="#triage-ambiguous-vendor">#</a></h3>
+<ol>
+<li>Duplicate the Netflix bill (Duplicate action) so you have two
+bills with merchant_pattern=<code>Netflix</code>, both monthly, near today&#39;s date.</li>
+<li>Add a transaction that matches both: &quot;NETFLIX.COM&quot;, $-15.49.</li>
+<li><code>/recurring</code> — triage card appears at the top with <strong>both</strong> candidates
+listed under one transaction group (&quot;2 candidate bills&quot;).</li>
+<li>Click <strong>Accept</strong> on the right one → its sibling row auto-closes as
+<code>reassigned</code>. Bill flips to paid for that period.</li>
+</ol>
+<h3 id="triage-out-of-tolerance-amount">Triage — out-of-tolerance amount<a class="heading-anchor" href="#triage-out-of-tolerance-amount">#</a></h3>
+<ol>
+<li>With a Fixed-mode bill expecting $15.49, drop a $5.00 transaction
+from &quot;NETFLIX.COM&quot; dated within window.</li>
+<li>Triage row lands with reason <strong>Amount is outside the bill&#39;s
+expected band</strong>.</li>
+<li>Accept it anyway → the transaction links (user-overridden).</li>
+<li>Or Reject it → triage row closes, no link.</li>
+</ol>
+<h3 id="overdue-sweep">Overdue sweep<a class="heading-anchor" href="#overdue-sweep">#</a></h3>
+<ol>
+<li>Pick a bill whose <code>next_due_date</code> is more than <code>overdue_grace_days</code>
+ago, with no matching payment recorded.</li>
+<li>Open <code>/recurring</code> → click <strong>Sweep overdue</strong> in the toolbar.</li>
+<li>Banner reports <code>flipped 1</code> (or however many).</li>
+<li>Dashboard insight cards show a <code>bill_overdue</code> card per flipped bill.</li>
+</ol>
+<hr>
+<h2 id="0221-bill-row-actions-recurring-toolbar">0.22.1 — Bill row actions + <code>/recurring</code> toolbar<a class="heading-anchor" href="#0221-bill-row-actions-recurring-toolbar">#</a></h2>
+<h3 id="auto-match-config-modal">Auto-match config modal<a class="heading-anchor" href="#auto-match-config-modal">#</a></h3>
+<ol>
+<li>From any bill row on <code>/recurring</code>, click <strong>Auto-match</strong>.</li>
+<li>Modal opens with: Merchant pattern (text), Amount mode (Fixed /
+Drifts / Variable), Match window (±days), Overdue grace (days).</li>
+<li>Variable mode shows an extra <strong>Absolute cap ($)</strong> field; it&#39;s
+hidden for Fixed and Drift.</li>
+<li>Help text under &quot;Amount mode&quot; updates as you switch modes.</li>
+<li>Save → row reloads with the new config; bill card shows the
+updated state.</li>
+</ol>
+<h3 id="pause-unpause">Pause / Unpause<a class="heading-anchor" href="#pause-unpause">#</a></h3>
+<ol>
+<li>Click <strong>Pause</strong> on an active bill. Modal asks for a resume date
+(defaults to 30 days out). Save.</li>
+<li>Bill&#39;s Status pill shows &quot;Paused until &lt;date&gt;&quot;. The matcher will
+skip it.</li>
+<li><strong>Unpause</strong> appears in place of Pause. Click it → status returns
+to Active immediately.</li>
+</ol>
+<h3 id="skip-period">Skip period<a class="heading-anchor" href="#skip-period">#</a></h3>
+<ol>
+<li>Click <strong>Skip period</strong> on a non-paused bill.</li>
+<li>Confirm dialog explains: marks current period as skipped and
+advances next due date.</li>
+<li>After confirm, <code>next_due_date</code> advances by one cycle.</li>
+<li>In bill history (<code>/api/bills/:id/periods</code>), the skipped period has
+<code>status = &#39;skipped&#39;</code> and a <code>skipped_at</code> timestamp.</li>
+</ol>
+<h3 id="rescan-sweep-buttons">Rescan + Sweep buttons<a class="heading-anchor" href="#rescan-sweep-buttons">#</a></h3>
+<ol>
+<li><strong>Rescan transactions</strong> — toolbar at top of <code>/recurring</code>. Click →
+banner reports <code>Rescanned N transactions — M auto-matched, K sent to triage.</code> Useful after editing a bill&#39;s merchant pattern.</li>
+<li><strong>Sweep overdue</strong> — same toolbar. Returns <code>Flipped N past-due bills to overdue.</code> or &quot;No bills past due grace window.&quot;</li>
+</ol>
+<hr>
+<h2 id="0222-credit-card-payoff-goals">0.22.2 — Credit-card payoff goals<a class="heading-anchor" href="#0222-credit-card-payoff-goals">#</a></h2>
+<h3 id="set-credit-limits">Set credit limits<a class="heading-anchor" href="#set-credit-limits">#</a></h3>
+<ol>
+<li><code>/accounts</code> → open a credit-card account. The detail view shows a
+<strong>Credit limit</strong> kv-item. Click <strong>Set limit</strong> → enter $5,000 →
+Save. Confirm utilization shows <code>&lt;owed&gt;/$5,000 = N%</code>.</li>
+<li>(Alternative path) <code>/debt-payoff</code> table — the <strong>Credit limit</strong>
+column is inline-editable for credit_card rows.</li>
+</ol>
+<h3 id="build-a-payoff-goal">Build a payoff goal<a class="heading-anchor" href="#build-a-payoff-goal">#</a></h3>
+<ol>
+<li>Click <strong>💳 Credit card payoff</strong> on <code>/goals</code> (or <strong>💳 Create payoff
+goal</strong> on <code>/debt-payoff</code>).</li>
+<li>Multi-select two credit cards. Modal shows:<ul>
+<li>Total balance</li>
+<li>Total credit limit</li>
+<li>Current utilization %</li>
+</ul>
+</li>
+<li>Pick <strong>Pay to 30% utilization</strong>. Target balance + amount to pay
+down compute live. Confirm the math: <code>target = total_limit × 0.30</code>.</li>
+<li>Optional target date.</li>
+<li>Click <strong>Create payoff goal</strong>.</li>
+</ol>
+<h3 id="goal-card-display">Goal card display<a class="heading-anchor" href="#goal-card-display">#</a></h3>
+<ol>
+<li>Back on <code>/goals</code>. The new payoff goal card:<ul>
+<li>Shows a <strong>Payoff</strong> pill next to the name.</li>
+<li>Displays &quot;Balance: $X · target $Y&quot;.</li>
+<li>Progress bar fills as the balance drops (not as a contribution
+grows).</li>
+<li>Footer shows &quot;N% paid down · $X to go&quot;.</li>
+<li>Bottom note: &quot;Linked to N credit cards · updates live from
+balances&quot;.</li>
+<li><strong>No Contribute button</strong> (intentionally — payoff goals
+auto-track from accounts).</li>
+</ul>
+</li>
+</ol>
+<h3 id="live-update">Live update<a class="heading-anchor" href="#live-update">#</a></h3>
+<ol>
+<li>Add a $200 payment transaction against one of the linked cards.</li>
+<li>Refresh <code>/goals</code> → the goal&#39;s displayed balance dropped by $200,
+progress bar advanced accordingly.</li>
+</ol>
+<hr>
+<h2 id="0240-scenarios-hub">0.24.0 — <code>/scenarios</code> hub<a class="heading-anchor" href="#0240-scenarios-hub">#</a></h2>
+<h3 id="picker-ui">Picker UI<a class="heading-anchor" href="#picker-ui">#</a></h3>
+<ol>
+<li>Open <code>/scenarios</code>. Left rail shows a picker grouped by category
+(Cash flow, Wealth building, Debt payoff, Life events). Each entry
+has an icon + title.</li>
+<li>Clicking a scenario routes to <code>?type=&lt;id&gt;</code> in the URL.</li>
+<li>Hit reload → the same scenario loads.</li>
+<li>Per-scenario inputs persist when switching between scenarios:<ul>
+<li>Set the Invest scenario&#39;s monthly contribution to $1000.</li>
+<li>Switch to FIRE → set spend to $80k.</li>
+<li>Switch back to Invest → your $1000 is still there.</li>
+</ul>
+</li>
+</ol>
+<h3 id="cash-flow-stress-test-migration-of-the-old-scenarios">Cash-flow stress test (migration of the old <code>/scenarios</code>)<a class="heading-anchor" href="#cash-flow-stress-test-migration-of-the-old-scenarios">#</a></h3>
+<ol>
+<li>Pick <strong>Cash-flow stress test</strong>. Form: horizon dropdown, income
+slider, expense slider, one-time events.</li>
+<li>Set income to 110% and expenses to 90%. Click <strong>Run</strong> (or it
+auto-runs).</li>
+<li>Two-line chart appears: Baseline (grey) + Scenario (purple).</li>
+<li>Cards show Starting / Baseline ending / Scenario ending.</li>
+</ol>
+<hr>
+<h2 id="0241-wealth-scenarios">0.24.1 — Wealth scenarios<a class="heading-anchor" href="#0241-wealth-scenarios">#</a></h2>
+<p>For each below, fill in reasonable values and confirm the result panel
+shows the listed metrics.</p>
+<h3 id="invest-xmo-for-y-years-at-z">Invest $X/mo for Y years at Z%<a class="heading-anchor" href="#invest-xmo-for-y-years-at-z">#</a></h3>
+<ul>
+<li>3 metric cards: Total contributed / Tax-deferred ending / Taxable ending.</li>
+<li>Growth-curve chart with three series (Contributed, Tax-deferred, Taxable).</li>
+</ul>
+<h3 id="bump-401k-to-n">Bump 401(k) to N%<a class="heading-anchor" href="#bump-401k-to-n">#</a></h3>
+<ul>
+<li>3 metric cards: Annual contribution change / Take-home hit
+(after tax savings) / Tax savings this year.</li>
+<li>3 metric cards underneath: Balance at retirement (current vs new)
+with the difference highlighted.</li>
+<li>A &quot;leaving free money on the table&quot; warning when the new
+contribution % is below the employer match cap.</li>
+</ul>
+<h3 id="windfall-split">Windfall split<a class="heading-anchor" href="#windfall-split">#</a></h3>
+<ul>
+<li>Three metric cards (Emergency fund / Toward debt / Invested) with
+the cumulative N-year impact in the description.</li>
+<li>If splits don&#39;t total 100%, a warning banner shows the total.</li>
+</ul>
+<h3 id="fire-date">FIRE date<a class="heading-anchor" href="#fire-date">#</a></h3>
+<ul>
+<li>Annual savings + save rate</li>
+<li>FIRE number = annual spend / SWR</li>
+<li>Distance to FIRE</li>
+<li>&quot;Years to FIRE&quot; big number (or a clear &quot;spending exceeds take-home&quot;
+banner when savings ≤ 0).</li>
+</ul>
+<hr>
+<h2 id="0242-debt-scenarios">0.24.2 — Debt scenarios<a class="heading-anchor" href="#0242-debt-scenarios">#</a></h2>
+<h3 id="add-xmo-extra-payment">Add $X/mo extra payment<a class="heading-anchor" href="#add-xmo-extra-payment">#</a></h3>
+<ul>
+<li>Current trajectory card (payoff time, total interest) vs With
+extra card (payoff time, total interest).</li>
+<li>Net impact card: time saved + interest saved.</li>
+<li>If payment doesn&#39;t cover interest, banner explains the minimum
+needed.</li>
+</ul>
+<h3 id="balance-transfer-offer">Balance transfer offer<a class="heading-anchor" href="#balance-transfer-offer">#</a></h3>
+<ul>
+<li>Two side-by-side cards: stay vs transfer.</li>
+<li>Transfer card includes the fee + remaining balance at promo end if
+payoff doesn&#39;t fit.</li>
+<li>Verdict card: interest saved (or lost) by transferring.</li>
+</ul>
+<h3 id="consolidate-at-one-rate">Consolidate at one rate<a class="heading-anchor" href="#consolidate-at-one-rate">#</a></h3>
+<ul>
+<li>Add/remove multi-debt rows.</li>
+<li>Verdict shows interest saved + monthly payment change (color-coded).</li>
+</ul>
+<h3 id="biweekly-mortgage">Biweekly mortgage<a class="heading-anchor" href="#biweekly-mortgage">#</a></h3>
+<ul>
+<li>Standard vs biweekly side-by-side.</li>
+<li>Net impact: time saved + interest saved (typically years and
+thousands).</li>
+</ul>
+<hr>
+<h2 id="0243-life-event-scenarios">0.24.3 — Life-event scenarios<a class="heading-anchor" href="#0243-life-event-scenarios">#</a></h2>
+<h3 id="have-a-kid">Have a kid<a class="heading-anchor" href="#have-a-kid">#</a></h3>
+<ul>
+<li>Monthly cost added + annual net (after tax credit).</li>
+<li>Cumulative cost: Year 1 / Years 1–5 / Years 1–18.</li>
+<li>529 ending value at 18.</li>
+</ul>
+<h3 id="buy-a-house">Buy a house<a class="heading-anchor" href="#buy-a-house">#</a></h3>
+<ul>
+<li>Cash at closing, loan amount, monthly PITI + HOA + PMI breakdown
+table.</li>
+<li>Front-end + back-end DTI ratios with color tone.</li>
+<li>Verdict banner: Comfortable / Stretched / Over budget.</li>
+</ul>
+<h3 id="job-change">Job change<a class="heading-anchor" href="#job-change">#</a></h3>
+<ul>
+<li>Current vs new total comp; new (COL-adjusted) total.</li>
+<li>Annual delta (color-tone signaling raise vs cut).</li>
+<li>N-year net: cumulative comp delta compounded + relocation cost
+subtracted.</li>
+</ul>
+<h3 id="sabbatical-income-loss">Sabbatical / income loss<a class="heading-anchor" href="#sabbatical-income-loss">#</a></h3>
+<ul>
+<li>Monthly burn during break, runway at burn rate.</li>
+<li>Cash at end of break (success → remaining cushion; failure → red
+banner with breakpoint month).</li>
+<li>Rebuild path (when surviving): time to restore starting cushion.</li>
+</ul>
+<h3 id="recession-income-shock">Recession / income shock<a class="heading-anchor" href="#recession-income-shock">#</a></h3>
+<ul>
+<li>Baseline vs shocked monthly net.</li>
+<li>End-of-shock cash position with success / stretched / over banners.</li>
+</ul>
+<hr>
+<h2 id="0244-11-new-reports">0.24.4 — 11 new reports<a class="heading-anchor" href="#0244-11-new-reports">#</a></h2>
+<p><code>/reports</code> should list <strong>17 reports</strong> in the left rail. Confirm each
+new one runs without error and the CSV export downloads:</p>
+<ul>
+<li><input disabled="" type="checkbox"> Year-over-year by category</li>
+<li><input disabled="" type="checkbox"> Month-over-month movers</li>
+<li><input disabled="" type="checkbox"> Day-of-week spending pattern</li>
+<li><input disabled="" type="checkbox"> Tax-deductible YTD</li>
+<li><input disabled="" type="checkbox"> Savings rate by month</li>
+<li><input disabled="" type="checkbox"> Income sources breakdown</li>
+<li><input disabled="" type="checkbox"> First-time merchants</li>
+<li><input disabled="" type="checkbox"> Refunds and chargebacks YTD</li>
+<li><input disabled="" type="checkbox"> Bill price drift</li>
+<li><input disabled="" type="checkbox"> Debt balance by month</li>
+<li><input disabled="" type="checkbox"> Average transaction by category</li>
+</ul>
+<p><strong>Nav-loop fix</strong>: after running any report, click a sidebar link →
+should navigate immediately (no 2-click workaround needed).</p>
+<hr>
+<h2 id="0245-editable-mileage-rates">0.24.5 — Editable mileage rates<a class="heading-anchor" href="#0245-editable-mileage-rates">#</a></h2>
+<ol>
+<li>Open <code>/mileage</code>. Below the year summary table, a new section: <strong>IRS
+standard mileage rates</strong>.</li>
+<li>Confirm the table lists every year currently seeded (2022–2026 by
+default) with Business / Charity / Medical rates.</li>
+<li>Click <strong>Edit</strong> on any row → values become inputs → Save → row
+updates, source pill flips from <code>seeded</code> to <code>manual</code>.</li>
+<li>Click <strong>+ Add year</strong> → enter <code>2027</code> → row appears pre-filled from
+the most recent year on file.</li>
+<li>Run the <strong>Tax-deductible YTD</strong> report (from 0.24.4) and confirm
+the deduction uses the new rates if you edited the current year.</li>
+</ol>
+<hr>
+<h2 id="0246-daily-anomaly-scan">0.24.6 — Daily anomaly scan<a class="heading-anchor" href="#0246-daily-anomaly-scan">#</a></h2>
+<ol>
+<li>Confirm <strong>ANOMALY_ENABLED</strong> is <code>true</code> in <code>/system/settings</code>.</li>
+<li>Make sure the tenant has at least one obvious anomaly candidate
+(e.g. a $2,000 charge at a merchant you usually spend $20 at,
+already on file).</li>
+<li>Within ~1 hour of the next scheduler tick (or immediately after
+restarting the app), <code>/anomalies</code> shows the alert.</li>
+<li>Re-running the scheduler doesn&#39;t create duplicates (anomaly_alerts
+has a unique index on (transaction_id, kind)).</li>
+</ol>
+<hr>
+<h2 id="0247-0248-dark-mode-polish">0.24.7 / 0.24.8 — Dark-mode polish<a class="heading-anchor" href="#0247-0248-dark-mode-polish">#</a></h2>
+<ol>
+<li>Toggle to dark theme (ThemeToggle in the sidebar footer).</li>
+<li>Open any page with a date input (e.g. <code>/transactions</code> filter,
+<code>/goals</code> new-goal modal, <code>/mileage</code> add-trip form). The calendar
+icon next to the date input should be clearly visible (light
+stroke on dark background). Hover shows an accent-tinted
+background.</li>
+<li>Bare <code>.pill</code> elements (e.g. category pills on <code>/transactions</code>)
+show against the surface-3 tint, not the old hardcoded light blue.</li>
+<li>Status pills on <code>/recurring</code> (Active / Paused / Closed) all read
+cleanly.</li>
+</ol>
+<hr>
+<h2 id="0249-portability-export">0.24.9 — Portability export<a class="heading-anchor" href="#0249-portability-export">#</a></h2>
+<ol>
+<li><code>/workspace</code> → <strong>Download .smrtcash archive</strong>.</li>
+<li>File downloads as <code>smrtcash-&lt;tenant&gt;-&lt;timestamp&gt;.smrtcash</code>.</li>
+<li>Open it (it&#39;s a gzipped tar): inside is <code>tenant.json</code> (manifest +
+bundled rows) and <code>attachments/</code> (any receipts you&#39;ve uploaded).</li>
+<li>Re-import the archive on a fresh tenant (or a test instance) →
+counts in the manifest match what lands.</li>
+</ol>
+<hr>
+<h2 id="02410-auto-learn-manual-renames-drift-mode-amount-snap">0.24.10 — Auto-learn manual renames + drift-mode amount snap<a class="heading-anchor" href="#02410-auto-learn-manual-renames-drift-mode-amount-snap">#</a></h2>
+<h3 id="manual-rename-auto-rule">Manual rename auto-rule<a class="heading-anchor" href="#manual-rename-auto-rule">#</a></h3>
+<ol>
+<li>Find a transaction with a messy raw_description like <code>POS DEBIT 12/05 STARBUCKS #4523 SEATTLE WA</code>.</li>
+<li>Click the row → edit merchant to <code>Starbucks</code>. Save.</li>
+<li>Open <code>/normalization-rules</code>. A new rule appears with:<ul>
+<li>Pattern = the full raw_description</li>
+<li>Normalized merchant = <code>Starbucks</code></li>
+<li>Source = <code>manual</code></li>
+<li>Enabled = true</li>
+</ul>
+</li>
+<li>Run the next import containing a similar description → the rename
+carries forward via the new rule.</li>
+<li>(Optional) Edit the rule&#39;s pattern to just <code>STARBUCKS</code> to
+generalize.</li>
+</ol>
+<h3 id="drift-mode-amount-snap">Drift-mode amount snap<a class="heading-anchor" href="#drift-mode-amount-snap">#</a></h3>
+<ol>
+<li>Create a bill: name <code>Mister Car Wash</code>, amount $24.99, frequency
+monthly, <strong>Amount mode = Drifts</strong>, merchant pattern <code>Mister Car Wash</code>.</li>
+<li>Import a transaction matching that bill at $26.99.</li>
+<li>Refresh <code>/recurring</code>. The bill&#39;s expected amount has snapped to
+$26.99. Next cycle&#39;s budget reflects the new expected.</li>
+<li>Repeat with a <strong>Fixed-mode</strong> bill at $15.49 + a $15.49 charge →
+amount stays $15.49 (fixed-mode is &quot;alert me if it changes,&quot;
+so we do NOT auto-update).</li>
+</ol>
+<hr>
+<h2 id="sign-off">Sign-off<a class="heading-anchor" href="#sign-off">#</a></h2>
+<p>After all sections pass, the build is RC1-ready. Tag the release and
+move on to the RC1 cohort distribution / feedback collection plan.</p>
+
+</main>
+<footer class="page">
+  <span>Generated 2026-05-28 01:54:37 UTC · commit be0f9c1</span>
+  <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
+</footer>
+</div>
+</body>
+</html>

@@ -162,59 +162,70 @@ descriptions, attach receipts, and see where your money goes — runs
 <strong>self-hosted</strong> on hardware you control <strong>or as a SaaS</strong> on
 infrastructure the operator deploys.</p>
 <h2 id="status">Status<a class="heading-anchor" href="#status">#</a></h2>
-<p><strong>Phases 1–9 + the original 0.13/0.14 hardening — complete.</strong> <strong>The
-0.15.x SaaS pivot — complete</strong> (<code>0.15.0</code> → <code>0.15.5</code>): Stripe billing,
-entitlement gating, dunning + grace, operator runbook. <strong>The 0.16.x
-SaaS launch readiness — complete</strong> (<code>0.16.0</code> → <code>0.16.4</code>): public
-signup with email verification, self-service password reset,
-super-admin subscriptions console, runtime-editable Stripe + signup
-settings, surfaced support link, <strong>per-tenant attachment encryption
-with envelope key wrapping + super-admin-driven rotation</strong>.</p>
+<p><strong>Current release: 0.24.4</strong> — phases 1–9, hardening, SaaS pivot
+(0.15.x), launch readiness (0.16.x), competitive-parity work
+(0.18.x), reconciliation + investment analysis (0.19.x), agentic AI
+moat (0.20.x), universal customer asks (0.21.x), production-launch
+readiness (0.22.x), and the scenario-expansion arc (0.24.x) all
+shipped. Next planned arc is <strong>0.25.x — credit-score + retirement
+scenarios</strong>. <strong>Scaling work is queued as 0.26.x</strong> for after feature
+work.</p>
 <p>What ships today:</p>
 <ul>
 <li><strong>Import &amp; connectivity</strong> — CSV / XLSX / OFX / QFX / QIF import with
 bank-format auto-detection and duplicate protection; <strong>OFX Direct
-Connect</strong> to pull transactions straight from supporting banks;
-<strong>opt-in Plaid integration</strong> (off by default); <strong>scheduled background
-sync</strong> that drives all sources on a per-source cadence and refreshes
-crypto prices.</li>
+Connect</strong>; <strong>opt-in Plaid integration</strong>; <strong>scheduled background
+sync</strong> with per-source cadence + daily crypto-price refresh.</li>
 <li><strong>AI normalization</strong> — pluggable provider (rules / Claude API /
-Ollama) that cleans merchant names and categorizes transactions, plus
-a <strong>conversational financial assistant</strong> with 17 tenant-scoped,
-audit-logged tools.</li>
+Ollama) that cleans merchant names and categorizes transactions,
+plus a <strong>conversational financial assistant</strong> with tenant-scoped
+audit-logged tools. <strong>Manual renames auto-learn</strong> into the
+normalization rule set so future imports inherit them.</li>
 <li><strong>Receipts</strong> — drag-and-drop attachments with Claude-vision OCR +
 <strong>per-tenant envelope encryption</strong> (AES-256-GCM DEK wrapped by a
 global KEK; super-admin can rotate any tenant&#39;s key without touching
 others), mismatch flagging.</li>
-<li><strong>Wealth</strong> — investment holdings (cost basis + mark-to-market), manual
-assets &amp; liabilities, <strong>multi-currency</strong> with daily-refreshed FX
-rates, <strong>retirement projections</strong>, <strong>crypto</strong> tracking with daily
-CoinGecko price refresh.</li>
+<li><strong>Wealth</strong> — investment holdings (cost basis + mark-to-market),
+manual assets &amp; liabilities, <strong>multi-currency</strong> with daily-refreshed
+FX rates, <strong>retirement projections</strong>, <strong>crypto</strong> tracking, <strong>credit
+card payoff goals</strong> that auto-track current balance toward $0 or a
+target utilization %.</li>
 <li><strong>Budgeting &amp; cash flow</strong> — flex budgets, weekly→monthly periods,
-budget-vs-actual, savings goals, bill reminders, AutoMagic wizard
-with fuel/toll math, 90-day forecast.</li>
-<li><strong>Reporting &amp; insights</strong> — dashboard charts, anomaly alerts,
-tax-category tagging + year-end Schedule A/C reports, calendar
-budget view, filtered CSV export, data portability tooling.</li>
+budget-vs-actual, savings goals with <strong>28 curated templates</strong>,
+AutoMagic wizard with fuel/toll math, 90-day forecast.</li>
+<li><strong>Bill matching engine</strong> — <code>/recurring</code> (Bills + Subscriptions
+unified) with per-bill amount-mode (fixed / drift / variable),
+match-window, merchant pattern. Auto-links incoming transactions
+and queues the ambiguous ones for review. Drift-mode bills track
+the latest matched amount automatically.</li>
+<li><strong>What-if scenarios</strong> — <code>/scenarios</code> hub with 13 calculators:
+invest $X/mo, bump 401(k), windfall split, FIRE date, balance
+transfer, debt consolidation, biweekly mortgage, have a kid, buy a
+house, job change, sabbatical, recession stress test, plus the
+cash-flow projector.</li>
+<li><strong>Reporting &amp; insights</strong> — <strong>17 canned reports</strong> (year-over-year,
+month-over-month movers, day-of-week pattern, tax-deductible YTD,
+savings rate, income sources, first-time merchants, refunds YTD,
+bill price drift, debt-balance over time, average txn, plus the
+originals); <strong>dashboard charts</strong>, <strong>daily anomaly scan</strong>,
+<strong>tax-category tagging</strong> + Schedule A/C reports, <strong>editable
+per-tenant IRS mileage rates</strong>, calendar budget view, CSV export,
+full data portability (<code>.smrtcash</code> bundle).</li>
 <li><strong>Mobile</strong> — installable PWA with responsive UI, offline shell,
 install prompt.</li>
 <li><strong>Households &amp; sharing</strong> — multi-tenant with admin/spouse/child
-roles, <strong>per-account read/read-write permission tuning</strong>, <strong>bill-
-splitting</strong> with net-balance settlement, <strong>cross-tenant isolation
-verified</strong> by a dedicated security test suite.</li>
+roles, <strong>per-account read/read-write permission tuning</strong>,
+<strong>bill-splitting</strong>, <strong>cross-tenant isolation verified</strong> by a
+dedicated security test suite.</li>
 <li><strong>SaaS billing</strong> — three tiers (Starter / Plus / Family), Stripe
-Checkout + Customer Portal, 14-day trial, dunning emails on
-payment_failed + 3-day grace, per-tenant metered usage (AI
-assistant, OCR) with cap-overflow warnings.</li>
+Checkout + Customer Portal, 14-day trial, dunning emails +
+3-day grace, per-tenant metered usage with cap-overflow warnings.</li>
 <li><strong>Public signup + self-service</strong> — <code>/signup</code> (gated by
 <code>PUBLIC_SIGNUP_ENABLED</code>), email verification, password reset, all
 with anti-enumeration response shapes.</li>
-<li><strong>Operator surface</strong> — super-admin <strong>subscriptions console</strong>
-(<code>/system/subscriptions</code>) with grant / sync-from-Stripe /
-force-cancel actions; <strong>SaaS health dashboard</strong> on <code>/health</code> with
-tenant + subscription + webhook ingest metrics; runtime-editable
-settings (Stripe keys, signup gate, support URL); operator runbook
-with playbooks for the common SaaS incidents.</li>
+<li><strong>Operator surface</strong> — super-admin <strong>subscriptions console</strong> +
+<strong>SaaS health dashboard</strong> + runtime-editable settings; full
+operator runbook with playbooks for the common SaaS incidents.</li>
 </ul>
 <p>See the <a href="./ROADMAP.html">Roadmap</a> for the full phase history and
 <a href="./CHANGELOG.html">Changelog</a> for what landed when.</p>
@@ -326,10 +337,10 @@ npm run dev --prefix web      # terminal 2
 <li>Money is stored as <strong>integer cents</strong> — never floating point.</li>
 </ul>
 <h2 id="testing">Testing<a class="heading-anchor" href="#testing">#</a></h2>
-<p><strong>743 automated server tests + 6 web tests</strong> spanning unit,
-integration, functional, security (incl. <strong>72 cross-tenant isolation
-tests</strong>), smoke, performance, and end-to-end layers — full suite
-passes cleanly. With PostgreSQL running:</p>
+<p>Automated server tests + web tests spanning unit, integration,
+functional, security (incl. cross-tenant isolation tests), smoke,
+performance, and end-to-end layers — full suite passes cleanly.
+With PostgreSQL running:</p>
 <pre><code class="language-sh">npm test            # server + web tests
 npm run test:e2e    # browser end-to-end tests
 </code></pre>
@@ -351,7 +362,7 @@ policy.</p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-27 13:47:31 UTC · commit cff74b2</span>
+  <span>Generated 2026-05-28 01:54:34 UTC · commit be0f9c1</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

@@ -280,9 +280,19 @@ application — nothing is &quot;all or nothing.&quot;</p>
 <td>✅ Complete — 2026-05-24</td>
 </tr>
 <tr>
-<td><strong>0.23.x</strong></td>
+<td><strong>0.24.x</strong></td>
+<td><strong>Scenario expansion — hub + 13 scenarios + 11 reports + editable mileage rates + daily anomaly scan</strong></td>
+<td>✅ Complete — 2026-05-27</td>
+</tr>
+<tr>
+<td><strong>0.25.x</strong></td>
+<td><strong>Credit-score + retirement scenarios — needs new model layers (score-band, Monte Carlo / withdrawal)</strong></td>
+<td>📋 Planned (next up after 0.24.x)</td>
+</tr>
+<tr>
+<td><strong>0.26.x</strong></td>
 <td><strong>Scaling — vertical upgrade runbook + horizontal architecture (read replicas, multi-instance app, object-store attachments)</strong></td>
-<td>📋 Planned</td>
+<td>📋 Planned (renumbered from 0.23.x; feature work prioritized first)</td>
 </tr>
 </tbody></table>
 <p>Legend: ✅ done · 🔜 next up · 📋 planned · 💡 backlog</p>
@@ -1175,10 +1185,73 @@ story has to fail (drop-off attributable to install/UX)
 before a native build earns its complexity.</li>
 </ul>
 <hr>
-<h2 id="023x-scaling">0.23.x — Scaling 📋<a class="heading-anchor" href="#023x-scaling">#</a></h2>
+<h2 id="024x-scenario-expansion">0.24.x — Scenario expansion ✅<a class="heading-anchor" href="#024x-scenario-expansion">#</a></h2>
+<p><strong>Goal:</strong> Turn <code>/scenarios</code> from a one-trick cash-flow projector into a real life-planning surface. Users come in with specific questions — &quot;should I bump my 401(k)?&quot;, &quot;what if we have a kid?&quot;, &quot;is a balance transfer worth it?&quot; — and walk out with a numeric answer they can lean on. Each scenario type is its own form + calculator + result panel under a shared hub UI.</p>
+<p>Shipped 2026-05-27.</p>
+<h3 id="0240-scenario-hub-refactor">0.24.0 — Scenario hub refactor 🧱 ✅<a class="heading-anchor" href="#0240-scenario-hub-refactor">#</a></h3>
+<p>Refactored <code>/scenarios</code> into a hub that lists available scenario types and routes each to its own input/result view. The existing cash-flow-with-deltas scenario keeps working (became the &quot;Cash-flow stress test&quot; entry). Per-scenario inputs persist when switching between scenarios.</p>
+<h3 id="0241-wealth-building-scenarios">0.24.1 — Wealth-building scenarios 📈 ✅<a class="heading-anchor" href="#0241-wealth-building-scenarios">#</a></h3>
+<ul>
+<li><strong>Invest $X/mo for Y years at Z%</strong> — compounding curve, tax-deferred vs taxable side-by-side.</li>
+<li><strong>Bump 401(k) to N%</strong> — take-home delta, tax savings, retirement-balance delta, employer-match warning.</li>
+<li><strong>Windfall split</strong> — bonus / refund / inheritance: emergency + debt + invest split with N-year impact.</li>
+<li><strong>FIRE date</strong> — given save rate + spend, years until portfolio covers SWR.</li>
+</ul>
+<h3 id="0242-debt-payoff-scenarios">0.24.2 — Debt-payoff scenarios 💸 ✅<a class="heading-anchor" href="#0242-debt-payoff-scenarios">#</a></h3>
+<ul>
+<li><strong>Add $X/mo extra payment</strong> — time + interest saved.</li>
+<li><strong>Balance transfer offer</strong> — promo APR + transfer fee vs current APR.</li>
+<li><strong>Consolidate at one rate</strong> — multi-debt list rolled into a single loan.</li>
+<li><strong>Biweekly mortgage</strong> — years shaved + interest saved.</li>
+</ul>
+<h3 id="0243-life-event-scenarios">0.24.3 — Life-event scenarios 🌱 ✅<a class="heading-anchor" href="#0243-life-event-scenarios">#</a></h3>
+<ul>
+<li><strong>Have a kid</strong> — childcare + 529 + tax credit, year 1 / 5 / 18.</li>
+<li><strong>Buy a house</strong> — PITI breakdown, front/back-end DTI, lender-comfort verdict.</li>
+<li><strong>Job change</strong> — total comp delta (salary + benefits + match) adjusted for COL, N-year net.</li>
+<li><strong>Sabbatical / income loss</strong> — runway, end-of-break cash, rebuild timeline.</li>
+<li><strong>Recession / income shock</strong> — stress-test with belt-tightening response, breakpoint month.</li>
+</ul>
+<h3 id="follow-on-slices-that-landed-in-the-same-arc">Follow-on slices that landed in the same arc<a class="heading-anchor" href="#follow-on-slices-that-landed-in-the-same-arc">#</a></h3>
+<ul>
+<li><strong>0.24.4</strong> — 11 new reports (year-over-year by category, MoM movers, day-of-week pattern, tax-deductible YTD, savings rate by month, income sources, first-time merchants, refunds YTD, bill price drift, debt balance by month, average txn by category).</li>
+<li><strong>0.24.5</strong> — editable per-tenant IRS mileage rates (was hardcoded; now per-year editable from <code>/mileage</code>).</li>
+<li><strong>0.24.6</strong> — daily anomaly scan riding the insights scheduler.</li>
+<li><strong>0.24.7</strong> — date-picker indicator visible in dark mode (replaced native glyph with theme-aware SVG).</li>
+<li><strong>0.24.8</strong> — pill backgrounds adapt to dark mode (theme vars instead of hardcoded hex).</li>
+<li><strong>0.24.9</strong> — error-handler tolerates non-string <code>err.code</code>; portability export tar flag fix.</li>
+</ul>
+<h3 id="implementation-notes">Implementation notes<a class="heading-anchor" href="#implementation-notes">#</a></h3>
+<p>Each scenario type lives in <code>web/src/scenarios/&lt;id&gt;.tsx</code> and exports a <code>ScenarioDef</code>: id, title, subtitle, category, defaults, Form, Result. Calculations are pure functions (no API) for every scenario except cash-flow-stress, which needs <code>/api/cash-flow</code> baseline.</p>
+<hr>
+<h2 id="025x-credit-score-retirement-scenarios">0.25.x — Credit-score + retirement scenarios 📋<a class="heading-anchor" href="#025x-credit-score-retirement-scenarios">#</a></h2>
+<p>Deferred from 0.24.x because both need model layers we don&#39;t have yet.</p>
+<h3 id="0250-credit-score-modeling">0.25.0 — Credit-score modeling 📊<a class="heading-anchor" href="#0250-credit-score-modeling">#</a></h3>
+<p>A coarse FICO-like model that translates utilization, age-of-credit, hard-pull count, and account mix into an estimated score band (not a number). Even with a simple &quot;your utilization is 65% → band: Fair → likely 600-650&quot; output, the scenario surface becomes:</p>
+<ul>
+<li><strong>Pay to N% utilization → score band</strong> (pairs with the 0.22.2 credit-card payoff goals).</li>
+<li><strong>New card opened</strong> — temp hit from hard pull + utilization headroom gained.</li>
+<li><strong>Old card closed</strong> — utilization rises + average history shortens.</li>
+<li><strong>Collections removed</strong> — biggest single-event modeled lift.</li>
+</ul>
+<p>Open question for this arc: do we ship a hand-rolled model or buy a real score-estimator API (Experian, ScoreSense, etc.)?</p>
+<h3 id="0251-retirement-scenarios">0.25.1 — Retirement scenarios 🏖️<a class="heading-anchor" href="#0251-retirement-scenarios">#</a></h3>
+<p>Once we have a real return-assumption model + withdrawal model:</p>
+<ul>
+<li><strong>Retire at 60 vs 65 vs 67</strong> — savings needed, monthly draw, longevity risk.</li>
+<li><strong>Social Security at 62 vs 67 vs 70</strong> — break-even age + lifetime delta.</li>
+<li><strong>Healthcare to Medicare gap</strong> — premium projection for ages 60–65.</li>
+<li><strong>Roth conversion ladder</strong> — convert $X/yr from traditional, tax cost vs RMD reduction at 73.</li>
+</ul>
+<p>Depends on us having a real Monte Carlo or sequence-of-returns engine, not just compounding curves. Deferred until we know what we want there.</p>
+<hr>
+<h2 id="026x-scaling">0.26.x — Scaling 📋<a class="heading-anchor" href="#026x-scaling">#</a></h2>
+<blockquote>
+<p><strong>Sequencing note:</strong> Originally drafted as 0.23.x (the next arc after 0.22.x), renumbered to 0.26.x because feature work (0.24.x scenarios shipped, 0.25.x credit/retirement next) is taking priority — we&#39;re still nowhere near the capacity ceiling that justifies architectural moves.</p>
+</blockquote>
 <p><strong>Goal:</strong> Stop reaching for &quot;stand up a new server&quot; as the answer to &quot;we&#39;re running out of capacity.&quot; Build the runbook for vertical upgrades and the architecture for horizontal scale so growth doesn&#39;t require an emergency migration.</p>
 <p>The trigger for this series is the <strong>/health → Server capacity</strong> widget (0.18.13). Once that widget says &quot;prepare a replacement environment by [date],&quot; we want the migration to be a 1-hour boring procedure, not a project.</p>
-<h3 id="0230-vertical-scale-runbook">0.23.0 — Vertical-scale runbook ⬆️<a class="heading-anchor" href="#0230-vertical-scale-runbook">#</a></h3>
+<h3 id="0260-vertical-scale-runbook">0.26.0 — Vertical-scale runbook ⬆️<a class="heading-anchor" href="#0260-vertical-scale-runbook">#</a></h3>
 <p>Document and rehearse the cheapest answer to &quot;we need more capacity&quot;: <strong>bigger box.</strong> Until traffic justifies the architectural complexity of horizontal scale, vertical is the right move.</p>
 <p>Deliverables:</p>
 <ul>
@@ -1194,8 +1267,8 @@ before a native build earns its complexity.</li>
 <li><strong>Reusable migration script</strong> at <code>scripts/migrate-server.sh</code> that rolls those steps into one prompt-driven flow.</li>
 <li><strong>Capacity ceiling estimates</strong> documented per Hostinger VM tier (or chosen host&#39;s equivalent) so the operator knows when the next-bigger tier still won&#39;t be enough.</li>
 </ul>
-<p>Expected lifespan of vertical-only scaling: probably good through low-thousands of paying tenants. Beyond that → 0.23.1+.</p>
-<h3 id="0231-stateless-app-shared-session-store">0.23.1 — Stateless app + shared session store ↔️<a class="heading-anchor" href="#0231-stateless-app-shared-session-store">#</a></h3>
+<p>Expected lifespan of vertical-only scaling: probably good through low-thousands of paying tenants. Beyond that → 0.26.1+.</p>
+<h3 id="0261-stateless-app-shared-session-store">0.26.1 — Stateless app + shared session store ↔️<a class="heading-anchor" href="#0261-stateless-app-shared-session-store">#</a></h3>
 <p>Today the app is single-instance: one container, in-memory rate limit state, file-system attachments. Sharing instances behind a load balancer requires eliminating per-instance state.</p>
 <p>Deliverables:</p>
 <ul>
@@ -1204,7 +1277,7 @@ before a native build earns its complexity.</li>
 <li><strong>Health-check endpoint</strong> that returns 200 once the app is ready to accept traffic and 503 during startup migrations. Required for a load balancer to do anything sensible during deploys.</li>
 <li><strong>Multi-instance Docker compose</strong> sample at <code>docker-compose.scale.yml</code> showing N app containers behind an Nginx LB on a single host — the &quot;scale up before scale out&quot; intermediate step.</li>
 </ul>
-<h3 id="0232-attachments-to-object-storage">0.23.2 — Attachments to object storage 📦<a class="heading-anchor" href="#0232-attachments-to-object-storage">#</a></h3>
+<h3 id="0262-attachments-to-object-storage">0.26.2 — Attachments to object storage 📦<a class="heading-anchor" href="#0262-attachments-to-object-storage">#</a></h3>
 <p>Today receipts live on the app&#39;s local filesystem encrypted with the per-tenant DEK. That&#39;s a hard ceiling on horizontal scale because every app instance needs the same files.</p>
 <p>Deliverables:</p>
 <ul>
@@ -1214,7 +1287,7 @@ before a native build earns its complexity.</li>
 <li><strong>Backup script</strong> updates: when <code>ATTACHMENT_STORAGE=s3</code>, backups skip the attachments tar and the operator relies on S3 lifecycle/versioning for that side.</li>
 <li><strong>F-31 hardening</strong>: container can finally run with <code>read-only</code> rootfs since attachments no longer write to the local FS.</li>
 </ul>
-<h3 id="0233-postgres-read-replica-connection-pooling">0.23.3 — Postgres read replica + connection pooling 📊<a class="heading-anchor" href="#0233-postgres-read-replica-connection-pooling">#</a></h3>
+<h3 id="0263-postgres-read-replica-connection-pooling">0.26.3 — Postgres read replica + connection pooling 📊<a class="heading-anchor" href="#0263-postgres-read-replica-connection-pooling">#</a></h3>
 <p>Once we&#39;re running N app instances, the DB becomes the next bottleneck. Two moves:</p>
 <p>Deliverables:</p>
 <ul>
@@ -1223,7 +1296,7 @@ before a native build earns its complexity.</li>
 <li><strong>Replica lag awareness</strong> — if the replica is more than 30s behind, fall back to the primary so the user never sees stale data.</li>
 <li><strong>Documentation</strong> at <code>docs/RUNBOOK_HORIZONTAL_SCALE.md</code> covering the cutover.</li>
 </ul>
-<h3 id="0234-multi-region-optional-customer-driven">0.23.4 — Multi-region (optional, customer-driven) 🌎<a class="heading-anchor" href="#0234-multi-region-optional-customer-driven">#</a></h3>
+<h3 id="0264-multi-region-optional-customer-driven">0.26.4 — Multi-region (optional, customer-driven) 🌎<a class="heading-anchor" href="#0264-multi-region-optional-customer-driven">#</a></h3>
 <p>Probably 2027+. Only worth doing once we have measurable EU/AU/AP customer base. Sketch only:</p>
 <ul>
 <li>Postgres logical replication across regions</li>
@@ -1243,7 +1316,7 @@ product is used and priorities become clearer.</em></p>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-27 13:47:32 UTC · commit cff74b2</span>
+  <span>Generated 2026-05-28 01:54:36 UTC · commit be0f9c1</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

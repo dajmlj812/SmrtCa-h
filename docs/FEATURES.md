@@ -4,9 +4,9 @@ Legend: ✅ available now · 🔜 next · 📋 planned · 💡 backlog (deferred
 
 The planned set was shaped by a competitive review of Monarch, Simplifi,
 Empower, Banktivity, CountAbout, Rocket Money and Moneydance — adopting their
-table-stakes features. As of **0.16.4**, Phases 1–9, the 0.13/0.14 hardening
-backlog, the 0.15.x SaaS pivot, and the 0.16.x SaaS launch readiness work
-are all complete. Native mobile is deferred (the PWA covers it). See the
+table-stakes features. As of **0.24.4**, every arc through 0.22.x (production
+launch readiness) and 0.24.x (scenario expansion + matcher learning) is
+complete. Native mobile is deferred (the PWA covers it). See the
 [Roadmap](./ROADMAP.md) for phase detail and the [Changelog](../CHANGELOG.md)
 for per-release notes.
 
@@ -93,6 +93,7 @@ for per-release notes.
 | Bulk edits with optional "save as rule" | ✅ |
 | Bulk delete (with confirm) for cleanup | ✅ |
 | Learned normalization rules (manual edits become persistent patterns) | ✅ |
+| **Auto-learn from manual rename** — editing a transaction's merchant name auto-upserts a normalization rule so future imports of the same description carry the rename forward (0.24.10) | ✅ |
 | Non-AI rules engine auto-applies during import (tenant-scoped, with enable/priority) | ✅ |
 | Transaction splits (one transaction → multiple categories) | ✅ |
 | Dedicated uncategorized review queue with inline categorization | ✅ |
@@ -101,6 +102,21 @@ for per-release notes.
 | Subscription action queue (flag → cancel / alter / keep with notes) | ✅ |
 | AI subscription discovery (Claude-powered, filters out non-subscriptions) | ✅ |
 | Receipt & file attachments | ✅ |
+
+## Bill Matching & Recurring (0.22.x)
+
+| Feature | Status |
+|---------|--------|
+| Unified `/recurring` page (Bills + Subscriptions, single sidebar entry) | ✅ |
+| Per-bill **amount mode** — fixed (±$1/2%), drift (trailing-3mo avg ±10%), variable (absolute cap) | ✅ |
+| Per-bill **merchant pattern** + match-window (default ±7 days) + overdue-grace (default 3 days) | ✅ |
+| Auto-link incoming transactions to bills on import (vendor + date + amount fit) | ✅ |
+| Triage queue when matcher isn't confident (ambiguous vendor, edge-of-window, out-of-tolerance) | ✅ |
+| Daily overdue sweep — past-grace pending periods flip to overdue + emit an insight card | ✅ |
+| **Drift-mode bills auto-track latest matched amount** — going-forward expected snaps to the last actual payment (0.24.10) | ✅ |
+| Pause / Unpause bills indefinitely + Skip individual periods | ✅ |
+| Rescan transactions — 90-day backfill matcher after editing match config | ✅ |
+| Category fill-on-match — uncategorized transactions adopt the bill's category | ✅ |
 
 ## AI
 
@@ -124,6 +140,8 @@ for per-release notes.
 | Budget periods — weekly / bi-weekly / semi-monthly / monthly / custom | ✅ |
 | Monthly budget-vs-actual tracking | ✅ |
 | Savings goals with progress tracking | ✅ |
+| **Credit-card payoff goals** — track current balance toward $0 or N% utilization (default 30% for credit-score optimization); live progress from linked card balances; entry points on /goals AND /debt-payoff (0.22.2) | ✅ |
+| **Goal templates** — 28 curated templates (emergency fund, debt payoff, 529, retirement, sabbatical, etc.) with sensible defaults | ✅ |
 | Bill reminders & upcoming-bills view | ✅ |
 | Simple cash-flow forecast from recurring items | ✅ |
 | AutoMagic budget wizard (multi-period with bills/income/groceries/fuel/tolls) | ✅ |
@@ -152,9 +170,61 @@ for per-release notes.
 | Dashboard with charts | ✅ |
 | Filtered CSV export | ✅ |
 | Spending-anomaly alerts (large / unusual-at-merchant / duplicate-suspect) | ✅ |
+| **Daily anomaly scan** — runs every ~23h per tenant, not just at import time (0.24.6) | ✅ |
 | Tax-category tagging + year-end Schedule A / C reports (JSON + CSV) | ✅ |
-| Data portability (full account-scoped export bundle) | ✅ |
-| Canned reports catalog (CSV export per report) | ✅ |
+| **Editable per-tenant IRS mileage rates** — was hardcoded, now per-year inline-editable on /mileage (0.24.5) | ✅ |
+| Data portability (full `.smrtcash` export bundle, secrets stripped) | ✅ |
+| Canned reports catalog — **17 reports** (CSV export per report) | ✅ |
+
+### Canned reports (full list)
+
+Core reports (0.13.x):
+
+- Spending by category
+- Top merchants
+- Monthly income vs expense
+- Subscription costs
+- Largest transactions
+- Net worth by month
+
+Added in 0.24.4:
+
+- **Year-over-year by category** — this period vs same period last year, with deltas and % change
+- **Month-over-month movers** — biggest spending swings between the two most recent months
+- **Day-of-week spending pattern** — total + count + average by weekday
+- **Tax-deductible YTD** — Schedule C line totals (uses tax_category taxonomy)
+- **Savings rate by month** — income, expenses, net, % saved
+- **Income sources breakdown** — inflows grouped by category
+- **First-time merchants** — vendors whose first transaction lands in the period (catches subscription creep)
+- **Refunds and chargebacks YTD** — uses refund_status tracking
+- **Bill price drift** — active bills whose recent payments deviate from the stated amount
+- **Debt balance by month** — total debt across credit cards + loans + manual liabilities
+- **Average transaction by category** — count, total, average per category
+
+## What-if Scenarios (0.24.0–0.24.3)
+
+`/scenarios` is a hub: pick a scenario type from the left rail, fill in
+the form, see the result. Per-scenario inputs persist when switching so
+users can compare answers. URL carries `?type=<id>` for refresh + sharing.
+
+| Scenario | Category | Status |
+|---------|----------|--------|
+| Cash-flow stress test (income/expense %, one-time events) | Cash flow | ✅ |
+| Invest $X/mo for Y years at Z% (tax-deferred vs taxable) | Wealth | ✅ |
+| Bump 401(k) to N% (take-home impact + retirement balance impact) | Wealth | ✅ |
+| Windfall split (emergency + debt + invest) | Wealth | ✅ |
+| FIRE date (given save rate + spend) | Wealth | ✅ |
+| Add $X/mo extra payment (time + interest saved) | Debt | ✅ |
+| Balance transfer offer (promo APR + fee vs current) | Debt | ✅ |
+| Consolidate at one rate (multi-debt rolled into one loan) | Debt | ✅ |
+| Biweekly mortgage (years shaved + interest saved) | Debt | ✅ |
+| Have a kid (childcare + 529 + tax credit; year 1 / 5 / 18) | Life event | ✅ |
+| Buy a house (PITI + DTI + lender-comfort verdict) | Life event | ✅ |
+| Job change (total comp delta adjusted for COL, N-year net) | Life event | ✅ |
+| Sabbatical / income loss (runway + rebuild timeline) | Life event | ✅ |
+| Recession / income shock (stress-test next year) | Life event | ✅ |
+| Credit-score modeling (utilization → score band) | Credit | 📋 0.25.0 |
+| Retirement (retire at 60/65/67, SS timing, Roth ladder) | Retirement | 📋 0.25.1 |
 
 ## Mobile & Experience
 

@@ -159,9 +159,9 @@ h4:hover .heading-anchor { visibility: visible; }
 <p>Legend: ✅ available now · 🔜 next · 📋 planned · 💡 backlog (deferred)</p>
 <p>The planned set was shaped by a competitive review of Monarch, Simplifi,
 Empower, Banktivity, CountAbout, Rocket Money and Moneydance — adopting their
-table-stakes features. As of <strong>0.16.4</strong>, Phases 1–9, the 0.13/0.14 hardening
-backlog, the 0.15.x SaaS pivot, and the 0.16.x SaaS launch readiness work
-are all complete. Native mobile is deferred (the PWA covers it). See the
+table-stakes features. As of <strong>0.24.4</strong>, every arc through 0.22.x (production
+launch readiness) and 0.24.x (scenario expansion + matcher learning) is
+complete. Native mobile is deferred (the PWA covers it). See the
 <a href="./ROADMAP.html">Roadmap</a> for phase detail and the <a href="CHANGELOG.html">Changelog</a>
 for per-release notes.</p>
 <hr>
@@ -431,6 +431,10 @@ for per-release notes.</p>
 <td>✅</td>
 </tr>
 <tr>
+<td><strong>Auto-learn from manual rename</strong> — editing a transaction&#39;s merchant name auto-upserts a normalization rule so future imports of the same description carry the rename forward (0.24.10)</td>
+<td>✅</td>
+</tr>
+<tr>
 <td>Non-AI rules engine auto-applies during import (tenant-scoped, with enable/priority)</td>
 <td>✅</td>
 </tr>
@@ -460,6 +464,55 @@ for per-release notes.</p>
 </tr>
 <tr>
 <td>Receipt &amp; file attachments</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h2 id="bill-matching-amp-recurring-022x">Bill Matching &amp; Recurring (0.22.x)<a class="heading-anchor" href="#bill-matching-amp-recurring-022x">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Unified <code>/recurring</code> page (Bills + Subscriptions, single sidebar entry)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Per-bill <strong>amount mode</strong> — fixed (±$1/2%), drift (trailing-3mo avg ±10%), variable (absolute cap)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Per-bill <strong>merchant pattern</strong> + match-window (default ±7 days) + overdue-grace (default 3 days)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Auto-link incoming transactions to bills on import (vendor + date + amount fit)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Triage queue when matcher isn&#39;t confident (ambiguous vendor, edge-of-window, out-of-tolerance)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Daily overdue sweep — past-grace pending periods flip to overdue + emit an insight card</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Drift-mode bills auto-track latest matched amount</strong> — going-forward expected snaps to the last actual payment (0.24.10)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Pause / Unpause bills indefinitely + Skip individual periods</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Rescan transactions — 90-day backfill matcher after editing match config</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Category fill-on-match — uncategorized transactions adopt the bill&#39;s category</td>
 <td>✅</td>
 </tr>
 </tbody></table>
@@ -530,6 +583,14 @@ for per-release notes.</p>
 </tr>
 <tr>
 <td>Savings goals with progress tracking</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Credit-card payoff goals</strong> — track current balance toward $0 or N% utilization (default 30% for credit-score optimization); live progress from linked card balances; entry points on /goals AND /debt-payoff (0.22.2)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Goal templates</strong> — 28 curated templates (emergency fund, debt payoff, 529, retirement, sabbatical, etc.) with sensible defaults</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -623,16 +684,141 @@ for per-release notes.</p>
 <td>✅</td>
 </tr>
 <tr>
+<td><strong>Daily anomaly scan</strong> — runs every ~23h per tenant, not just at import time (0.24.6)</td>
+<td>✅</td>
+</tr>
+<tr>
 <td>Tax-category tagging + year-end Schedule A / C reports (JSON + CSV)</td>
 <td>✅</td>
 </tr>
 <tr>
-<td>Data portability (full account-scoped export bundle)</td>
+<td><strong>Editable per-tenant IRS mileage rates</strong> — was hardcoded, now per-year inline-editable on /mileage (0.24.5)</td>
 <td>✅</td>
 </tr>
 <tr>
-<td>Canned reports catalog (CSV export per report)</td>
+<td>Data portability (full <code>.smrtcash</code> export bundle, secrets stripped)</td>
 <td>✅</td>
+</tr>
+<tr>
+<td>Canned reports catalog — <strong>17 reports</strong> (CSV export per report)</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h3 id="canned-reports-full-list">Canned reports (full list)<a class="heading-anchor" href="#canned-reports-full-list">#</a></h3>
+<p>Core reports (0.13.x):</p>
+<ul>
+<li>Spending by category</li>
+<li>Top merchants</li>
+<li>Monthly income vs expense</li>
+<li>Subscription costs</li>
+<li>Largest transactions</li>
+<li>Net worth by month</li>
+</ul>
+<p>Added in 0.24.4:</p>
+<ul>
+<li><strong>Year-over-year by category</strong> — this period vs same period last year, with deltas and % change</li>
+<li><strong>Month-over-month movers</strong> — biggest spending swings between the two most recent months</li>
+<li><strong>Day-of-week spending pattern</strong> — total + count + average by weekday</li>
+<li><strong>Tax-deductible YTD</strong> — Schedule C line totals (uses tax_category taxonomy)</li>
+<li><strong>Savings rate by month</strong> — income, expenses, net, % saved</li>
+<li><strong>Income sources breakdown</strong> — inflows grouped by category</li>
+<li><strong>First-time merchants</strong> — vendors whose first transaction lands in the period (catches subscription creep)</li>
+<li><strong>Refunds and chargebacks YTD</strong> — uses refund_status tracking</li>
+<li><strong>Bill price drift</strong> — active bills whose recent payments deviate from the stated amount</li>
+<li><strong>Debt balance by month</strong> — total debt across credit cards + loans + manual liabilities</li>
+<li><strong>Average transaction by category</strong> — count, total, average per category</li>
+</ul>
+<h2 id="what-if-scenarios-02400243">What-if Scenarios (0.24.0–0.24.3)<a class="heading-anchor" href="#what-if-scenarios-02400243">#</a></h2>
+<p><code>/scenarios</code> is a hub: pick a scenario type from the left rail, fill in
+the form, see the result. Per-scenario inputs persist when switching so
+users can compare answers. URL carries <code>?type=&lt;id&gt;</code> for refresh + sharing.</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Category</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Cash-flow stress test (income/expense %, one-time events)</td>
+<td>Cash flow</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Invest $X/mo for Y years at Z% (tax-deferred vs taxable)</td>
+<td>Wealth</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Bump 401(k) to N% (take-home impact + retirement balance impact)</td>
+<td>Wealth</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Windfall split (emergency + debt + invest)</td>
+<td>Wealth</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>FIRE date (given save rate + spend)</td>
+<td>Wealth</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Add $X/mo extra payment (time + interest saved)</td>
+<td>Debt</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Balance transfer offer (promo APR + fee vs current)</td>
+<td>Debt</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Consolidate at one rate (multi-debt rolled into one loan)</td>
+<td>Debt</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Biweekly mortgage (years shaved + interest saved)</td>
+<td>Debt</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Have a kid (childcare + 529 + tax credit; year 1 / 5 / 18)</td>
+<td>Life event</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Buy a house (PITI + DTI + lender-comfort verdict)</td>
+<td>Life event</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Job change (total comp delta adjusted for COL, N-year net)</td>
+<td>Life event</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Sabbatical / income loss (runway + rebuild timeline)</td>
+<td>Life event</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Recession / income shock (stress-test next year)</td>
+<td>Life event</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Credit-score modeling (utilization → score band)</td>
+<td>Credit</td>
+<td>📋 0.25.0</td>
+</tr>
+<tr>
+<td>Retirement (retire at 60/65/67, SS timing, Roth ladder)</td>
+<td>Retirement</td>
+<td>📋 0.25.1</td>
 </tr>
 </tbody></table>
 <h2 id="mobile-amp-experience">Mobile &amp; Experience<a class="heading-anchor" href="#mobile-amp-experience">#</a></h2>
@@ -767,7 +953,7 @@ backlog, and <a href="./TESTING.html">TESTING.md</a> for how the suite is verifi
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-27 13:47:32 UTC · commit cff74b2</span>
+  <span>Generated 2026-05-28 01:54:35 UTC · commit be0f9c1</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

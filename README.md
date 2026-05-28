@@ -8,60 +8,71 @@ infrastructure the operator deploys.
 
 ## Status
 
-**Phases 1–9 + the original 0.13/0.14 hardening — complete.** **The
-0.15.x SaaS pivot — complete** (`0.15.0` → `0.15.5`): Stripe billing,
-entitlement gating, dunning + grace, operator runbook. **The 0.16.x
-SaaS launch readiness — complete** (`0.16.0` → `0.16.4`): public
-signup with email verification, self-service password reset,
-super-admin subscriptions console, runtime-editable Stripe + signup
-settings, surfaced support link, **per-tenant attachment encryption
-with envelope key wrapping + super-admin-driven rotation**.
+**Current release: 0.24.4** — phases 1–9, hardening, SaaS pivot
+(0.15.x), launch readiness (0.16.x), competitive-parity work
+(0.18.x), reconciliation + investment analysis (0.19.x), agentic AI
+moat (0.20.x), universal customer asks (0.21.x), production-launch
+readiness (0.22.x), and the scenario-expansion arc (0.24.x) all
+shipped. Next planned arc is **0.25.x — credit-score + retirement
+scenarios**. **Scaling work is queued as 0.26.x** for after feature
+work.
 
 What ships today:
 
 - **Import & connectivity** — CSV / XLSX / OFX / QFX / QIF import with
   bank-format auto-detection and duplicate protection; **OFX Direct
-  Connect** to pull transactions straight from supporting banks;
-  **opt-in Plaid integration** (off by default); **scheduled background
-  sync** that drives all sources on a per-source cadence and refreshes
-  crypto prices.
+  Connect**; **opt-in Plaid integration**; **scheduled background
+  sync** with per-source cadence + daily crypto-price refresh.
 - **AI normalization** — pluggable provider (rules / Claude API /
-  Ollama) that cleans merchant names and categorizes transactions, plus
-  a **conversational financial assistant** with 17 tenant-scoped,
-  audit-logged tools.
+  Ollama) that cleans merchant names and categorizes transactions,
+  plus a **conversational financial assistant** with tenant-scoped
+  audit-logged tools. **Manual renames auto-learn** into the
+  normalization rule set so future imports inherit them.
 - **Receipts** — drag-and-drop attachments with Claude-vision OCR +
   **per-tenant envelope encryption** (AES-256-GCM DEK wrapped by a
   global KEK; super-admin can rotate any tenant's key without touching
   others), mismatch flagging.
-- **Wealth** — investment holdings (cost basis + mark-to-market), manual
-  assets & liabilities, **multi-currency** with daily-refreshed FX
-  rates, **retirement projections**, **crypto** tracking with daily
-  CoinGecko price refresh.
+- **Wealth** — investment holdings (cost basis + mark-to-market),
+  manual assets & liabilities, **multi-currency** with daily-refreshed
+  FX rates, **retirement projections**, **crypto** tracking, **credit
+  card payoff goals** that auto-track current balance toward $0 or a
+  target utilization %.
 - **Budgeting & cash flow** — flex budgets, weekly→monthly periods,
-  budget-vs-actual, savings goals, bill reminders, AutoMagic wizard
-  with fuel/toll math, 90-day forecast.
-- **Reporting & insights** — dashboard charts, anomaly alerts,
-  tax-category tagging + year-end Schedule A/C reports, calendar
-  budget view, filtered CSV export, data portability tooling.
+  budget-vs-actual, savings goals with **28 curated templates**,
+  AutoMagic wizard with fuel/toll math, 90-day forecast.
+- **Bill matching engine** — `/recurring` (Bills + Subscriptions
+  unified) with per-bill amount-mode (fixed / drift / variable),
+  match-window, merchant pattern. Auto-links incoming transactions
+  and queues the ambiguous ones for review. Drift-mode bills track
+  the latest matched amount automatically.
+- **What-if scenarios** — `/scenarios` hub with 13 calculators:
+  invest $X/mo, bump 401(k), windfall split, FIRE date, balance
+  transfer, debt consolidation, biweekly mortgage, have a kid, buy a
+  house, job change, sabbatical, recession stress test, plus the
+  cash-flow projector.
+- **Reporting & insights** — **17 canned reports** (year-over-year,
+  month-over-month movers, day-of-week pattern, tax-deductible YTD,
+  savings rate, income sources, first-time merchants, refunds YTD,
+  bill price drift, debt-balance over time, average txn, plus the
+  originals); **dashboard charts**, **daily anomaly scan**,
+  **tax-category tagging** + Schedule A/C reports, **editable
+  per-tenant IRS mileage rates**, calendar budget view, CSV export,
+  full data portability (`.smrtcash` bundle).
 - **Mobile** — installable PWA with responsive UI, offline shell,
   install prompt.
 - **Households & sharing** — multi-tenant with admin/spouse/child
-  roles, **per-account read/read-write permission tuning**, **bill-
-  splitting** with net-balance settlement, **cross-tenant isolation
-  verified** by a dedicated security test suite.
+  roles, **per-account read/read-write permission tuning**,
+  **bill-splitting**, **cross-tenant isolation verified** by a
+  dedicated security test suite.
 - **SaaS billing** — three tiers (Starter / Plus / Family), Stripe
-  Checkout + Customer Portal, 14-day trial, dunning emails on
-  payment_failed + 3-day grace, per-tenant metered usage (AI
-  assistant, OCR) with cap-overflow warnings.
+  Checkout + Customer Portal, 14-day trial, dunning emails +
+  3-day grace, per-tenant metered usage with cap-overflow warnings.
 - **Public signup + self-service** — `/signup` (gated by
   `PUBLIC_SIGNUP_ENABLED`), email verification, password reset, all
   with anti-enumeration response shapes.
-- **Operator surface** — super-admin **subscriptions console**
-  (`/system/subscriptions`) with grant / sync-from-Stripe /
-  force-cancel actions; **SaaS health dashboard** on `/health` with
-  tenant + subscription + webhook ingest metrics; runtime-editable
-  settings (Stripe keys, signup gate, support URL); operator runbook
-  with playbooks for the common SaaS incidents.
+- **Operator surface** — super-admin **subscriptions console** +
+  **SaaS health dashboard** + runtime-editable settings; full
+  operator runbook with playbooks for the common SaaS incidents.
 
 See the [Roadmap](./docs/ROADMAP.md) for the full phase history and
 [Changelog](./CHANGELOG.md) for what landed when.
@@ -131,10 +142,10 @@ Then open **http://localhost:5173**. Full details in the
 
 ## Testing
 
-**743 automated server tests + 6 web tests** spanning unit,
-integration, functional, security (incl. **72 cross-tenant isolation
-tests**), smoke, performance, and end-to-end layers — full suite
-passes cleanly. With PostgreSQL running:
+Automated server tests + web tests spanning unit, integration,
+functional, security (incl. cross-tenant isolation tests), smoke,
+performance, and end-to-end layers — full suite passes cleanly.
+With PostgreSQL running:
 
 ```sh
 npm test            # server + web tests

@@ -161,10 +161,280 @@ h4:hover .heading-anchor { visibility: visible; }
 <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> format.</p>
 <hr>
 <h2 id="unreleased">[Unreleased]<a class="heading-anchor" href="#unreleased">#</a></h2>
-<p><em>0.21.x arc is shipped end-to-end (0.21.0–0.21.7) plus 0.21.8
-budget-page split. See entries below for each slice. The
-post-arc verification walk-through lives at
-<code>docs/VERIFY_0.21.x.md</code>.</em></p>
+<p><em>Nothing in flight. Next planned arc is 0.25.x —
+credit-score + retirement scenarios (both gated on new model
+layers). The renumbered scaling arc is 0.26.x.</em></p>
+<hr>
+<h2 id="0244-2026-05-27-polish-matcher-learning-release">[0.24.4] — 2026-05-27 — Polish + matcher-learning release<a class="heading-anchor" href="#0244-2026-05-27-polish-matcher-learning-release">#</a></h2>
+<p>Rollup release that wraps the 0.24.x arc. Bundles four follow-on
+slices on top of the scenario-hub shipped in 0.24.3:</p>
+<h3 id="added-11-new-reports-0244">Added — 11 new reports (0.24.4)<a class="heading-anchor" href="#added-11-new-reports-0244">#</a></h3>
+<p><code>/reports</code> grew from 6 to 17. New entries:</p>
+<ul>
+<li><strong>Year-over-year by category</strong> — this period vs same period
+last year, per category, with delta and % change.</li>
+<li><strong>Month-over-month movers</strong> — biggest spending swings between
+the two most recent completed months.</li>
+<li><strong>Day-of-week spending pattern</strong> — total + count + average
+outflows by weekday.</li>
+<li><strong>Tax-deductible YTD</strong> — Schedule C line totals (uses
+<code>categories.tax_category</code> from 0.21.0).</li>
+<li><strong>Savings rate by month</strong> — income, expenses, net, savings %.</li>
+<li><strong>Income sources breakdown</strong> — inflows grouped by category.</li>
+<li><strong>First-time merchants</strong> — vendors whose first transaction
+falls in the period. Catches subscription creep.</li>
+<li><strong>Refunds and chargebacks YTD</strong> — uses <code>transactions.refund_status</code>
+from 0.21.1; open disputes float to the top.</li>
+<li><strong>Bill price drift</strong> — active bills whose last 3 paid periods
+deviate from the stated amount by &gt;max($1, 2%).</li>
+<li><strong>Debt balance by month</strong> — mirror of the net-worth report,
+filtered to credit_card + loan + manual_liability accounts.</li>
+<li><strong>Average transaction by category</strong> — count, total, average
+per category. Useful for budget calibration.</li>
+</ul>
+<h3 id="added-editable-per-tenant-mileage-rates-0245">Added — editable per-tenant mileage rates (0.24.5)<a class="heading-anchor" href="#added-editable-per-tenant-mileage-rates-0245">#</a></h3>
+<p>The IRS standard mileage rates were hardcoded in
+<code>server/src/routes/mileage.ts</code> as <code>MILEAGE_RATES</code>. Updating them
+required a deploy. Migration 073 moves them into a per-tenant
+<code>mileage_rates</code> table with <code>business / charity / medical</code>
+columns as <code>numeric(7,1)</code> (matches the IRS publication
+precision). Existing tenants are backfilled with the same
+values the old constant carried; new tenants lazy-seed on first
+<code>/api/mileage-rates</code> read.</p>
+<p>UI: new &quot;IRS standard mileage rates&quot; section on <code>/mileage</code> with
+one row per year. Inline edit / Save / Cancel per row, source
+pill (seeded / manual / irs_fetch), last-updated date, and a
+&quot;+ Add year&quot; affordance that pre-fills from the most recent
+year on file.</p>
+<h3 id="added-daily-anomaly-scan-0246">Added — daily anomaly scan (0.24.6)<a class="heading-anchor" href="#added-daily-anomaly-scan-0246">#</a></h3>
+<p>Anomaly detection used to only fire at import time, which meant
+a tenant who didn&#39;t import for a few days got no fresh alerts.
+The detector now also runs once per ~23h per tenant inside the
+existing insights-scheduler tick. Self-gates on
+<code>ANOMALY_ENABLED</code>; idempotent (the <code>anomaly_alerts</code> unique
+index handles dedup).</p>
+<h3 id="fixed-dark-mode-polish-0247-0248">Fixed — dark-mode polish (0.24.7 + 0.24.8)<a class="heading-anchor" href="#fixed-dark-mode-polish-0247-0248">#</a></h3>
+<ul>
+<li><strong>Date-picker indicator</strong> in dark mode was a barely-visible
+dark glyph on a dark surface. The previous attempt
+(<code>color-scheme: dark</code> + <code>filter: invert(0.85)</code>) was actually
+fighting itself — Chromium already painted a light glyph in
+dark mode, and the invert was flipping it back to dark.
+Replaced the native indicator with an inline SVG that&#39;s
+theme-aware (dark stroke in light mode, light stroke in
+dark), plus a hover background for a visible click target.</li>
+<li><strong>Pill backgrounds</strong> that were hardcoded to light-mode hex
+codes (the base <code>.pill</code> was <code>#f1f5f9</code>, <code>.secret-pill</code> and
+<code>.warn-pill</code> were amber, HostWidget pills were rgba()) now
+use theme vars so they adapt in dark mode.</li>
+</ul>
+<h3 id="fixed-error-handler-tolerates-non-string-errcode-0249">Fixed — error handler tolerates non-string <code>err.code</code> (0.24.9)<a class="heading-anchor" href="#fixed-error-handler-tolerates-non-string-errcode-0249">#</a></h3>
+<p><code>/api/portability/export</code> returned <code>code.startsWith is not a function</code> — that was the global error handler crashing on
+top of the real error. <code>promisify(execFile)</code> rejects with an
+<code>Error</code> whose <code>code</code> is the child process exit code (a
+number). The handler now coerces to string before calling
+<code>startsWith</code>.</p>
+<h3 id="fixed-portability-export-uses-busybox-compatible-tar-0249">Fixed — portability export uses BusyBox-compatible tar (0.24.9)<a class="heading-anchor" href="#fixed-portability-export-uses-busybox-compatible-tar-0249">#</a></h3>
+<p>The Docker image is Alpine which ships BusyBox tar. The
+exporter was passing <code>--force-local</code> (a GNU tar flag) and the
+command rejected with <code>unrecognized option: force-local</code>.
+Dropped the flag — the exec runs inside the Linux container
+regardless of host OS, so Linux paths never have drive-letter
+colons and the flag had nothing to defend against.</p>
+<h3 id="fixed-reports-page-nav-loop-0244">Fixed — reports page nav loop (0.24.4)<a class="heading-anchor" href="#fixed-reports-page-nav-loop-0244">#</a></h3>
+<p>After running a report, sidebar nav links stopped responding
+until you selected (but didn&#39;t run) a different report.
+<code>FilterableTable</code> recomputed <code>visibleColumns</code> inline on every
+render (a fresh array reference each time), which fed a
+<code>useMemo</code> for <code>filteredRows</code>, which fired the
+<code>onProjectionChange</code> effect, which <code>setState</code>&#39;d on the parent,
+which re-rendered <code>FilterableTable</code>, which built a new
+<code>visibleColumns</code> array — infinite render loop. Memoizing
+<code>visibleColumns</code> on <code>[columns, visible]</code> breaks the cycle.</p>
+<h3 id="added-auto-learn-manual-transaction-renames-02410">Added — auto-learn manual transaction renames (0.24.10)<a class="heading-anchor" href="#added-auto-learn-manual-transaction-renames-02410">#</a></h3>
+<p>PATCH <code>/api/transactions/:id</code> setting <code>normalized_merchant</code>
+already flipped <code>normalization_status=&#39;manual&#39;</code> so future AI
+passes couldn&#39;t undo the rename — but it didn&#39;t TEACH the
+system, so future imports of the same <code>raw_description</code> had no
+carry-forward. Now an upsert into <code>normalization_rules</code> lands
+in the same request: <code>pattern = raw_description</code> verbatim,
+<code>source = &#39;manual&#39;</code>, enabled, priority 0. The user can
+broaden the pattern from <code>/normalization-rules</code> later.</p>
+<h3 id="added-drift-mode-bills-track-latest-matched-amount-02410">Added — drift-mode bills track latest matched amount (0.24.10)<a class="heading-anchor" href="#added-drift-mode-bills-track-latest-matched-amount-02410">#</a></h3>
+<p><code>linkBillToTxn</code> in the matcher now updates <code>bills.amount_cents</code>
+to the matched transaction&#39;s absolute amount when the bill&#39;s
+<code>amount_mode</code> is <code>drift</code>. Means a car-wash membership going
+from $24 to $26 updates the bill row automatically; the next
+cycle&#39;s budget reflects the new expected. Fixed-mode bills are
+left alone (the whole point of fixed is &quot;alert me if this
+changes&quot;), and variable-mode bills are too (the cap, not the
+expected, is what matters).</p>
+<h3 id="fixed-super-admin-sidebar-supportlink-undefined">Fixed — super-admin sidebar SupportLink undefined<a class="heading-anchor" href="#fixed-super-admin-sidebar-supportlink-undefined">#</a></h3>
+<p>The super-admin layout referenced <code>&lt;SupportLink&gt;</code> but the
+component was never defined — login as super admin crashed
+with &quot;SupportLink is not defined&quot;. Replaced with the same
+inline <code>&lt;a&gt;</code> markup the regular sidebar uses for the same
+support-URL link.</p>
+<h3 id="operations">Operations<a class="heading-anchor" href="#operations">#</a></h3>
+<ul>
+<li>Roadmap reorganized: 0.24.x marked ✅ Complete with all
+sub-slices listed; 0.23.x (Scaling) renumbered to 0.26.x and
+moved to the end of the document because feature work
+(0.25.x credit/retirement scenarios next) is taking priority
+over architectural work we don&#39;t yet need.</li>
+</ul>
+<hr>
+<h2 id="0243-2026-05-27-scenario-hub-13-what-if-scenarios">[0.24.3] — 2026-05-27 — Scenario hub + 13 what-if scenarios<a class="heading-anchor" href="#0243-2026-05-27-scenario-hub-13-what-if-scenarios">#</a></h2>
+<p><code>/scenarios</code> was a one-trick cash-flow projector. This release
+refactored it into a hub that registers individual scenario
+modules and renders the selected one&#39;s Form + Result. Left-rail
+picker grouped by category; URL carries <code>?type=&lt;id&gt;</code> so refresh
+or shared link lands on the same scenario. Per-scenario inputs
+are preserved when switching between scenarios so users can
+compare answers without re-entering numbers.</p>
+<h3 id="0240-hub-refactor">0.24.0 — Hub refactor<a class="heading-anchor" href="#0240-hub-refactor">#</a></h3>
+<p><code>/scenarios</code> becomes a hub. Existing cash-flow-with-deltas
+scenario keeps working as &quot;Cash-flow stress test&quot;.</p>
+<h3 id="0241-wealth-building-scenarios-4">0.24.1 — Wealth-building scenarios (4)<a class="heading-anchor" href="#0241-wealth-building-scenarios-4">#</a></h3>
+<ul>
+<li><strong>Invest $X/mo for Y years at Z%</strong> — compounding curve,
+tax-deferred vs taxable side-by-side.</li>
+<li><strong>Bump 401(k) to N%</strong> — take-home delta + tax savings +
+retirement-balance delta + employer-match warning.</li>
+<li><strong>Windfall split</strong> — bonus / refund / inheritance: emergency<ul>
+<li>debt + invest split with N-year impact.</li>
+</ul>
+</li>
+<li><strong>FIRE date</strong> — given save rate + spend, years until
+portfolio covers SWR.</li>
+</ul>
+<h3 id="0242-debt-payoff-scenarios-4">0.24.2 — Debt-payoff scenarios (4)<a class="heading-anchor" href="#0242-debt-payoff-scenarios-4">#</a></h3>
+<ul>
+<li><strong>Add $X/mo extra payment</strong> — time + interest saved.</li>
+<li><strong>Balance transfer offer</strong> — promo APR + transfer fee vs
+current APR; post-promo balance handling.</li>
+<li><strong>Consolidate at one rate</strong> — multi-debt list rolled into a
+single loan with origination fee.</li>
+<li><strong>Biweekly mortgage</strong> — years shaved + interest saved.</li>
+</ul>
+<h3 id="0243-life-event-scenarios-5">0.24.3 — Life-event scenarios (5)<a class="heading-anchor" href="#0243-life-event-scenarios-5">#</a></h3>
+<ul>
+<li><strong>Have a kid</strong> — childcare + 529 + tax credit, year 1 / 5 / 18.</li>
+<li><strong>Buy a house</strong> — PITI breakdown, front/back-end DTI,
+lender-comfort verdict.</li>
+<li><strong>Job change</strong> — total comp delta (salary + benefits +
+match) adjusted for COL, N-year net.</li>
+<li><strong>Sabbatical / income loss</strong> — runway, end-of-break cash,
+rebuild timeline.</li>
+<li><strong>Recession / income shock</strong> — stress test with belt-tightening
+response, breakpoint month.</li>
+</ul>
+<p>Implementation: each scenario lives in
+<code>web/src/scenarios/&lt;id&gt;.tsx</code> and exports a <code>ScenarioDef</code>
+(id, title, subtitle, category, defaults, Form, Result). Pure
+client-side math for every scenario except cash-flow-stress.</p>
+<hr>
+<h2 id="0222-2026-05-27-credit-card-payoff-goals">[0.22.2] — 2026-05-27 — Credit-card payoff goals<a class="heading-anchor" href="#0222-2026-05-27-credit-card-payoff-goals">#</a></h2>
+<p>Goals were always &quot;accumulate up toward target.&quot; This release
+adds the inverse: payoff goals that shrink a tracked balance
+toward a target ($0 or X% utilization).</p>
+<ul>
+<li>Migration 072: <code>accounts.credit_limit_cents</code>; <code>savings_goals.kind</code>
+(<code>savings | payoff</code>); <code>savings_goals.initial_amount_cents</code>;
+<code>savings_goals.linked_account_ids</code>;
+<code>savings_goals.target_utilization_pct</code>. Relaxes
+<code>target_amount_cents</code> check from <code>&gt; 0</code> to <code>&gt;= 0</code> so payoff
+goals targeting $0 can be saved.</li>
+<li><code>GET /api/goals</code> enriches payoff goals with
+<code>computed_balance_cents</code> (live SUM of |balance| across linked
+accounts) and a shrinking-direction progress formula
+<code>(initial - current) / (initial - target)</code>.</li>
+<li>New <code>PayoffGoalModal</code> reachable from both <code>/goals</code> and
+<code>/debt-payoff</code>. Multi-selects credit-card accounts, shows
+total balance + total limit + current utilization, offers
+&quot;Pay to $0&quot; or &quot;Pay to N% utilization&quot; (default 30%, the
+standard credit-score recommendation).</li>
+<li>Inline <code>credit_limit</code> field on the account detail page +
+<code>/debt-payoff</code> table. PATCH <code>/api/accounts/:id</code> accepts
+<code>credit_limit_cents</code>.</li>
+</ul>
+<hr>
+<h2 id="0221-2026-05-27-bill-matcher-ui-date-picker-fixes">[0.22.1] — 2026-05-27 — Bill matcher UI + date picker fixes<a class="heading-anchor" href="#0221-2026-05-27-bill-matcher-ui-date-picker-fixes">#</a></h2>
+<ul>
+<li><strong>Bill row actions on <code>/recurring</code></strong> — Auto-match (opens a
+config modal exposing <code>merchant_pattern</code>, <code>amount_mode</code>,
+<code>amount_tolerance_cents</code>, <code>match_window_days</code>,
+<code>overdue_grace_days</code>), Pause (with resume-date picker),
+Unpause, Skip period.</li>
+<li><strong>Recurring page toolbar</strong> — Rescan transactions (90-day
+backfill matcher) and Sweep overdue (manual trigger of the
+daily sweep).</li>
+<li><strong>Date-picker indicator visible in dark mode</strong> —
+<code>color-scheme: light/dark</code> on <code>:root</code>, plus
+<code>::-webkit-calendar-picker-indicator</code> styling. (Superseded by
+0.24.7&#39;s SVG approach.)</li>
+</ul>
+<hr>
+<h2 id="0220-2026-05-27-bill-matching-engine-recurring-page">[0.22.0] — 2026-05-27 — Bill matching engine + /recurring page<a class="heading-anchor" href="#0220-2026-05-27-bill-matching-engine-recurring-page">#</a></h2>
+<p>The headline feature of this arc: bills now auto-match incoming
+transactions instead of waiting for the user to mark them paid.</p>
+<h3 id="schema-migration-071">Schema (migration 071)<a class="heading-anchor" href="#schema-migration-071">#</a></h3>
+<ul>
+<li><code>bills.kind</code> (<code>bill | subscription</code>) — used by the unified
+<code>/recurring</code> page&#39;s filter tabs.</li>
+<li><code>bills.amount_mode</code> (<code>fixed | drift | variable</code>) +
+<code>bills.amount_tolerance_cents</code> — declares HOW the matcher
+decides amount fit per row.</li>
+<li><code>bills.match_window_days</code> (default 7), <code>bills.merchant_pattern</code>
+(initialized to the bill name for opportunistic matching on
+day one), <code>bills.paused_until</code>, <code>bills.overdue_grace_days</code>
+(default 3).</li>
+<li><code>bill_periods</code> — per-cycle ledger keyed by (bill_id,
+period_anchor_date). Status: pending / paid / overdue /
+skipped.</li>
+<li><code>bill_match_triage</code> — queue for matches the engine wasn&#39;t
+confident enough to make automatically.</li>
+<li><code>insight_cards.kind</code> extended with <code>bill_overdue</code>.</li>
+</ul>
+<h3 id="engine-serversrcdomainbill-matcherts">Engine (<code>server/src/domain/bill-matcher.ts</code>)<a class="heading-anchor" href="#engine-serversrcdomainbill-matcherts">#</a></h3>
+<ul>
+<li><code>tryMatchTransaction</code> — vendor (case-insensitive substring)<ul>
+<li>date (±match_window_days) + amount (per-mode tolerance)
+scoring. Single confident match → auto-link via bill_periods</li>
+<li>cursor advance + category fill-if-blank. Multi-candidate
+or edge-of-window or amount-out-of-tolerance → triage rows.</li>
+</ul>
+</li>
+<li><code>sweepOverdueBills</code> — periodic flip of past-grace pending
+periods to overdue with an <code>insight_card</code> emit.</li>
+<li><code>resolveTriage</code> — user accept/reject/reassign from the queue.</li>
+</ul>
+<h3 id="hooks">Hooks<a class="heading-anchor" href="#hooks">#</a></h3>
+<ul>
+<li>Post-import: matcher runs on each freshly inserted
+transaction (third pass after rules + anomaly scan).</li>
+<li>Daily: <code>sweepOverdueBills</code> runs at the top of every
+insights-scheduler tick.</li>
+</ul>
+<h3 id="ui">UI<a class="heading-anchor" href="#ui">#</a></h3>
+<ul>
+<li><code>/recurring</code> route replaces <code>/bills</code> and <code>/subscriptions</code>.
+Sidebar shows one entry. Both old paths redirect.
+Tab strip (Bills / Subscriptions) inside the page.</li>
+<li><code>BillTriageQueue</code> component renders above the tab strip when
+there are pending matches; groups by transaction so the user
+sees &quot;this charge has 2 candidate bills&quot; instead of two
+unrelated rows. Renders nothing when empty.</li>
+</ul>
+<h3 id="other-improvements-same-arc">Other improvements (same arc)<a class="heading-anchor" href="#other-improvements-same-arc">#</a></h3>
+<ul>
+<li><strong>Paycheck budget</strong>: collapsible periods. Today&#39;s period
+auto-expands; others collapsed. State persists in
+localStorage so choices stick across reloads.</li>
+<li><strong>Insights scheduler</strong>: a second daily pass besides the
+existing insight-card generation — <code>sweepOverdueBills</code>
+runs at the top of every tick.</li>
+</ul>
 <hr>
 <h2 id="0218-2026-05-27-split-budgets-into-monthly-paycheck-pages">[0.21.8] — 2026-05-27 — Split Budgets into Monthly + Paycheck pages<a class="heading-anchor" href="#0218-2026-05-27-split-budgets-into-monthly-paycheck-pages">#</a></h2>
 <p>The single <code>/budgets</code> page mixed two distinct workflows: a
@@ -7096,7 +7366,7 @@ all duplicates.</li>
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-27 13:47:32 UTC · commit cff74b2</span>
+  <span>Generated 2026-05-28 01:54:35 UTC · commit be0f9c1</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>
