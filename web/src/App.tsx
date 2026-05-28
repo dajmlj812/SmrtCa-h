@@ -253,7 +253,11 @@ function SuperAdminApp({
             Platform operator
             <div className="muted small">v{__APP_VERSION__}</div>
           </div>
-          <SupportLink supportUrl={supportUrl} />
+          {supportUrl && (
+            <a href={supportUrl} target="_blank" rel="noreferrer">
+              Help &amp; feature requests
+            </a>
+          )}
           {me && (
             <button
               className="btn-link"
