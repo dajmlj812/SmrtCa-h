@@ -416,41 +416,52 @@ select:focus {
   outline-offset: -1px;
 }
 
-/* 0.22.1 — date / time inputs.
+/* 0.24.7 — date / time pickers, take 2.
  *
- * The native calendar-picker indicator (Chromium) is a tiny dark icon
- * that disappears against the page in dark mode and is barely visible
- * even in light mode against our off-white card surface. Force a
- * larger hit area, full opacity, and the right tint per theme so the
- * icon is unambiguously clickable.
+ * The previous approach (color-scheme cue + filter:invert in dark
+ * mode) was unreliable: modern Chromium with color-scheme: dark
+ * ALREADY paints the indicator as a light glyph, so invert(0.85)
+ * was flipping the light glyph back to nearly-black on the dark
+ * surface — exactly the opposite of what we wanted.
  *
- * color-scheme on :root already cues Chromium to draw the dark
- * variant of the icon in dark mode; the filter line below is a
- * belt-and-braces nudge to lift it off the surface a little more
- * than the default. */
+ * Take 2: replace the indicator entirely with our own SVG
+ * background, baked-in stroke color per theme. This is the only
+ * approach guaranteed to look right across Chromium versions,
+ * Edge, Linux Chromiums, and PWA-installed instances.
+ *
+ * Light theme: dark calendar glyph on a tinted hover background.
+ * Dark theme: light calendar glyph on a tinted hover background.
+ * Both: visibly larger click target than the browser default. */
 input[type='date']::-webkit-calendar-picker-indicator,
 input[type='datetime-local']::-webkit-calendar-picker-indicator,
 input[type='month']::-webkit-calendar-picker-indicator,
 input[type='time']::-webkit-calendar-picker-indicator,
 input[type='week']::-webkit-calendar-picker-indicator {
-  opacity: 0.9;
-  cursor: pointer;
-  padding: 2px;
+  /* Inline SVG with a black stroke. Wrapped in url() with %23 for #. */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231a1f2e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   margin-left: 4px;
-  filter: contrast(1.15);
+  opacity: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  /* Erase the default Chromium glyph so it doesn't double up
+   * underneath ours. */
+  color: transparent;
+  filter: none;
 }
 input[type='date']::-webkit-calendar-picker-indicator:hover,
 input[type='datetime-local']::-webkit-calendar-picker-indicator:hover,
 input[type='month']::-webkit-calendar-picker-indicator:hover,
 input[type='time']::-webkit-calendar-picker-indicator:hover,
 input[type='week']::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
+  background-color: var(--accent-soft);
 }
-/* Dark mode: invert the dark glyph the OS hands us so it reads as a
- * light icon against the dark surface. color-scheme alone gets us
- * most of the way on modern Chromium, but Edge and some Linux
- * Chromiums still serve the light-mode glyph; explicit invert is
- * the only reliable fix across browsers. */
+/* Dark theme: swap to a near-white stroke. */
 :root[data-theme='dark']
   input[type='date']::-webkit-calendar-picker-indicator,
 :root[data-theme='dark']
@@ -461,7 +472,7 @@ input[type='week']::-webkit-calendar-picker-indicator:hover {
   input[type='time']::-webkit-calendar-picker-indicator,
 :root[data-theme='dark']
   input[type='week']::-webkit-calendar-picker-indicator {
-  filter: invert(0.85) contrast(1.15);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e8ecf3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>");
 }
 
 /* ── Tables ──────────────────────────────────────────────── */
