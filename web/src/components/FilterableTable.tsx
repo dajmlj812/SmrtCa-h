@@ -114,7 +114,16 @@ export function FilterableTable({
     return () => document.removeEventListener('mousedown', onClick);
   }, [chooserOpen]);
 
-  const visibleColumns = columns.filter((c) => visible.has(c.key));
+  // 0.24.5 — must be memoized: this array is a useEffect dep at
+  // line 153 (`onProjectionChange` emitter). Without memoization a
+  // fresh reference was created on every render → emitter fired →
+  // parent setState → re-render → new visibleColumns ref → emitter
+  // fires again. Infinite render loop manifested on /reports as
+  // "after running a report, the sidebar nav links don't work."
+  const visibleColumns = useMemo(
+    () => columns.filter((c) => visible.has(c.key)),
+    [columns, visible],
+  );
   const filteredRows = useMemo(() => {
     const predicates = visibleColumns
       .map((c) => ({
