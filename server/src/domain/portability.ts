@@ -268,15 +268,15 @@ export async function exportTenantData(
     'utf-8',
   );
 
-  // Bundle as tar.gz. The image ships `tar` because backup-runner
-  // already uses it. `--force-local` tells GNU tar not to interpret
-  // a Windows path's drive-letter colon (`C:\...`) as an SSH-style
-  // host:path — without it, dev runs on Windows fail with
-  // "Cannot execute remote shell". Safe on Linux (no-op when no
-  // colon is present).
+  // Bundle as tar.gz. The image ships BusyBox `tar` (alpine), which
+  // does NOT recognise `--force-local`. The exec runs INSIDE the
+  // Linux container regardless of host OS, so the Linux-style /tmp
+  // paths never have a drive-letter colon and the flag is
+  // unnecessary anyway. Earlier versions had it and the runtime
+  // rejected the whole command with "unrecognized option:
+  // force-local" — that broke /api/portability/export entirely.
   const archivePath = `${workDir}.tar.gz`;
   await exec('tar', [
-    '--force-local',
     '-czf', archivePath,
     '-C', dirname(workDir), basename(workDir),
   ]);
