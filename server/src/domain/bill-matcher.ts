@@ -339,12 +339,37 @@ async function linkBillToTxn(
     [bill.id, bill.next_due_date, bill.tenant_id, txn.id],
   );
 
+  // 0.24.10 — for drift-mode bills, snap the bill's expected
+  // amount_cents to whatever just paid. The user explicitly chose
+  // "drifts over time" for this bill, so the going-forward expected
+  // should track the latest reality (e.g. car-wash membership goes
+  // from $24 to $26 — the bill row updates so the budget shows the
+  // new expected on the next cycle).
+  //
+  // Fixed-mode bills are left alone (the whole point of fixed is
+  // "alert me if this changes"). Variable-mode bills are also left
+  // alone (the cap, not the expected, is what matters there).
+  //
   // Advance the cursor unless one-time.
   const next = advanceByFrequency(bill.next_due_date, bill.frequency);
+  const sets: string[] = [];
+  const params: unknown[] = [];
   if (next) {
+    params.push(next);
+    sets.push(`next_due_date = $${params.length}`);
+  }
+  if (bill.amount_mode === 'drift') {
+    const observedCents = Math.abs(Number(txn.amount_cents));
+    if (observedCents > 0 && observedCents !== bill.amount_cents) {
+      params.push(observedCents);
+      sets.push(`amount_cents = $${params.length}`);
+    }
+  }
+  if (sets.length > 0) {
+    params.push(bill.id);
     await client.query(
-      `UPDATE bills SET next_due_date = $1 WHERE id = $2`,
-      [next, bill.id],
+      `UPDATE bills SET ${sets.join(', ')} WHERE id = $${params.length}`,
+      params,
     );
   }
 

@@ -341,6 +341,50 @@ export async function transactionRoutes(app: FastifyInstance): Promise<void> {
       if (result.rowCount === 0) {
         return reply.code(404).send({ error: 'Transaction not found' });
       }
+
+      // 0.24.10 — when the user manually renames the merchant on a
+      // transaction, learn from it: upsert a normalization_rules row
+      // so future imports of the same raw_description carry the
+      // rename forward. Pattern is the raw_description verbatim
+      // (case-insensitive substring) — narrow but safe. The user can
+      // broaden it later from /normalization-rules.
+      //
+      // Skipped when:
+      //   • merchant wasn't part of this PATCH (e.g. only category
+      //     changed),
+      //   • the new merchant is null / empty (clearing isn't a rule),
+      //   • raw_description is empty.
+      //
+      // ON CONFLICT (tenant_id, lower(pattern)) DO UPDATE preserves
+      // the unique-pattern invariant from migration 029.
+      const row = result.rows[0] as {
+        raw_description: string;
+        normalized_merchant: string | null;
+      };
+      if (
+        body.merchant !== undefined &&
+        row.normalized_merchant !== null &&
+        row.normalized_merchant.trim() !== '' &&
+        row.raw_description &&
+        row.raw_description.trim() !== ''
+      ) {
+        try {
+          await query(
+            `INSERT INTO normalization_rules
+               (tenant_id, pattern, normalized_merchant, source, enabled, priority)
+             VALUES ($1, $2, $3, 'manual', true, 0)
+             ON CONFLICT (tenant_id, lower(pattern)) DO UPDATE
+               SET normalized_merchant = EXCLUDED.normalized_merchant,
+                   source = 'manual',
+                   enabled = true`,
+            [tenantId, row.raw_description.trim(), row.normalized_merchant],
+          );
+        } catch {
+          // Best-effort: a rule failure shouldn't roll back the user's
+          // successful rename. The rename row is already persisted.
+        }
+      }
+
       return { transaction: result.rows[0] };
     },
   );
