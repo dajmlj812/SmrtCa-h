@@ -320,21 +320,6 @@ onboarding walkthrough.</p>
 <p>Self-hosting is no longer supported. SmrtCash runs only as the managed
 SaaS operated by BuildITSmrt, LLC.</p>
 </blockquote>
-<h2 id="running-the-service-operators-only">Running the service (operators only)<a class="heading-anchor" href="#running-the-service-operators-only">#</a></h2>
-<p>This repository is the source for the hosted service. Running it is an
-<strong>operator</strong> task, not a customer one. The build + deploy procedure lives
-in <a href="./SAAS_DEPLOY.html">SaaS Deploy</a> and the day-to-day playbooks in the
-<a href="./OPERATOR_RUNBOOK.html">Operator Runbook</a>.</p>
-<p>Local development (for contributors):</p>
-<pre><code class="language-powershell">Copy-Item .env.example .env
-docker compose -p smrtcash up -d db
-npm install --prefix server
-npm install --prefix web
-npm run migrate --prefix server
-npm run dev --prefix server   # terminal 1
-npm run dev --prefix web      # terminal 2
-</code></pre>
-<p>Then open <strong><a href="http://localhost:5173">http://localhost:5173</a></strong>.</p>
 <h2 id="architecture">Architecture<a class="heading-anchor" href="#architecture">#</a></h2>
 <ul>
 <li><strong>server/</strong> — Fastify + TypeScript API</li>
@@ -369,7 +354,7 @@ checklist) live in the <em>internal</em> <a href="./ADMIN_GUIDE.html#security-ch
 
 </main>
 <footer class="page">
-  <span>Generated 2026-05-28 02:41:34 UTC · commit dd70e02</span>
+  <span>Generated 2026-05-28 03:11:54 UTC · commit f0680d0</span>
   <span>Source: <a href="https://github.com/dajmlj812/SmrtCa-h">github.com/dajmlj812/SmrtCa-h</a></span>
 </footer>
 </div>

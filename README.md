@@ -116,27 +116,6 @@ onboarding walkthrough.
 > Self-hosting is no longer supported. SmrtCash runs only as the managed
 > SaaS operated by BuildITSmrt, LLC.
 
-## Running the service (operators only)
-
-This repository is the source for the hosted service. Running it is an
-**operator** task, not a customer one. The build + deploy procedure lives
-in [SaaS Deploy](./docs/SAAS_DEPLOY.md) and the day-to-day playbooks in the
-[Operator Runbook](./docs/OPERATOR_RUNBOOK.md).
-
-Local development (for contributors):
-
-```powershell
-Copy-Item .env.example .env
-docker compose -p smrtcash up -d db
-npm install --prefix server
-npm install --prefix web
-npm run migrate --prefix server
-npm run dev --prefix server   # terminal 1
-npm run dev --prefix web      # terminal 2
-```
-
-Then open **http://localhost:5173**.
-
 ## Architecture
 
 - **server/** — Fastify + TypeScript API
