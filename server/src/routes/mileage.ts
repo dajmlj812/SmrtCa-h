@@ -33,14 +33,14 @@ const PURPOSES: MileagePurpose[] = [
 ];
 
 /**
- * IRS standard mileage rates in cents per mile, by tax year.
- *
- * Each entry covers Jan 1 – Dec 31 of the keyed year. Mid-year
- * rate splits (2022 had one) are not modeled — picking the
- * higher half-year rate here is a known imprecision; consult a
- * tax professional for ambiguous years.
+ * 0.24.5 — fallback mileage rates used only when a tenant has no
+ * row in the `mileage_rates` table for the queried year. Migration
+ * 073 seeds these into every existing tenant; new tenants get them
+ * via seedDefaultMileageRates() at tenant creation. The IRS
+ * publishes new rates in December for the following year — users
+ * can edit them per-tenant from the /mileage page without a deploy.
  */
-export const MILEAGE_RATES: Record<
+const FALLBACK_RATES: Record<
   number,
   { business: number; charity: number; medical: number }
 > = {
@@ -51,27 +51,96 @@ export const MILEAGE_RATES: Record<
   2026: { business: 70, charity: 14, medical: 21 },
 };
 
-const LATEST_RATES = MILEAGE_RATES[2026]!;
+const FALLBACK_LATEST = FALLBACK_RATES[2026]!;
 
-export function mileageRatesForYear(year: number): {
+/**
+ * Resolve mileage rates for a (tenant, year) pair.
+ *
+ * Prefers the tenant's mileage_rates row for the exact year. Falls
+ * back to the same tenant's most recent year on file, then to the
+ * built-in FALLBACK_RATES, so a freshly migrated database still
+ * answers the tax-export endpoint correctly even if the seed hasn't
+ * run yet.
+ */
+export async function mileageRatesForYear(
+  year: number,
+  tenantId: string,
+): Promise<{
   business: number;
   charity: number;
   medical: number;
   moving: number;
   commute: number;
   personal: number;
-} {
-  const base = MILEAGE_RATES[year] ?? LATEST_RATES;
+}> {
+  const r = await query<{
+    business_cents_per_mile: string;
+    charity_cents_per_mile: string;
+    medical_cents_per_mile: string;
+  }>(
+    `SELECT business_cents_per_mile, charity_cents_per_mile, medical_cents_per_mile
+       FROM mileage_rates
+      WHERE tenant_id = $1 AND tax_year = $2`,
+    [tenantId, year],
+  );
+  let business: number, charity: number, medical: number;
+  if (r.rows.length > 0) {
+    business = Number(r.rows[0]!.business_cents_per_mile);
+    charity = Number(r.rows[0]!.charity_cents_per_mile);
+    medical = Number(r.rows[0]!.medical_cents_per_mile);
+  } else {
+    // No exact-year row. Try the tenant's most recent year on file.
+    const latest = await query<{
+      business_cents_per_mile: string;
+      charity_cents_per_mile: string;
+      medical_cents_per_mile: string;
+    }>(
+      `SELECT business_cents_per_mile, charity_cents_per_mile, medical_cents_per_mile
+         FROM mileage_rates
+        WHERE tenant_id = $1
+        ORDER BY tax_year DESC
+        LIMIT 1`,
+      [tenantId],
+    );
+    if (latest.rows.length > 0) {
+      business = Number(latest.rows[0]!.business_cents_per_mile);
+      charity = Number(latest.rows[0]!.charity_cents_per_mile);
+      medical = Number(latest.rows[0]!.medical_cents_per_mile);
+    } else {
+      const fb = FALLBACK_RATES[year] ?? FALLBACK_LATEST;
+      business = fb.business;
+      charity = fb.charity;
+      medical = fb.medical;
+    }
+  }
   return {
-    business: base.business,
-    charity: base.charity,
-    medical: base.medical,
+    business,
+    charity,
+    medical,
     // Moving is deductible only for active-duty military since TCJA
-    // (2018); we keep a rate slot for parity with the medical rate.
-    moving: base.medical,
+    // (2018); we keep a rate slot at the medical rate.
+    moving: medical,
     commute: 0,
     personal: 0,
   };
+}
+
+/**
+ * 0.24.5 — seed the default IRS rates into a brand-new tenant's
+ * mileage_rates table. Called from the tenant-creation flow so the
+ * /mileage page has something to show on day one.
+ */
+export async function seedDefaultMileageRates(tenantId: string): Promise<void> {
+  for (const [yearStr, r] of Object.entries(FALLBACK_RATES)) {
+    await query(
+      `INSERT INTO mileage_rates
+         (tenant_id, tax_year, business_cents_per_mile,
+          charity_cents_per_mile, medical_cents_per_mile, source)
+       VALUES ($1, $2, $3, $4, $5, 'seeded')
+       ON CONFLICT (tenant_id, tax_year) DO NOTHING`,
+      [tenantId, Number(yearStr), r.business, r.charity, r.medical],
+    );
+  }
 }
 
 const TRIP_COLUMNS = `
@@ -268,7 +337,7 @@ export async function mileageRoutes(app: FastifyInstance): Promise<void> {
           GROUP BY purpose`,
         [tenantId, `${year}-01-01`, `${year}-12-31`],
       );
-      const rates = mileageRatesForYear(year);
+      const rates = await mileageRatesForYear(year, tenantId);
       const byPurpose = r.rows.map((row) => {
         const miles = Number(row.miles);
         const rate = rates[row.purpose as MileagePurpose];
@@ -292,6 +361,119 @@ export async function mileageRoutes(app: FastifyInstance): Promise<void> {
         total_miles,
         total_deduction_cents,
       };
+    },
+  );
+
+  // ── 0.24.5 — mileage rate management ───────────────────────────
+  /**
+   * List every saved rate row for the tenant. Lazy-seeds the
+   * fallback defaults if the tenant has no rows yet (handles
+   * tenants created before migration 073).
+   */
+  app.get('/api/mileage-rates', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const existing = await query<{ tax_year: number }>(
+      `SELECT tax_year FROM mileage_rates WHERE tenant_id = $1 LIMIT 1`,
+      [tenantId],
+    );
+    if (existing.rows.length === 0) {
+      await seedDefaultMileageRates(tenantId);
+    }
+    const r = await query<{
+      tax_year: number;
+      business_cents_per_mile: string;
+      charity_cents_per_mile: string;
+      medical_cents_per_mile: string;
+      source: string;
+      updated_at: string;
+    }>(
+      `SELECT tax_year, business_cents_per_mile,
+              charity_cents_per_mile, medical_cents_per_mile,
+              source, updated_at
+         FROM mileage_rates
+        WHERE tenant_id = $1
+        ORDER BY tax_year DESC`,
+      [tenantId],
+    );
+    return {
+      rates: r.rows.map((row) => ({
+        tax_year: row.tax_year,
+        business_cents_per_mile: Number(row.business_cents_per_mile),
+        charity_cents_per_mile: Number(row.charity_cents_per_mile),
+        medical_cents_per_mile: Number(row.medical_cents_per_mile),
+        source: row.source,
+        updated_at: row.updated_at,
+      })),
+    };
+  });
+
+  /**
+   * Upsert one tax year's rates. Marks the row source='manual' so
+   * future "fetch from IRS" automation can tell user-edited rates
+   * apart from seeded / auto-fetched ones.
+   */
+  app.put<{
+    Params: { year: string };
+    Body: {
+      businessCentsPerMile?: unknown;
+      charityCentsPerMile?: unknown;
+      medicalCentsPerMile?: unknown;
+    };
+  }>('/api/mileage-rates/:year', async (req, reply) => {
+    const tenantId = requireTenant(req, reply);
+    if (!tenantId) return;
+    const year = Number(req.params.year);
+    if (!Number.isInteger(year) || year < 1990 || year > 2100) {
+      return reply.code(400).send({ error: 'year must be 1990..2100' });
+    }
+    function nn(v: unknown, label: string): number | string {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) {
+        return `${label} must be a non-negative number`;
+      }
+      // One-decimal precision to match the IRS publication format.
+      return Math.round(n * 10) / 10;
+    }
+    const b = nn(req.body?.businessCentsPerMile, 'businessCentsPerMile');
+    if (typeof b === 'string') return reply.code(400).send({ error: b });
+    const c = nn(req.body?.charityCentsPerMile, 'charityCentsPerMile');
+    if (typeof c === 'string') return reply.code(400).send({ error: c });
+    const m = nn(req.body?.medicalCentsPerMile, 'medicalCentsPerMile');
+    if (typeof m === 'string') return reply.code(400).send({ error: m });
+    await query(
+      `INSERT INTO mileage_rates
+         (tenant_id, tax_year, business_cents_per_mile,
+          charity_cents_per_mile, medical_cents_per_mile, source)
+       VALUES ($1, $2, $3, $4, $5, 'manual')
+       ON CONFLICT (tenant_id, tax_year) DO UPDATE
+         SET business_cents_per_mile = EXCLUDED.business_cents_per_mile,
+             charity_cents_per_mile = EXCLUDED.charity_cents_per_mile,
+             medical_cents_per_mile = EXCLUDED.medical_cents_per_mile,
+             source = 'manual',
+             updated_at = now()`,
+      [tenantId, year, b, c, m],
+    );
+    return { saved: true };
+  });
+
+  app.delete<{ Params: { year: string } }>(
+    '/api/mileage-rates/:year',
+    async (req, reply) => {
+      const tenantId = requireTenant(req, reply);
+      if (!tenantId) return;
+      const year = Number(req.params.year);
+      if (!Number.isInteger(year) || year < 1990 || year > 2100) {
+        return reply.code(400).send({ error: 'year must be 1990..2100' });
+      }
+      const r = await query(
+        `DELETE FROM mileage_rates WHERE tenant_id = $1 AND tax_year = $2`,
+        [tenantId, year],
+      );
+      if (r.rowCount === 0) {
+        return reply.code(404).send({ error: 'No rates row for that year' });
+      }
+      return { deleted: true };
     },
   );
 }

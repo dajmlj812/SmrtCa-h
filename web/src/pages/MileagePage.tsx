@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import {
   api,
   type MileagePurpose,
+  type MileageRateRow,
   type MileageSummary,
   type MileageTrip,
   type MileageTripInput,
@@ -170,6 +171,8 @@ export function MileagePage() {
           </table>
         </div>
       )}
+
+      <RatesPanel onRatesChanged={() => void reload()} />
 
       <h2 style={{ marginTop: 24 }}>Trips in {year}</h2>
       {loading && trips.length === 0 && <p className="empty">Loading…</p>}
@@ -417,6 +420,279 @@ function SummaryCard({
         className={tone === 'pos' ? 'pos' : tone === 'neg' ? 'neg' : ''}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 0.24.5 — editable IRS standard mileage rates per tax year.
+ *
+ * The IRS publishes new rates each December for the next year.
+ * Until 0.24.5 they were hardcoded in server code (MILEAGE_RATES),
+ * which meant updating required a deploy. This panel pulls the
+ * per-tenant rate table and lets the user edit any year inline.
+ *
+ * "Fetch from IRS" — there's no official API; we'd need to scrape
+ * the irs.gov page, which is fragile. Left as a placeholder
+ * button that explains the situation and points to the publication.
+ */
+function RatesPanel({ onRatesChanged }: { onRatesChanged: () => void }) {
+  const [rates, setRates] = useState<MileageRateRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editingYear, setEditingYear] = useState<number | null>(null);
+  const [editValues, setEditValues] = useState<{
+    business: string;
+    charity: string;
+    medical: string;
+  }>({ business: '', charity: '', medical: '' });
+  const [saving, setSaving] = useState(false);
+  const [addingYearStr, setAddingYearStr] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await api.listMileageRates();
+      setRates(list);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load rates');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  function startEdit(row: MileageRateRow) {
+    setEditingYear(row.tax_year);
+    setEditValues({
+      business: row.business_cents_per_mile.toFixed(1),
+      charity: row.charity_cents_per_mile.toFixed(1),
+      medical: row.medical_cents_per_mile.toFixed(1),
+    });
+  }
+
+  async function saveEdit(year: number) {
+    setSaving(true);
+    setError(null);
+    try {
+      const b = Number(editValues.business);
+      const c = Number(editValues.charity);
+      const m = Number(editValues.medical);
+      if (![b, c, m].every((n) => Number.isFinite(n) && n >= 0)) {
+        throw new Error('All three rates must be ≥ 0');
+      }
+      await api.saveMileageRate(year, {
+        businessCentsPerMile: b,
+        charityCentsPerMile: c,
+        medicalCentsPerMile: m,
+      });
+      setEditingYear(null);
+      await load();
+      onRatesChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addYear() {
+    const y = Number(addingYearStr);
+    if (!Number.isInteger(y) || y < 1990 || y > 2100) {
+      setError('Year must be 1990–2100');
+      return;
+    }
+    if (rates.some((r) => r.tax_year === y)) {
+      setError(`Rates for ${y} already exist — edit that row instead.`);
+      return;
+    }
+    // Seed from the most recent year's rates so the user has a
+    // reasonable starting point.
+    const recent = rates[0];
+    await api.saveMileageRate(y, {
+      businessCentsPerMile: recent?.business_cents_per_mile ?? 70,
+      charityCentsPerMile: recent?.charity_cents_per_mile ?? 14,
+      medicalCentsPerMile: recent?.medical_cents_per_mile ?? 21,
+    });
+    setAddingYearStr('');
+    await load();
+    onRatesChanged();
+  }
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 8,
+        }}
+      >
+        <h2 style={{ margin: 0 }}>IRS standard mileage rates</h2>
+        <span className="muted small">¢ per mile</span>
+      </div>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Edit any year's rates inline when the IRS publishes new ones (typically
+        December for the following year). Sources:{' '}
+        <a
+          href="https://www.irs.gov/tax-professionals/standard-mileage-rates"
+          target="_blank"
+          rel="noreferrer"
+        >
+          irs.gov/tax-professionals/standard-mileage-rates
+        </a>
+        .
+      </p>
+      {error && <div className="banner error">{error}</div>}
+      {loading ? (
+        <p className="empty">Loading rates…</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="txn-table">
+            <thead>
+              <tr>
+                <th>Tax year</th>
+                <th className="num">Business</th>
+                <th className="num">Charity</th>
+                <th className="num">Medical</th>
+                <th>Source</th>
+                <th>Updated</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rates.map((r) => {
+                const isEditing = editingYear === r.tax_year;
+                return (
+                  <tr key={r.tax_year}>
+                    <td>
+                      <strong>{r.tax_year}</strong>
+                    </td>
+                    <td className="num">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={editValues.business}
+                          style={{ width: 70, textAlign: 'right' }}
+                          onChange={(e) =>
+                            setEditValues((v) => ({ ...v, business: e.target.value }))
+                          }
+                        />
+                      ) : (
+                        r.business_cents_per_mile.toFixed(1)
+                      )}
+                    </td>
+                    <td className="num">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={editValues.charity}
+                          style={{ width: 70, textAlign: 'right' }}
+                          onChange={(e) =>
+                            setEditValues((v) => ({ ...v, charity: e.target.value }))
+                          }
+                        />
+                      ) : (
+                        r.charity_cents_per_mile.toFixed(1)
+                      )}
+                    </td>
+                    <td className="num">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={editValues.medical}
+                          style={{ width: 70, textAlign: 'right' }}
+                          onChange={(e) =>
+                            setEditValues((v) => ({ ...v, medical: e.target.value }))
+                          }
+                        />
+                      ) : (
+                        r.medical_cents_per_mile.toFixed(1)
+                      )}
+                    </td>
+                    <td>
+                      <span className="pill">{r.source}</span>
+                    </td>
+                    <td className="muted small">
+                      {new Date(r.updated_at).toLocaleDateString()}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-link"
+                            disabled={saving}
+                            onClick={() => void saveEdit(r.tax_year)}
+                          >
+                            {saving ? 'Saving…' : 'Save'}
+                          </button>{' '}
+                          <button
+                            type="button"
+                            className="btn-link"
+                            disabled={saving}
+                            onClick={() => setEditingYear(null)}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={() => startEdit(r)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          marginTop: 12,
+        }}
+      >
+        <input
+          type="number"
+          placeholder="YYYY"
+          value={addingYearStr}
+          min={1990}
+          max={2100}
+          onChange={(e) => setAddingYearStr(e.target.value)}
+          style={{ width: 100 }}
+        />
+        <button
+          type="button"
+          className="btn secondary"
+          onClick={() => void addYear()}
+        >
+          + Add year
+        </button>
+        <span className="muted small">
+          Pre-fills from the most recent year on file; you edit the new row to
+          match the IRS publication.
+        </span>
       </div>
     </div>
   );

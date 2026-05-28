@@ -199,6 +199,15 @@ export interface MileageSummary {
   total_deduction_cents: number;
 }
 
+export interface MileageRateRow {
+  tax_year: number;
+  business_cents_per_mile: number;
+  charity_cents_per_mile: number;
+  medical_cents_per_mile: number;
+  source: 'seeded' | 'manual' | 'irs_fetch';
+  updated_at: string;
+}
+
 export type CancellationStatus =
   | 'queued' | 'in_progress' | 'done' | 'couldnt' | 'abandoned';
 
@@ -3778,6 +3787,27 @@ export const api = {
 
   mileageSummary: (year: number) =>
     http<MileageSummary>(`/api/mileage/summary/${year}`),
+
+  // 0.24.5 — editable mileage rates per tax year.
+  listMileageRates: () =>
+    http<{ rates: MileageRateRow[] }>('/api/mileage-rates').then((r) => r.rates),
+  saveMileageRate: (
+    year: number,
+    body: {
+      businessCentsPerMile: number;
+      charityCentsPerMile: number;
+      medicalCentsPerMile: number;
+    },
+  ) =>
+    http<{ saved: true }>(`/api/mileage-rates/${year}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  deleteMileageRate: (year: number) =>
+    http<{ deleted: true }>(`/api/mileage-rates/${year}`, {
+      method: 'DELETE',
+    }),
 
   // 0.21.2 — warranties
   listWarranties: (status?: 'active' | 'expired' | 'expiring') => {

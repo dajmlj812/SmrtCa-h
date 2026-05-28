@@ -302,7 +302,7 @@ async function buildScheduleC(
     [tenantId, startDate, endDate],
   );
   const businessMiles = Number(mileageRow.rows[0]?.miles ?? 0);
-  const rate = mileageRatesForYear(year).business;
+  const rate = (await mileageRatesForYear(year, tenantId)).business;
   const mileageDeductionCents = Math.round(businessMiles * rate);
   const line9 = byLine.get('9');
   if (line9) {
