@@ -1,0 +1,40 @@
+  📋 0.21.x — Universal customer asks (Mint-shutdown audience)
+
+  ┌────────────────────────────────────────────┬────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │                   Slice                    │ Effort │                                               What it ships                                                │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.0 Real tax export                     │ ~3–4d  │ Schedule C + mileage + TurboTax-importable TXF + IRS-line CSV. Mint had this, nobody else does.            │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.1 Refund / chargeback tracking        │ ~1–2d  │ refund_status column + Dispute / Mark refunded action + dashboard tile                                     │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.2 Receipt → warranty tracking         │ ~2d    │ Extend OCR with warranty-until field + /warranties view + 30-day expiry email                              │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.3 Non-traditional household models    │ ~3–5d  │ Per-account split %, cross-tenant read-only invites, custody-period assignment                             │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.4 Investment performance analysis     │ ~2–3d  │ TWRR, IRR, vs-benchmark (S&P 500 / 60-40) — Empower shows positions, not these metrics                     │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.5 Scenario cash-flow forecasting      │ ~2–3d  │ What-if sliders on top of 0.18.0: income loss for N months, big one-time expense, rate change              │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.6 Subscription cancellation execution │ ~5–7d  │ Headless browser worker that actually does the cancellation. Legally risky — needs review per jurisdiction │
+  ├────────────────────────────────────────────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 0.21.7 Truly portable data export          │ ~2d    │ Single-file .smrtcash bundle that round-trips through the importer                                         │
+  └────────────────────────────────────────────┴────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  📋 0.23.x — Scaling (post-traction)
+
+  ┌─────────────────────────────────────────────┬────────┬────────────────────────────────────────────────┐
+  │                    Slice                    │ Status │                 What it ships                  │
+  ├─────────────────────────────────────────────┼────────┼────────────────────────────────────────────────┤
+  │ 0.23.0 Vertical-scale runbook               │ ⬆️      │ Documented procedure for "bigger box" upgrades │
+  ├─────────────────────────────────────────────┼────────┼────────────────────────────────────────────────┤
+  │ 0.23.1 Stateless app + shared session store │ ↔️      │ Sessions → Redis, app horizontally scalable    │
+  ├─────────────────────────────────────────────┼────────┼────────────────────────────────────────────────┤
+  │ 0.23.2 Attachments → object storage         │ 📦     │ S3/R2 for receipts instead of local volume     │
+  ├─────────────────────────────────────────────┼────────┼────────────────────────────────────────────────┤
+  │ 0.23.3 Postgres read replica + pooling      │ 📊     │ Read traffic offload, PgBouncer or equivalent  │
+  ├─────────────────────────────────────────────┼────────┼────────────────────────────────────────────────┤
+  │ 0.23.4 Multi-region                         │ 🌎     │ Optional, customer-driven; defer until asked   │
+  └─────────────────────────────────────────────┴────────┴────────────────────────────────────────────────┘
+
+  ---
+  Totals: ~16 open slices, roughly 35–45 dev-days of work depending on which 0.21.x items you skip.
