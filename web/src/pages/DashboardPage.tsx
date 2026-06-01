@@ -112,6 +112,24 @@ function defaultLayout(): Layout[] {
   return WIDGETS.map((w) => ({ i: w.id, ...w.defaultLayout }));
 }
 
+/**
+ * Current-month window (1st → today) computed in the BROWSER's local
+ * time. The spending endpoint defaults its window from the server
+ * clock, which runs in UTC; for a user whose local date is the last
+ * of the month, UTC can already be on the 1st of the NEXT month, so
+ * the server default collapses to "today in UTC" (empty) and the
+ * "Spending this month" widget shows no data. Passing the locally
+ * derived month boundaries makes the widget reflect the user's actual
+ * calendar month regardless of server timezone.
+ */
+function localMonthToDate(): { start: string; end: string } {
+  const now = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  const y = now.getFullYear();
+  const m = p(now.getMonth() + 1);
+  return { start: `${y}-${m}-01`, end: `${y}-${m}-${p(now.getDate())}` };
+}
+
 function asLayouts(items: Layout[]): Layouts {
   // v1 Layouts is { [breakpoint]: Layout[] } where Layout is the
   // single-item type.
@@ -152,9 +170,10 @@ export function DashboardPage() {
       try {
         // Fetch all dashboard data + user prefs in parallel. Prefs is
         // a tiny query — no point sequencing it.
+        const spendWindow = localMonthToDate();
         const [spending, incomeExpense, netWorth, upcoming, flow, goals, prefs, insightCards] =
           await Promise.all([
-            api.spendingByCategory({}),
+            api.spendingByCategory({ start: spendWindow.start, end: spendWindow.end }),
             api.incomeExpense({ months: 12 }),
             api.netWorthOverTime({ months: 12 }),
             api.upcomingBills(30),
