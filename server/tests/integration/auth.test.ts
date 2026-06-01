@@ -519,6 +519,35 @@ describe('Auth API', () => {
   // ── 0.16.2: password reset ─────────────────────────────────
 
   describe('password reset (0.16.2)', () => {
+    // F-02 (security audit 2026-05-25) made /password-reset-request
+    // fire-and-forget the token INSERT so "real email" and "unknown
+    // email" return in symmetric time (anti-enumeration). That means
+    // the 202 can land BEFORE the password_resets row is committed, so
+    // a synchronous SELECT right after the request races the insert.
+    // Poll briefly for the freshest unconsumed token instead.
+    async function waitForResetToken(
+      email = 'reset-me@example.com',
+      timeoutMs = 2000,
+    ): Promise<string> {
+      const deadline = Date.now() + timeoutMs;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const tok = await pool.query<{ token: string }>(
+          `SELECT token FROM password_resets
+             WHERE user_id = (SELECT id FROM users WHERE email = $1)
+               AND consumed_at IS NULL
+             ORDER BY created_at DESC
+             LIMIT 1`,
+          [email],
+        );
+        if (tok.rowCount && tok.rows[0]) return tok.rows[0].token;
+        if (Date.now() > deadline) {
+          throw new Error(`reset token for ${email} not minted within ${timeoutMs}ms`);
+        }
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    }
+
     beforeEach(async () => {
       await resetDb({ skipAuth: true });
       // Seed the operator + a regular user we'll reset.
@@ -581,13 +610,8 @@ describe('Auth API', () => {
         skipAuth: true,
       } as any);
       expect(r.statusCode).toBe(202);
-      const tok = await pool.query<{ token: string }>(
-        `SELECT token FROM password_resets
-           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')
-             AND consumed_at IS NULL`,
-      );
-      expect(tok.rowCount).toBe(1);
-      expect(tok.rows[0]!.token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+      const token = await waitForResetToken();
+      expect(token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
     });
 
     it('reset-confirm rejects an invalid token', async () => {
@@ -610,18 +634,15 @@ describe('Auth API', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
+      const token = await waitForResetToken();
       await pool.query(
         `UPDATE password_resets SET expires_at = now() - interval '1 hour'
           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
       );
-      const tok = await pool.query<{ token: string }>(
-        `SELECT token FROM password_resets
-           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
-      );
       const r = await app.inject({
         method: 'POST',
         url: '/api/auth/password-reset-confirm',
-        payload: { token: tok.rows[0]!.token, password: 'new-password-67890' },
+        payload: { token, password: 'new-password-67890' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -637,14 +658,11 @@ describe('Auth API', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
-      const tok = await pool.query<{ token: string }>(
-        `SELECT token FROM password_resets
-           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
-      );
+      const token = await waitForResetToken();
       const r = await app.inject({
         method: 'POST',
         url: '/api/auth/password-reset-confirm',
-        payload: { token: tok.rows[0]!.token, password: 'short' },
+        payload: { token, password: 'short' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -660,14 +678,11 @@ describe('Auth API', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
-      const tok = await pool.query<{ token: string }>(
-        `SELECT token FROM password_resets
-           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')`,
-      );
+      const token = await waitForResetToken();
       const confirm = await app.inject({
         method: 'POST',
         url: '/api/auth/password-reset-confirm',
-        payload: { token: tok.rows[0]!.token, password: 'brand-new-password-99' },
+        payload: { token, password: 'brand-new-password-99' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -678,7 +693,7 @@ describe('Auth API', () => {
       const replay = await app.inject({
         method: 'POST',
         url: '/api/auth/password-reset-confirm',
-        payload: { token: tok.rows[0]!.token, password: 'another-new-pw-00' },
+        payload: { token, password: 'another-new-pw-00' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
@@ -730,15 +745,11 @@ describe('Auth API', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);
-      const tok = await pool.query<{ token: string }>(
-        `SELECT token FROM password_resets
-           WHERE user_id = (SELECT id FROM users WHERE email = 'reset-me@example.com')
-             AND consumed_at IS NULL`,
-      );
+      const token = await waitForResetToken();
       await app.inject({
         method: 'POST',
         url: '/api/auth/password-reset-confirm',
-        payload: { token: tok.rows[0]!.token, password: 'fresh-pw-after-reset-1' },
+        payload: { token, password: 'fresh-pw-after-reset-1' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         skipAuth: true,
       } as any);

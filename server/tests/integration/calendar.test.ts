@@ -104,14 +104,13 @@ describe('GET /api/calendar/:month (0.12.3)', () => {
     );
     const r = await app.inject({ method: 'GET', url: '/api/calendar/2026-05' });
     const body = r.json();
-    const may1 = (body.days as Array<{ date: string; bill_due_ids: string[] }>).find(
-      (d) => d.date === '2026-05-01',
-    )!;
-    expect(may1.bill_due_ids).toContain(b1.rows[0]!.id);
-    const may15 = (body.days as Array<{ date: string; bill_due_ids: string[] }>).find(
-      (d) => d.date === '2026-05-15',
-    )!;
-    expect(may15.bill_due_ids).toContain(b2.rows[0]!.id);
+    // The calendar day exposes `bills_due` as an array of bill objects
+    // ({ id, name, amount_cents }), not a bare id list.
+    type CalDay = { date: string; bills_due: Array<{ id: string }> };
+    const may1 = (body.days as CalDay[]).find((d) => d.date === '2026-05-01')!;
+    expect(may1.bills_due.map((b) => b.id)).toContain(b1.rows[0]!.id);
+    const may15 = (body.days as CalDay[]).find((d) => d.date === '2026-05-15')!;
+    expect(may15.bills_due.map((b) => b.id)).toContain(b2.rows[0]!.id);
   });
 
   it('totals.budget_cents sums every budget row for the month', async () => {

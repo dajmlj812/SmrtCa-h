@@ -47,7 +47,7 @@ describe('cleanMerchant', () => {
 describe('pickCategory', () => {
   it('maps a Chase source category to ours', () => {
     expect(pickCategory('anything', 'Food & Drink', ALLOWED)).toEqual({
-      category: 'Dining & Restaurants',
+      category: 'Restaurants',
       confidence: 0.8,
     });
   });
@@ -99,6 +99,6 @@ describe('RulesNormalizer.normalize', () => {
     expect(results[0]!.merchant).toBe('T-Mobile');
     expect(results[0]!.category).toBe('Bills & Utilities');
     expect(results[1]!.id).toBe('2');
-    expect(results[1]!.category).toBe('Taxes');
+    expect(results[1]!.category).toBe('Taxes Paid');
   });
 });

@@ -111,8 +111,15 @@ describe('OFX Direct Connect routes (0.11.1)', () => {
   });
   beforeEach(async () => {
     await resetDb();
-    (app as unknown as { ofxDcFetchOverride?: typeof fetch }).ofxDcFetchOverride =
-      undefined;
+    const overrides = app as unknown as {
+      ofxDcFetchOverride?: typeof fetch;
+      ofxDcSafetyOverride?: (url: string) => Promise<void>;
+    };
+    overrides.ofxDcFetchOverride = undefined;
+    // The real fetch-time SSRF guard resolves DNS, which fails for the
+    // synthetic `example.bank` host these tests use. Inject a no-op so
+    // the route exercises its real logic offline.
+    overrides.ofxDcSafetyOverride = async () => {};
   });
 
   it('rejects creation without an active tenant context', async () => {

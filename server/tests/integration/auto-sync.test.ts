@@ -7,9 +7,18 @@ import {
   seedAccount,
   pool,
 } from '../setup/test-db.js';
-import { runAutoSyncTick } from '../../src/domain/auto-sync.js';
+import { runAutoSyncTick as runAutoSyncTickRaw } from '../../src/domain/auto-sync.js';
 import { setDbValue } from '../../src/domain/settings.js';
 import { encryptString } from '../../src/domain/crypto.js';
+
+// The real OFX fetch-time SSRF guard resolves DNS, which fails for the
+// synthetic `example.bank` host these tests seed. Inject a no-op guard
+// into every tick so OFX sync runs offline; production still resolves
+// and validates real bank URLs. Per-test ofxFetchOverride etc. pass
+// through unchanged.
+type AutoSyncOpts = Parameters<typeof runAutoSyncTickRaw>[0];
+const runAutoSyncTick = (opts: AutoSyncOpts = {}) =>
+  runAutoSyncTickRaw({ ofxSafetyOverride: async () => {}, ...opts });
 
 /**
  * Phase 8.3 — Auto-sync scheduler (0.11.3) end-to-end.

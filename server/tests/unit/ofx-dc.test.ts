@@ -30,6 +30,12 @@ function fakeFetchOk(body: string): FetchLike {
     })) as unknown as FetchLike;
 }
 
+// Passthrough SSRF guard for tests: the real assertSafeUrlForFetch does
+// a live DNS lookup, which fails for the synthetic `example.bank` host
+// these tests use. Injecting a no-op keeps the tests offline while the
+// production default still resolves+validates real bank URLs.
+const noopSafetyCheck = async (): Promise<void> => {};
+
 function okOfxResponse(opts: { type: 'BANK' | 'CC'; statusCode?: number; message?: string } = { type: 'BANK' }): string {
   const code = opts.statusCode ?? 0;
   const message = opts.message ?? '';
@@ -157,7 +163,7 @@ describe('OFX Direct Connect protocol (0.11.1)', () => {
         startDate: new Date('2026-03-01T00:00:00Z'),
         endDate: new Date('2026-03-15T00:00:00Z'),
       },
-      { fetchImpl: fakeFetchOk(okOfxResponse({ type: 'BANK' })) },
+      { fetchImpl: fakeFetchOk(okOfxResponse({ type: 'BANK' })), safetyCheck: noopSafetyCheck },
     );
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0]!.amountCents).toBe(-1234);
@@ -177,7 +183,7 @@ describe('OFX Direct Connect protocol (0.11.1)', () => {
           startDate: new Date('2026-03-01T00:00:00Z'),
           endDate: new Date('2026-03-15T00:00:00Z'),
         },
-        { fetchImpl: fakeFetchOk(body) },
+        { fetchImpl: fakeFetchOk(body), safetyCheck: noopSafetyCheck },
       ),
     ).rejects.toMatchObject({ kind: 'auth_failed' });
   });
@@ -192,7 +198,7 @@ describe('OFX Direct Connect protocol (0.11.1)', () => {
           startDate: new Date('2026-03-01T00:00:00Z'),
           endDate: new Date('2026-03-15T00:00:00Z'),
         },
-        { fetchImpl: failing },
+        { fetchImpl: failing, safetyCheck: noopSafetyCheck },
       ),
     ).rejects.toMatchObject({ kind: 'http_error' });
   });
@@ -208,7 +214,7 @@ describe('OFX Direct Connect protocol (0.11.1)', () => {
           startDate: new Date('2026-03-01T00:00:00Z'),
           endDate: new Date('2026-03-15T00:00:00Z'),
         },
-        { fetchImpl: failing },
+        { fetchImpl: failing, safetyCheck: noopSafetyCheck },
       ),
     ).rejects.toBeInstanceOf(OfxDcError);
   });

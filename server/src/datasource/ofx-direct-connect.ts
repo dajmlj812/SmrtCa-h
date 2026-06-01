@@ -77,6 +77,14 @@ export interface OfxDirectConnectContext extends DataSourceContext {
   startDate?: Date;
   endDate?: Date;
   fetchImpl?: PostOfxOptions['fetchImpl'];
+  /**
+   * Optional override for the fetch-time SSRF guard. Production leaves
+   * it unset (the real DNS-resolving guard runs); tests inject a
+   * passthrough so they can exercise the route/sync paths offline with
+   * synthetic bank hostnames. Travels alongside fetchImpl through the
+   * same injection seam.
+   */
+  safetyCheck?: PostOfxOptions['safetyCheck'];
 }
 
 /**
@@ -110,9 +118,12 @@ export const ofxDirectConnectSource: TransactionDataSource = {
     const conn = storedRowToConnection(row);
 
     try {
+      const opts: PostOfxOptions = {};
+      if (c.fetchImpl) opts.fetchImpl = c.fetchImpl;
+      if (c.safetyCheck) opts.safetyCheck = c.safetyCheck;
       const result = await fetchOfxStatement(
         { connection: conn, startDate, endDate },
-        c.fetchImpl ? { fetchImpl: c.fetchImpl } : undefined,
+        opts,
       );
       return {
         formatId: result.formatId,

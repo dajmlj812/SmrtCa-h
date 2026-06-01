@@ -275,11 +275,21 @@ export async function exportTenantData(
   // unnecessary anyway. Earlier versions had it and the runtime
   // rejected the whole command with "unrecognized option:
   // force-local" — that broke /api/portability/export entirely.
-  const archivePath = `${workDir}.tar.gz`;
-  await exec('tar', [
-    '-czf', archivePath,
-    '-C', dirname(workDir), basename(workDir),
-  ]);
+  //
+  // 0.24.x — pass ONLY relative filenames to tar and set `cwd` to the
+  // parent dir. GNU tar (which devs hit when running the suite on a
+  // Windows host) interprets a `-f` value containing a colon — e.g.
+  // `C:\Users\...\export.tar.gz` — as a remote `host:path` spec and
+  // fails with "Cannot connect ... Connection refused". Keeping every
+  // tar argument colon-free (relative archive name + relative input
+  // dir, both resolved against cwd) sidesteps that on GNU tar while
+  // remaining correct for the Alpine BusyBox tar in the container.
+  const parentDir = dirname(workDir);
+  const archiveName = `${basename(workDir)}.tar.gz`;
+  const archivePath = join(parentDir, archiveName);
+  await exec('tar', ['-czf', archiveName, basename(workDir)], {
+    cwd: parentDir,
+  });
   const archiveStat = await stat(archivePath);
 
   return {
@@ -349,12 +359,17 @@ export async function importTenantBundle(
   const workDir = join(tmpdir(), `smrtcash-import-${stamp}`);
   await mkdir(workDir, { recursive: true });
   try {
-    // Extract.
-    await exec('tar', [
-      '--force-local',
-      '-xzf', archivePath,
-      '-C', workDir,
-    ]);
+    // Extract. Pass the archive as a relative name with cwd set to its
+    // own directory, and extract into workDir via a relative cwd too,
+    // so no tar argument carries a Windows drive-letter colon (which
+    // GNU tar would treat as a remote host:path). `--force-local`
+    // would also fix the colon on GNU tar, but Alpine BusyBox tar in
+    // the container does not recognise that flag, so we avoid it.
+    await exec(
+      'tar',
+      ['-xzf', basename(archivePath), '-C', workDir],
+      { cwd: dirname(archivePath) },
+    );
     // The bundle's root is the timestamped workdir from export.
     // Find tenant.json by walking one level deep.
     const { readdir, readFile } = await import('node:fs/promises');

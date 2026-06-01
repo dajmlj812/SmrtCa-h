@@ -75,7 +75,7 @@ describe('ClaudeNormalizer', () => {
           {
             id: 't2',
             merchant: 'IRS',
-            category: 'Taxes',
+            category: 'Taxes Paid',
             confidence: 0.99,
             note: '',
           },
@@ -105,7 +105,7 @@ describe('ClaudeNormalizer', () => {
 
     expect(results).toHaveLength(2);
     expect(results[0]!.merchant).toBe('Netflix');
-    expect(results[1]!.category).toBe('Taxes');
+    expect(results[1]!.category).toBe('Taxes Paid');
   });
 
   it('falls back to Uncategorized when the model omits a row', async () => {

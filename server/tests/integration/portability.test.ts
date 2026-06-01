@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import {
   makeTestApp,
@@ -215,7 +215,9 @@ describe('Data portability export (0.13.0)', () => {
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-type']).toBe('application/gzip');
     expect(String(r.headers['content-disposition'])).toContain('attachment;');
-    expect(String(r.headers['content-disposition'])).toMatch(/\.tar\.gz/);
+    // 0.21.7 — the user-facing download uses the single-file
+    // ".smrtcash" extension (still a gzipped tar under the hood).
+    expect(String(r.headers['content-disposition'])).toMatch(/\.smrtcash/);
     expect(typeof r.headers['x-smrtcash-counts']).toBe('string');
     const counts = JSON.parse(String(r.headers['x-smrtcash-counts']));
     expect(counts).toHaveProperty('accounts');
@@ -245,7 +247,11 @@ describe('Data portability export (0.13.0)', () => {
       expect(result.counts.attachments).toBe(1);
       // Untar and verify the file is present.
       const extractDir = await mkdtemp(join(tmpdir(), 'smrtcash-test-att-'));
-      await exec('tar', ['--force-local', '-xzf', result.archivePath, '-C', extractDir]);
+      // Relative archive name + cwd to avoid the GNU-tar colon issue on
+      // Windows hosts; no --force-local (Alpine BusyBox tar rejects it).
+      await exec('tar', ['-xzf', basename(result.archivePath), '-C', extractDir], {
+        cwd: dirname(result.archivePath),
+      });
       const { readdir } = await import('node:fs/promises');
       const inner = (await readdir(extractDir))[0]!;
       const attsDir = join(extractDir, inner, 'attachments');

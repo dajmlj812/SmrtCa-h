@@ -17,13 +17,18 @@ import type {
  */
 
 /** Map Chase's own category names to ours when the bank provides one. */
+// Targets MUST be canonical leaf/group names from
+// domain/categories.ts (the 0.21.x taxonomy). pickCategory only
+// returns a mapping when `allowed.has(target)`, so a target that
+// drifts out of the canonical list silently degrades to
+// Uncategorized in production — keep these in sync with that file.
 const CHASE_CATEGORY_MAP: Record<string, string> = {
   'Bills & Utilities': 'Bills & Utilities',
   Entertainment: 'Entertainment',
-  'Food & Drink': 'Dining & Restaurants',
+  'Food & Drink': 'Restaurants',
   Gas: 'Gas & Fuel',
   Groceries: 'Groceries',
-  Travel: 'Travel',
+  Travel: 'Travel (personal)',
   Shopping: 'Shopping',
   'Health & Wellness': 'Health & Medical',
   'Fees & Adjustments': 'Fees & Charges',
@@ -47,9 +52,10 @@ const KEYWORD_RULES: Array<{ pattern: RegExp; category: string }> = [
     pattern: /\b(TRANSFER|AUTOMATIC PAYMENT|AUTOPAY|ZELLE)\b/i,
     category: 'Transfers',
   },
-  // Taxes
-  { pattern: /\b(IRS|USATAXPYMT|TAX PAYMENT)\b/i, category: 'Taxes' },
-  // Income
+  // Taxes — "Taxes Paid" is the canonical group name in the 0.21.x
+  // taxonomy (there is no bare "Taxes" leaf).
+  { pattern: /\b(IRS|USATAXPYMT|TAX PAYMENT)\b/i, category: 'Taxes Paid' },
+  // Income — canonical group name.
   {
     pattern:
       /\b(PAYROLL|DIRECT DEPOSIT|INTEREST PAYMENT|INTEREST EARNED|REIMBURSEMENT)\b/i,
@@ -79,11 +85,11 @@ const KEYWORD_RULES: Array<{ pattern: RegExp; category: string }> = [
       /\b(WALMART|KROGER|TRADER JOE|WHOLE FOODS|COSTCO|SAFEWAY|PUBLIX|ALDI|WEGMANS|GROCERY|SUPERMARKET)\b/i,
     category: 'Groceries',
   },
-  // Dining
+  // Dining — canonical leaf is "Restaurants" (under "Food out").
   {
     pattern:
       /\b(STARBUCKS|MCDONALDS|CHIPOTLE|PIZZA|DOORDASH|UBER\s*EATS|GRUBHUB|COFFEE|CAFE|RESTAURANT|BREWERY|DINER)\b/i,
-    category: 'Dining & Restaurants',
+    category: 'Restaurants',
   },
   // Health
   {
@@ -91,11 +97,11 @@ const KEYWORD_RULES: Array<{ pattern: RegExp; category: string }> = [
       /\b(WALGREENS|CVS|PHARMACY|DOCTOR|CLINIC|HOSPITAL|DENTAL|OPTOMETRY)\b/i,
     category: 'Health & Medical',
   },
-  // Travel
+  // Travel — canonical group is "Travel (personal)".
   {
     pattern:
       /\b(UBER|LYFT|AIRLINES|HOTEL|AIRBNB|EXPEDIA|TOLL|CLEAR\s*\*)\b/i,
-    category: 'Travel',
+    category: 'Travel (personal)',
   },
   // Entertainment
   {

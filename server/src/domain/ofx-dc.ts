@@ -210,10 +210,26 @@ function extractSonrsCode(responseBody: string): { code: number; message: string
 /** Injectable fetch — production callers default to global `fetch`. */
 export type FetchLike = typeof fetch;
 
+/**
+ * The fetch-time SSRF guard. Production defaults to the real
+ * `assertSafeUrlForFetch` (which resolves DNS and rejects
+ * private/loopback targets). Injectable so unit tests that already
+ * stub the network via `fetchImpl` can also stub the guard — the
+ * real guard does a live DNS lookup, which would otherwise fail for
+ * the synthetic hostnames (`example.bank`) those tests use.
+ */
+export type UrlSafetyCheck = (url: string) => Promise<void>;
+
 export interface PostOfxOptions {
   fetchImpl?: FetchLike;
   /** Defaults to 60s. Banks are slow. */
   timeoutMs?: number;
+  /**
+   * Override the fetch-time SSRF guard. Defaults to the real
+   * `assertSafeUrlForFetch`. Tests inject a passthrough so they can
+   * run offline against synthetic hostnames.
+   */
+  safetyCheck?: UrlSafetyCheck;
 }
 
 /**
@@ -227,10 +243,15 @@ export async function postOfxRequest(
 ): Promise<string> {
   // F-23 — re-check at fetch time so DNS rebinding (resolver returns
   // 8.8.8.8 at save time, 127.0.0.1 at fetch time) doesn't slip past
-  // the settings-time check. The import is dynamic to avoid a circular
-  // dependency with util/url-safety pulling in dns lookups.
-  const { assertSafeUrlForFetch } = await import('../util/url-safety.js');
-  await assertSafeUrlForFetch(url);
+  // the settings-time check. Defaults to the real guard (dynamic
+  // import avoids a circular dependency with util/url-safety pulling
+  // in dns lookups); tests inject a passthrough via opts.safetyCheck.
+  if (opts.safetyCheck) {
+    await opts.safetyCheck(url);
+  } else {
+    const { assertSafeUrlForFetch } = await import('../util/url-safety.js');
+    await assertSafeUrlForFetch(url);
+  }
   const f = opts.fetchImpl ?? fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);

@@ -8,9 +8,23 @@ describe('validateUrlSetting (0.18.12)', () => {
     expect(validateUrlSetting('SUPPORT_URL', 'https://support.example.com/help')).toBeNull();
   });
 
-  it('accepts http for dev / private deploys', () => {
-    expect(validateUrlSetting('OLLAMA_BASE_URL', 'http://localhost:11434')).toBeNull();
-    expect(validateUrlSetting('OLLAMA_BASE_URL', 'http://10.0.0.5:11434')).toBeNull();
+  it('accepts http for a public-hostname dev deploy', () => {
+    // http (not https) is allowed; the SSRF gate only objects to
+    // private/loopback *IP literals*, not to the http scheme itself.
+    expect(validateUrlSetting('OLLAMA_BASE_URL', 'http://ollama.example.com:11434')).toBeNull();
+  });
+
+  it('rejects private/loopback IP literals (F-23 SSRF guard)', () => {
+    // 0.18.12 accepted these; the 2026-05-25 security audit (F-23)
+    // tightened validateUrlSetting to refuse server-initiated traffic
+    // to private ranges (loopback, RFC-1918, link-local/IMDS). A
+    // settings save pointing OLLAMA_BASE_URL at the LAN is now blocked.
+    expect(validateUrlSetting('OLLAMA_BASE_URL', 'http://10.0.0.5:11434'))
+      .toMatch(/private\/loopback/);
+    expect(validateUrlSetting('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'))
+      .toMatch(/private\/loopback/);
+    expect(validateUrlSetting('OLLAMA_BASE_URL', 'http://169.254.169.254/'))
+      .toMatch(/private\/loopback/);
   });
 
   it('rejects non-URLs with a clear message', () => {

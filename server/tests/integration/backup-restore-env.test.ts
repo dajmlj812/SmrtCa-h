@@ -190,7 +190,10 @@ describe('Budget wizard savings percentage overrides (0.9.4)', () => {
        VALUES ('Salary', 200000, 'weekly', now()::date + 1, true)`,
     );
 
-    // Default global is 20% — verify a 50% override changes the suggestion.
+    // 0.17.22 — the savings model is the three-tier low/mid/high
+    // leftover-percentage set (the old savingsIncomePct /
+    // savingsLeftoverPct pair was replaced). Verify per-run overrides
+    // flow through to the preview's echoed percentages.
     const r = await app.inject({
       method: 'POST',
       url: '/api/budgets/wizard/preview',
@@ -198,15 +201,17 @@ describe('Budget wizard savings percentage overrides (0.9.4)', () => {
         periodType: 'weekly',
         anchor: new Date().toISOString().slice(0, 10),
         count: 1,
-        savingsIncomePctOverride: 50,
-        savingsLeftoverPctOverride: 80,
+        savingsLowPctOverride: 5,
+        savingsMidPctOverride: 50,
+        savingsHighPctOverride: 80,
       },
       headers: { 'content-type': 'application/json' },
     });
     expect(r.statusCode).toBe(200);
     const preview = r.json().preview;
-    expect(preview.savingsIncomePct).toBe(50);
-    expect(preview.savingsLeftoverPct).toBe(80);
+    expect(preview.savingsLowPct).toBe(5);
+    expect(preview.savingsMidPct).toBe(50);
+    expect(preview.savingsHighPct).toBe(80);
   });
 
   it('out-of-range % override falls back to the global default', async () => {
@@ -217,11 +222,12 @@ describe('Budget wizard savings percentage overrides (0.9.4)', () => {
         periodType: 'weekly',
         anchor: new Date().toISOString().slice(0, 10),
         count: 1,
-        savingsIncomePctOverride: 150, // > 100 -> ignored
+        savingsMidPctOverride: 150, // > 100 -> ignored, falls back to default
       },
       headers: { 'content-type': 'application/json' },
     });
     expect(r.statusCode).toBe(200);
-    expect(r.json().preview.savingsIncomePct).toBe(20); // default
+    // Default mid-tier is 50% (SAVINGS_PCT_MID default in budget-wizard.ts).
+    expect(r.json().preview.savingsMidPct).toBe(50);
   });
 });

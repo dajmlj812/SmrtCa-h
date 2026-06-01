@@ -91,6 +91,12 @@ async function tick(): Promise<void> {
 export async function runAutoSyncTick(opts: {
   force?: boolean;
   ofxFetchOverride?: OfxDirectConnectContext['fetchImpl'];
+  /**
+   * Test-only override of the OFX fetch-time SSRF guard. Production
+   * leaves it unset so the real DNS-resolving guard runs; tests inject
+   * a passthrough to sync synthetic bank hosts offline.
+   */
+  ofxSafetyOverride?: OfxDirectConnectContext['safetyCheck'];
   plaidFetchOverride?: PlaidFetch;
   cryptoFetchOverride?: CryptoFetch;
   now?: Date;
@@ -151,6 +157,7 @@ export async function runAutoSyncTick(opts: {
         tenantId: row.tenant_id,
         endDate: now,
         fetchImpl: opts.ofxFetchOverride,
+        safetyCheck: opts.ofxSafetyOverride,
       } as OfxDirectConnectContext);
       const persisted = await persistBatch(
         row.account_id,

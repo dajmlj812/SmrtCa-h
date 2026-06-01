@@ -30,7 +30,7 @@ describe('PATCH /api/transactions/:id', () => {
     txnId = txn.rows[0]!.id;
 
     const cat = await pool.query<{ id: string }>(
-      `SELECT id FROM categories WHERE name = 'Dining & Restaurants'`,
+      `SELECT id FROM categories WHERE name = 'Restaurants'`,
     );
     categoryId = cat.rows[0]!.id;
   });

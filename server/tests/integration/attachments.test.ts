@@ -263,7 +263,13 @@ describe('Attachments API', () => {
   it('rejects with 413 when the aggregate upload exceeds the cap', async () => {
     // Vitest config sets ATTACHMENTS_MAX_REQUEST_BYTES=1 MB; two 600 KB
     // files clear the per-file limit but trip the aggregate cap.
-    const SIX_HUNDRED_KB = Buffer.alloc(600 * 1024, 1);
+    // The buffer must start with the real PNG signature or the F-21
+    // magic-byte sniff rejects each file (400) BEFORE the aggregate-cap
+    // check (413) can fire. Prefix TINY_PNG, then pad to 600 KB.
+    const SIX_HUNDRED_KB = Buffer.concat([
+      TINY_PNG,
+      Buffer.alloc(600 * 1024 - TINY_PNG.length, 1),
+    ]);
     const form = buildAttachmentForm([
       { name: 'a.png', mime: 'image/png', buffer: SIX_HUNDRED_KB },
       { name: 'b.png', mime: 'image/png', buffer: SIX_HUNDRED_KB },

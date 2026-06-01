@@ -552,7 +552,13 @@ export async function buildWizardPreview(input: WizardInput): Promise<WizardPrev
     defaultPct: number,
   ): Promise<number> {
     return getEffectiveValue(settingKey).then((raw) => {
-      const globalPct = Number(raw);
+      // An unset setting comes back as '' from getEffectiveValue (these
+      // keys have no SETTING_DEFAULTS entry). `Number('')` is 0, which
+      // would slip through the 0..100 range check and silently override
+      // the intended code default with 0% — so treat a blank/whitespace
+      // global as "unset" and fall back to defaultPct.
+      const trimmed = raw.trim();
+      const globalPct = trimmed === '' ? NaN : Number(trimmed);
       const base = Number.isFinite(globalPct) && globalPct >= 0 && globalPct <= 100
         ? globalPct
         : defaultPct;
@@ -908,14 +914,22 @@ export async function commitWizard(
       amount: number;
       note: string | null;
     }> = [
+      // The three explicit AutoMagic categories. The route still
+      // accepts groceriesOverrideCents / fuelOverrideCents /
+      // tollsOverrideCents and the preview still computes
+      // p.groceriesCents / p.fuelCents / p.tollsCents from them, so
+      // commit MUST seed these rows — a 0.21.x refactor dropped them
+      // here (voiding the cat ids), which silently discarded the
+      // user's grocery/fuel/toll budget overrides. They go first so
+      // that if a recurring-spend entry later resolves to the same
+      // category in the same period, the dup-check below keeps the
+      // explicit override (inserted first) and skips the duplicate.
+      { catId: groceriesCat, amount: p.groceriesCents, note: null },
+      { catId: fuelCat, amount: p.fuelCents, note: null },
+      { catId: tollsCat, amount: p.tollsCents, note: null },
       { catId: miscCat, amount: p.miscCents, note: p.miscNote || null },
       { catId: savingsCat, amount: p.savingsCents, note: null },
     ];
-    // Suppress unused-var TS warnings — groceriesCat / fuelCat /
-    // tollsCat are still resolved above for backward compat.
-    void groceriesCat;
-    void fuelCat;
-    void tollsCat;
     // recurringCatIds / recurringWeekly resolved above are kept
     // for back-compat but no longer iterated — commit reads the
     // preview's `recurring` array directly so user overrides /

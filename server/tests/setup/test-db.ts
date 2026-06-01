@@ -45,20 +45,43 @@ export async function cleanupAttachmentDir(): Promise<void> {
  * that need to start from a clean unauthenticated state.
  */
 export async function resetDb(opts: { skipAuth?: boolean } = {}): Promise<void> {
-  await pool.query(
-    `TRUNCATE accounts, categories, import_batches, transactions, attachments,
-              users, sessions, budgets, savings_goals, bills, recurring_income,
-              recurring_suggestions, normalization_rules, transaction_splits,
-              holdings, vehicles, commute_routes, route_vehicle_assignments,
-              fuel_prices, app_settings, backups, tenants, memberships,
-              invitations, user_identities, auth_provider_configs,
-              account_user_access, audit_log, exchange_rates,
-              retirement_projections, ofx_dc_connections,
-              plaid_items, plaid_account_links,
-              split_participants, transaction_shares,
-              anomaly_alerts, tenant_encryption_keys
-       RESTART IDENTITY CASCADE`,
-  );
+  // Migration 051 (security audit F-32) installs a BEFORE TRUNCATE trigger
+  // that makes audit_log immutable in production. The test reset still needs
+  // to clear it between tests, so we suppress user triggers for the TRUNCATE
+  // via `session_replication_role = replica` — which disables them for THIS
+  // SESSION ONLY and takes no table lock (unlike ALTER TABLE ... DISABLE
+  // TRIGGER, which is global DDL under an ACCESS EXCLUSIVE lock and serializes
+  // the whole suite). Both the SET and the TRUNCATE must run on the same
+  // physical connection, so we check out one dedicated client rather than
+  // using `pool.query` (which may route each call to a different connection,
+  // leaving the TRUNCATE on a session where the role was never set).
+  const client = await pool.connect();
+  try {
+    await client.query(`SET session_replication_role = 'replica'`);
+    await client.query(
+      `TRUNCATE accounts, categories, import_batches, transactions, attachments,
+                users, sessions, budgets, savings_goals, bills, recurring_income,
+                recurring_suggestions, normalization_rules, transaction_splits,
+                holdings, vehicles, commute_routes, route_vehicle_assignments,
+                fuel_prices, app_settings, backups, tenants, memberships,
+                invitations, user_identities, auth_provider_configs,
+                account_user_access, audit_log, exchange_rates,
+                retirement_projections, ofx_dc_connections,
+                plaid_items, plaid_account_links,
+                split_participants, transaction_shares,
+                anomaly_alerts, tenant_encryption_keys
+         RESTART IDENTITY CASCADE`,
+    );
+  } finally {
+    // Restore default trigger behavior before returning the connection to the
+    // pool, so a later borrower of this same connection isn't silently running
+    // with FK/user triggers disabled.
+    try {
+      await client.query(`SET session_replication_role = 'origin'`);
+    } finally {
+      client.release();
+    }
+  }
   await seedDefaultCategories(pool);
   if (!opts.skipAuth) {
     // Seed the singleton test user, the Default tenant, and a

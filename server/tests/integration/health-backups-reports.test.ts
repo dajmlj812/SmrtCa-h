@@ -161,10 +161,19 @@ describe('Health metrics (Phase 7.6, super-admin gated 0.9.1)', () => {
   });
 
   it('webhook counts reflect newly recorded events', async () => {
+    // stripe_processed_events is intentionally NOT truncated by resetDb
+    // (it's the Stripe idempotency ledger and is meant to be monotonic).
+    // That means rows from a previous run of THIS test survive, and an
+    // `ON CONFLICT DO NOTHING` re-insert keeps their original, now-stale
+    // processed_at — which makes the processed_24h window read 0. Clear
+    // our own fixture ids first so each run records fresh timestamps.
+    await pool.query(
+      `DELETE FROM stripe_processed_events
+        WHERE event_id IN ('evt_test_a', 'evt_test_b', 'evt_test_c')`,
+    );
     await pool.query(
       `INSERT INTO stripe_processed_events (event_id) VALUES
-         ('evt_test_a'), ('evt_test_b'), ('evt_test_c')
-       ON CONFLICT DO NOTHING`,
+         ('evt_test_a'), ('evt_test_b'), ('evt_test_c')`,
     );
     const r = await app.inject({
       method: 'GET',

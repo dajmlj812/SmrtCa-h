@@ -288,8 +288,12 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
       const denied = requireFinancialMutation(ctx);
       if (denied) return reply.code(denied.status).send({ error: denied.error });
 
-      const fetchImpl = (app as unknown as { ofxDcFetchOverride?: PostOfxOptions['fetchImpl'] })
-        .ofxDcFetchOverride;
+      const overrides = app as unknown as {
+        ofxDcFetchOverride?: PostOfxOptions['fetchImpl'];
+        ofxDcSafetyOverride?: PostOfxOptions['safetyCheck'];
+      };
+      const fetchImpl = overrides.ofxDcFetchOverride;
+      const safetyCheck = overrides.ofxDcSafetyOverride;
       try {
         // 1-day window — just probe the bank for an auth-success response.
         const end = new Date();
@@ -301,6 +305,7 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
           startDate: start,
           endDate: end,
           fetchImpl,
+          safetyCheck,
         } as OfxDirectConnectContext);
         return {
           ok: true,
@@ -341,8 +346,12 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
       if (!row.enabled)
         return reply.code(400).send({ error: 'Connection is disabled' });
 
-      const fetchImpl = (app as unknown as { ofxDcFetchOverride?: PostOfxOptions['fetchImpl'] })
-        .ofxDcFetchOverride;
+      const overrides = app as unknown as {
+        ofxDcFetchOverride?: PostOfxOptions['fetchImpl'];
+        ofxDcSafetyOverride?: PostOfxOptions['safetyCheck'];
+      };
+      const fetchImpl = overrides.ofxDcFetchOverride;
+      const safetyCheck = overrides.ofxDcSafetyOverride;
       const end = new Date();
       try {
         const result = await ofxDirectConnectSource.fetch({
@@ -350,6 +359,7 @@ export async function ofxDcRoutes(app: FastifyInstance): Promise<void> {
           tenantId,
           endDate: end,
           fetchImpl,
+          safetyCheck,
         } as OfxDirectConnectContext);
 
         const persisted = await persistBatch(
